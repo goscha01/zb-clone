@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
 require('dotenv').config();
+const serverless = require('serverless-http');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -379,7 +380,12 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  console.log(`ZenBooker API server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/api/health`);
-}); 
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`ZenBooker API server running on port ${PORT}`);
+    console.log(`Health check: http://localhost:${PORT}/api/health`);
+  });
+} else {
+  // Export for Vercel
+  module.exports = serverless(app);
+}
