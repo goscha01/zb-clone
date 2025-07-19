@@ -6,37 +6,37 @@ import MobileHeader from "../components/mobile-header"
 import CustomerModal from "../components/customer-modal"
 import { Plus, ChevronDown, Info, Star, Calendar, ArrowRight, BarChart2, CreditCard, Users, RefreshCw, MapPin, Globe, Check, AlertTriangle } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
+import { useAuth } from "../context/AuthContext"
+import { jobsAPI, customersAPI, servicesAPI, invoicesAPI } from "../services/api"
 
 const ZenbookerDashboard = () => {
+  const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState('7') // days
   const [showNewMenu, setShowNewMenu] = useState(false)
   const [showCustomerModal, setShowCustomerModal] = useState(false)
+  const [error, setError] = useState("")
+  const [retryCount, setRetryCount] = useState(0)
   const newMenuRef = useRef(null)
   const navigate = useNavigate()
 
-  const handleNewOptionClick = (option) => {
-    setShowNewMenu(false)
-    if (option.title === "Job") {
-      window.location.href = "/createjob"
-    } else if (option.title === "Customer") {
-      setShowCustomerModal(true)
-    }
-  }
+  // Dashboard data state
+  const [dashboardData, setDashboardData] = useState({
+    todayJobs: 0,
+    todayDuration: 0,
+    todayEarnings: 0,
+    newJobs: 0,
+    totalJobs: 0,
+    newRecurringBookings: 0,
+    recurringBookings: 0,
+    jobValue: 0,
+    customerSatisfaction: 0,
+    totalRevenue: 0
+  })
 
-  const handleSaveCustomer = (customerData) => {
-    console.log("Saving customer:", customerData)
-    setShowCustomerModal(false)
-    // Here you would typically make an API call to save the customer
-  }
-
-  const newOptions = [
-    { title: "Job", icon: BarChart2 },
-    { title: "Customer", icon: Users }
-  ]
-
-  const setupTasks = [
+  // Setup tasks state
+  const [setupTasks, setSetupTasks] = useState([
     {
       number: 1,
       title: "Create your services",
@@ -95,6 +95,217 @@ const ZenbookerDashboard = () => {
       link: "/team",
       icon: Users,
     },
+  ])
+
+  // Retry mechanism for API calls
+  const retryAPI = async (apiCall, maxRetries = 3, delay = 1000) => {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        return await apiCall()
+      } catch (error) {
+        setRetryCount(attempt)
+        
+        if (attempt === maxRetries) {
+          throw error
+        }
+        
+        // If it's a 429 error, wait longer
+        if (error.response?.status === 429) {
+          console.log(`🔄 Rate limited, waiting ${delay * attempt}ms before retry ${attempt}/${maxRetries}`)
+          await new Promise(resolve => setTimeout(resolve, delay * attempt))
+        } else {
+          console.log(`🔄 API call failed, retrying ${attempt}/${maxRetries}`)
+          await new Promise(resolve => setTimeout(resolve, delay))
+        }
+      }
+    }
+  }
+
+  // Fetch dashboard data
+  useEffect(() => {
+    if (user?.id) {
+      fetchDashboardData()
+    }
+  }, [user, dateRange])
+
+  const fetchDashboardData = async () => {
+    if (!user?.id) {
+      console.log('No user ID available for dashboard')
+      return
+    }
+    
+    try {
+      setIsLoading(true)
+      setError("")
+      
+      console.log('🔄 Fetching dashboard data for user:', user.id)
+      console.log('📊 API Base URL:', process.env.REACT_APP_API_URL || 'http://localhost:5000/api')
+      
+      // Add delay between API calls to prevent rate limiting
+      const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+      
+      // Fetch jobs data
+      console.log('📋 Fetching jobs...')
+      const jobsResponse = await retryAPI(() => jobsAPI.getAll(user.id, "", "", 1, 1000))
+      const jobs = jobsResponse.jobs || jobsResponse || []
+      console.log('✅ Jobs loaded:', jobs.length)
+      
+      // Add delay to prevent rate limiting
+      await delay(200)
+      
+      // Fetch invoices data
+      console.log('💰 Fetching invoices...')
+      const invoicesResponse = await retryAPI(() => invoicesAPI.getAll(user.id, "", "", 1, 1000))
+      const invoices = invoicesResponse.invoices || invoicesResponse || []
+      console.log('✅ Invoices loaded:', invoices.length)
+      
+      // Add delay to prevent rate limiting
+      await delay(200)
+      
+      // Fetch services data
+      console.log('🔧 Fetching services...')
+      const servicesResponse = await retryAPI(() => servicesAPI.getAll(user.id))
+      const services = servicesResponse || []
+      console.log('✅ Services loaded:', services.length)
+      
+      // Add delay to prevent rate limiting
+      await delay(200)
+      
+      // Fetch team members data
+      console.log('👥 Fetching team members...')
+      let teamMembers = []
+      try {
+        // TODO: Re-enable team API when backend team endpoints are fully implemented
+        // const teamResponse = await teamAPI.getAll(user.id, { page: 1, limit: 1000 })
+        // const teamMembers = teamResponse.teamMembers || teamResponse || []
+        teamMembers = [] // Temporarily set to empty array
+        console.log('✅ Team members loaded:', teamMembers.length)
+      } catch (teamError) {
+        console.warn('⚠️ Team members fetch failed:', teamError.message)
+        teamMembers = []
+      }
+      
+      // Calculate today's data
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const tomorrow = new Date(today)
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      
+      const todayJobs = jobs.filter(job => {
+        const jobDate = new Date(job.scheduled_date)
+        return jobDate >= today && jobDate < tomorrow
+      })
+      
+      const todayEarnings = todayJobs.reduce((sum, job) => {
+        const invoice = invoices.find(inv => inv.job_id === job.id)
+        return sum + (parseFloat(invoice?.total_amount || invoice?.amount || 0))
+      }, 0)
+      
+      const todayDuration = todayJobs.reduce((sum, job) => {
+        return sum + (parseInt(job.service_duration || 0))
+      }, 0)
+      
+      // Calculate date range data
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - parseInt(dateRange))
+      
+      const rangeJobs = jobs.filter(job => {
+        const jobDate = new Date(job.scheduled_date)
+        return jobDate >= startDate
+      })
+      
+      const rangeInvoices = invoices.filter(invoice => {
+        const invoiceDate = new Date(invoice.created_at)
+        return invoiceDate >= startDate
+      })
+      
+      // Calculate metrics
+      const newJobs = rangeJobs.filter(job => {
+        const jobDate = new Date(job.created_at)
+        return jobDate >= startDate
+      }).length
+      
+      const totalRevenue = rangeInvoices.reduce((sum, invoice) => {
+        return sum + (parseFloat(invoice.total_amount || invoice.amount || 0))
+      }, 0)
+      
+      const avgJobValue = rangeJobs.length > 0 ? totalRevenue / rangeJobs.length : 0
+      
+      // Calculate recurring bookings (jobs with is_recurring = true)
+      const recurringJobs = jobs.filter(job => job.is_recurring === true)
+      const newRecurringJobs = recurringJobs.filter(job => {
+        const jobDate = new Date(job.created_at)
+        return jobDate >= startDate
+      }).length
+      
+      const newDashboardData = {
+        todayJobs: todayJobs.length,
+        todayDuration: todayDuration,
+        todayEarnings: todayEarnings,
+        newJobs: newJobs,
+        totalJobs: rangeJobs.length,
+        newRecurringBookings: newRecurringJobs,
+        recurringBookings: recurringJobs.length,
+        jobValue: avgJobValue,
+        customerSatisfaction: 0, // Would need ratings data
+        totalRevenue: totalRevenue
+      }
+      
+      setDashboardData(newDashboardData)
+      
+      // Check setup task completion
+      await checkSetupTaskCompletion(services, jobs, teamMembers)
+      
+      // Reset retry count on success
+      setRetryCount(0)
+      
+      console.log('📊 Dashboard data loaded:', newDashboardData)
+      console.log('✅ Dashboard connected to backend successfully!')
+      
+    } catch (error) {
+      console.error('❌ Error fetching dashboard data:', error)
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        config: error.config
+      })
+      
+      // Handle specific error types
+      if (error.response?.status === 429) {
+        setError(`Too many requests (${retryCount > 0 ? `Retried ${retryCount} times` : ''}). Please wait a moment and try refreshing the page.`)
+      } else if (error.response?.status === 500) {
+        setError("Server error. Please try again later.")
+      } else if (error.response?.status === 404) {
+        setError("API endpoint not found. Please check your connection.")
+      } else if (error.code === 'ECONNABORTED') {
+        setError("Request timed out. Please check your connection and try again.")
+      } else {
+        setError(`Failed to load dashboard data: ${error.message || 'Unknown error'}`)
+      }
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleNewOptionClick = (option) => {
+    setShowNewMenu(false)
+    if (option.title === "Job") {
+      navigate("/createjob")
+    } else if (option.title === "Customer") {
+      setShowCustomerModal(true)
+    }
+  }
+
+  const handleSaveCustomer = (customerData) => {
+    console.log("Saving customer:", customerData)
+    setShowCustomerModal(false)
+    // Here you would typically make an API call to save the customer
+  }
+
+  const newOptions = [
+    { title: "Job", icon: BarChart2 },
+    { title: "Customer", icon: Users }
   ]
 
   const ratingBreakdown = [
@@ -117,6 +328,67 @@ const ZenbookerDashboard = () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
   }, [])
+
+  const checkSetupTaskCompletion = async (services, jobs, teamMembers) => {
+    console.log('🔍 Checking setup task completion...')
+    
+    const updatedTasks = setupTasks.map(task => {
+      let completed = false
+      
+      switch (task.number) {
+        case 1: // Create your services
+          completed = services && services.length > 0
+          console.log(`📋 Services created: ${services?.length || 0} - Task 1 completed: ${completed}`)
+          break
+          
+        case 2: // Create a test job
+          completed = jobs && jobs.length > 0
+          console.log(`📋 Jobs created: ${jobs?.length || 0} - Task 2 completed: ${completed}`)
+          break
+          
+        case 3: // Configure booking settings
+          // This would need availability settings from backend
+          completed = false // Placeholder - would need availability API
+          console.log(`📋 Booking settings configured: ${completed}`)
+          break
+          
+        case 4: // Set business hours
+          // This would need business hours from backend
+          completed = false // Placeholder - would need business hours API
+          console.log(`📋 Business hours set: ${completed}`)
+          break
+          
+        case 5: // Set service area
+          // This would need territories from backend
+          completed = false // Placeholder - would need territories API
+          console.log(`📋 Service area set: ${completed}`)
+          break
+          
+        case 6: // Set up online booking site
+          // This would need online booking settings from backend
+          completed = false // Placeholder - would need online booking API
+          console.log(`📋 Online booking site set up: ${completed}`)
+          break
+          
+        case 7: // Add team members
+          completed = teamMembers && teamMembers.length > 0
+          console.log(`📋 Team members added: ${teamMembers?.length || 0} - Task 7 completed: ${completed}`)
+          break
+          
+        default:
+          completed = false
+      }
+      
+      return { ...task, completed }
+    })
+    
+    setSetupTasks(updatedTasks)
+    
+    const completedCount = updatedTasks.filter(task => task.completed).length
+    console.log(`✅ Setup tasks completed: ${completedCount}/${updatedTasks.length}`)
+    
+    return updatedTasks
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -228,12 +500,54 @@ const ZenbookerDashboard = () => {
         <div className="flex-1 overflow-auto">
           <div className="p-4 lg:p-6">
             <div className="max-w-7xl mx-auto space-y-6 lg:space-y-8">
+              {/* Error Display */}
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <AlertTriangle className="h-5 w-5 text-red-400" />
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <h3 className="text-sm font-medium text-red-800">{error}</h3>
+                      <p className="mt-1 text-sm text-red-700">
+                        Please check your connection and try refreshing the page.
+                      </p>
+                    </div>
+                    <div className="ml-3">
+                      <button
+                        onClick={fetchDashboardData}
+                        disabled={isLoading}
+                        className="bg-red-100 text-red-800 px-3 py-1 rounded text-sm font-medium hover:bg-red-200 disabled:opacity-50"
+                      >
+                        {isLoading ? `Retrying...${retryCount > 0 ? ` (${retryCount})` : ''}` : 'Retry'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Setup Section */}
               <div className="bg-white rounded-xl border border-gray-200 p-4 lg:p-6 shadow-sm hover:shadow-md transition-shadow duration-200">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-display font-semibold text-gray-900">Finish setting up your account</h2>
                   <span className="text-sm text-gray-500">{setupTasks.filter(task => task.completed).length}/{setupTasks.length} completed</span>
                 </div>
+                
+                {/* Progress Bar */}
+                <div className="mb-6">
+                  <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                    <span>Setup Progress</span>
+                    <span>{Math.round((setupTasks.filter(task => task.completed).length / setupTasks.length) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                      style={{ 
+                        width: `${(setupTasks.filter(task => task.completed).length / setupTasks.length) * 100}%` 
+                      }}
+                    ></div>
+                  </div>
+                </div>
+                
                 <div className="space-y-3 lg:space-y-4">
                   {setupTasks.map((task, index) => (
                     <Link to={task.link} key={index}>
@@ -264,18 +578,26 @@ const ZenbookerDashboard = () => {
                     <span className="text-sm text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
                       {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
+                    <button
+                      onClick={fetchDashboardData}
+                      disabled={isLoading}
+                      className="p-2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                      title="Refresh dashboard data"
+                    >
+                      <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+                    </button>
                   </div>
                   <div className="grid grid-cols-3 gap-6 lg:flex lg:items-center lg:space-x-12">
                     <div className="text-center">
-                      <div className="text-xl lg:text-2xl font-bold text-gray-900">0</div>
+                      <div className="text-xl lg:text-2xl font-bold text-gray-900">{dashboardData.todayJobs}</div>
                       <div className="text-gray-600 text-sm mt-1">Jobs</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-xl lg:text-2xl font-bold text-gray-900">0h 0m</div>
+                      <div className="text-xl lg:text-2xl font-bold text-gray-900">{dashboardData.todayDuration}h {dashboardData.todayDuration % 60}m</div>
                       <div className="text-gray-600 text-sm mt-1">Duration</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-xl lg:text-2xl font-bold text-gray-900">₦0</div>
+                      <div className="text-xl lg:text-2xl font-bold text-gray-900">${dashboardData.todayEarnings.toLocaleString()}</div>
                       <div className="text-gray-600 text-sm mt-1">Earnings</div>
                     </div>
                   </div>
@@ -287,13 +609,23 @@ const ZenbookerDashboard = () => {
                     <button className="px-4 py-2 bg-white text-gray-900 font-medium rounded-l-lg border-r border-gray-200">Map</button>
                     <button className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors duration-200 rounded-r-lg">Satellite</button>
                   </div>
-                  <div className="text-center">
-                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 mx-auto shadow-sm">
-                      <Calendar className="w-6 h-6 text-gray-400" />
+                  {dashboardData.todayJobs > 0 ? (
+                    <div className="text-center">
+                      <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3 mx-auto shadow-sm">
+                        <Calendar className="w-6 h-6 text-green-600" />
+                      </div>
+                      <p className="text-gray-900 font-medium">{dashboardData.todayJobs} job{dashboardData.todayJobs !== 1 ? 's' : ''} scheduled</p>
+                      <p className="text-gray-600 text-sm mt-1">You have {dashboardData.todayJobs} job{dashboardData.todayJobs !== 1 ? 's' : ''} to complete today.</p>
                     </div>
-                    <p className="text-gray-900 font-medium">No scheduled jobs</p>
-                    <p className="text-gray-600 text-sm mt-1">Looks like you don't have anything to do today.</p>
-                  </div>
+                  ) : (
+                    <div className="text-center">
+                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 mx-auto shadow-sm">
+                        <Calendar className="w-6 h-6 text-gray-400" />
+                      </div>
+                      <p className="text-gray-900 font-medium">No scheduled jobs</p>
+                      <p className="text-gray-600 text-sm mt-1">Looks like you don't have anything to do today.</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -336,9 +668,9 @@ const ZenbookerDashboard = () => {
                       </div>
                     ) : (
                       <>
-                        <div className="text-3xl font-bold text-gray-900">0</div>
+                        <div className="text-3xl font-bold text-gray-900">{dashboardData.newJobs}</div>
                         <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                          <div className="h-2 bg-primary-600 rounded-full" style={{ width: "0%" }}></div>
+                          <div className="h-2 bg-primary-600 rounded-full" style={{ width: `${(dashboardData.newJobs / dashboardData.totalJobs) * 100}%` }}></div>
                         </div>
                       </>
                     )}
@@ -374,9 +706,9 @@ const ZenbookerDashboard = () => {
                       </div>
                       <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help transition-colors duration-200" />
                     </div>
-                    <div className="text-3xl font-bold text-gray-900">0</div>
+                    <div className="text-3xl font-bold text-gray-900">{dashboardData.newRecurringBookings}</div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div className="h-2 bg-primary-600 rounded-full" style={{ width: "0%" }}></div>
+                      <div className="h-2 bg-primary-600 rounded-full" style={{ width: `${(dashboardData.newRecurringBookings / dashboardData.recurringBookings) * 100}%` }}></div>
                     </div>
                   </div>
 
@@ -404,7 +736,7 @@ const ZenbookerDashboard = () => {
                       </div>
                       <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help transition-colors duration-200" />
                     </div>
-                    <div className="text-3xl font-bold text-gray-900">-</div>
+                    <div className="text-3xl font-bold text-gray-900">${dashboardData.jobValue.toLocaleString()}</div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div className="h-2 bg-primary-600 rounded-full" style={{ width: "0%" }}></div>
                     </div>
@@ -419,7 +751,7 @@ const ZenbookerDashboard = () => {
                       </div>
                       <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help transition-colors duration-200" />
                     </div>
-                    <div className="text-3xl font-bold text-gray-900">₦0</div>
+                    <div className="text-3xl font-bold text-gray-900">${dashboardData.totalRevenue.toLocaleString()}</div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div className="h-2 bg-primary-600 rounded-full" style={{ width: "0%" }}></div>
                     </div>

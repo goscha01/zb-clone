@@ -31,13 +31,19 @@ const ZenbookerCustomers = () => {
   }, [])
 
   const fetchCustomers = async () => {
-    if (!user?.id) return
+    if (!user?.id) {
+      console.log('No user ID found:', user)
+      setLoading(false)
+      return
+    }
     
     try {
       setLoading(true)
       setError("")
-      const response = await customersAPI.getAll(user.id)
-      setCustomers(response)
+      console.log('Fetching customers for user:', user.id)
+      const response = await customersAPI.getAll()
+      console.log('Customers response:', response)
+      setCustomers(response.customers || response)
     } catch (error) {
       console.error('Error fetching customers:', error)
       setError("Failed to load customers. Please try again.")
@@ -63,15 +69,10 @@ const ZenbookerCustomers = () => {
     
     try {
       setError("")
-      const newCustomer = {
-        ...customerData,
-        userId: user.id
-      }
-      
-      const response = await customersAPI.create(newCustomer)
+      const response = await customersAPI.create(customerData)
       
       // Add the new customer to the list
-      setCustomers(prev => [response, ...prev])
+      setCustomers(prev => [response.customer || response, ...prev])
       setIsCustomerModalOpen(false)
     } catch (error) {
       console.error('Error creating customer:', error)
@@ -360,10 +361,14 @@ const ZenbookerCustomers = () => {
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
       />
-      <ImportCustomersModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-      />
+                  <ImportCustomersModal 
+              isOpen={isImportModalOpen} 
+              onClose={() => setIsImportModalOpen(false)}
+              onImportSuccess={(newCustomers) => {
+                setCustomers(prev => [...newCustomers, ...prev])
+                setIsImportModalOpen(false)
+              }}
+            />
     </div>
   )
 }

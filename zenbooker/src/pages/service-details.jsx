@@ -1,13 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
 import CreateRecurringOptionModal from "../components/create-recurring-option-modal"
 import TerritoryAdjustmentModal from "../components/territory-adjustment-modal"
 import ModifierModal from "../components/modifier-modal"
 import IntakeQuestionModal from "../components/intake-question-modal"
+import { servicesAPI, serviceAvailabilityAPI } from "../services/api"
+import { useAuth } from "../context/AuthContext"
 import { 
   ChevronLeft,
   ChevronRight,
@@ -26,11 +28,15 @@ import {
   Camera,
   Info,
   HelpCircle,
-  MapPin
+  MapPin,
+  Loader2,
+  AlertCircle
 } from "lucide-react"
 
 const ServiceDetails = () => {
   const navigate = useNavigate()
+  const { serviceId } = useParams()
+  const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [expandedSection, setExpandedSection] = useState(null)
   const [editingModifier, setEditingModifier] = useState(null)
@@ -43,58 +49,213 @@ const ServiceDetails = () => {
   const [isTerritoryModalOpen, setIsTerritoryModalOpen] = useState(false)
   const [recurringOptions, setRecurringOptions] = useState([])
   const [territoryRules, setTerritoryRules] = useState([])
+  
+  // Availability State
+  const [availabilityData, setAvailabilityData] = useState({
+    availabilityType: 'default',
+    businessHoursOverride: null,
+    timeslotTemplateId: null,
+    minimumBookingNotice: 0,
+    maximumBookingAdvance: 525600,
+    bookingInterval: 30,
+    schedulingRules: [],
+    timeslotTemplates: []
+  })
+  const [availabilityLoading, setAvailabilityLoading] = useState(false)
+  const [availabilitySaving, setAvailabilitySaving] = useState(false)
+  
+  // API State
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
+  
   const [serviceData, setServiceData] = useState({
-    name: "TV Mounting",
+    name: "",
     description: "",
-    baseDuration: { hours: 0, minutes: 30 },
-    basePrice: "29",
+    price: 0,
+    duration: 0,
+    category: "",
     isFree: false,
     bookingType: "bookable",
     displayPrefix: "Estimated Total",
     isTaxable: false,
     hidePrice: false,
-    modifiers: [
-      {
-        id: 1,
-        title: "What size is your TV?",
-        options: [
-          { label: 'Up to 31"', price: "+$74 - 20 min" },
-          { label: '32" - 60"', price: "+$50 - 30 min" },
-          { label: '61" - 80"', price: "+$64 - 45 min" },
-          { label: 'Over 81"', price: "+$97 - 1 hr" }
-        ]
-      },
-      {
-        id: 2,
-        title: "Do you need a wall mount for your TV?",
-        options: [
-          { label: "I have one already", price: "" },
-          { label: "Fixed", price: "+$30" },
-          { label: "Tilting", price: "+$40" },
-          { label: "Full Motion", price: "+$50" }
-        ]
-      },
-      {
-        id: 3,
-        title: "Wire Concealment",
-        options: [
-          { label: "No Wire Concealment", price: "" },
-          { label: "External Wire Concealment", price: "+$39 - 20 min" },
-          { label: "In-Wall Wire Concealment", price: "+$65 - 45 min" }
-        ]
-      },
-      {
-        id: 4,
-        title: "Device Setup",
-        options: [
-          { label: "Soundbar", price: "+$15 - 10 min" },
-          { label: "Streaming Device", price: "+$15 - 15 min" },
-          { label: "Gaming Console", price: "+$15 - 15 min" },
-          { label: "Cable or Satellite Box", price: "+$15" }
-        ]
-      }
-    ]
+    modifiers: [],
+    require_payment_method: false
   })
+
+  // Load service data on component mount
+  useEffect(() => {
+    console.log('ServiceDetails useEffect - serviceId:', serviceId, 'user:', user?.id)
+    console.log('Current URL:', window.location.href)
+    
+    if (!user?.id) {
+      console.log('No user found, redirecting to signin')
+      navigate('/signin')
+      return
+    }
+    
+    if (!serviceId) {
+      console.log('No service ID found, redirecting to services')
+      navigate('/services')
+      return
+    }
+    
+    console.log('Starting to load service data...')
+    loadServiceData()
+  }, [serviceId, user?.id])
+
+  const loadServiceData = async () => {
+    try {
+      console.log('Loading service data for ID:', serviceId)
+      setLoading(true)
+      setError("")
+      
+      if (!serviceId) {
+        console.error('No service ID provided')
+        setError("No service ID provided")
+        setLoading(false)
+        return
+      }
+      
+      // First check if backend is running
+      try {
+        const healthResponse = await fetch('http://localhost:5000/api/health')
+        if (!healthResponse.ok) {
+          throw new Error('Backend not responding')
+        }
+        console.log('Backend is running')
+      } catch (healthError) {
+        console.error('Backend health check failed:', healthError)
+        setError("Backend server is not running. Please start the server and try again.")
+        setLoading(false)
+        return
+      }
+      
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 10000)
+      )
+      
+      const servicePromise = servicesAPI.getById(serviceId)
+      const service = await Promise.race([servicePromise, timeoutPromise])
+      
+      console.log('Service data received:', service)
+      
+      if (!service) {
+        console.error('No service found')
+        setError("Service not found")
+        setLoading(false)
+        return
+      }
+      
+      // Convert backend data to frontend format
+      const hours = Math.floor(service.duration / 60)
+      const minutes = service.duration % 60
+      
+      setServiceData({
+        id: service.id,
+        name: service.name,
+        description: service.description || "",
+        price: service.price || 0,
+        duration: service.duration || 0,
+        category: service.category || "",
+        isFree: service.price === 0,
+        bookingType: "bookable",
+        displayPrefix: "Estimated Total",
+        isTaxable: false,
+        hidePrice: false,
+        modifiers: service.modifiers ? JSON.parse(service.modifiers) : [],
+        require_payment_method: !!service.require_payment_method
+      })
+      
+      console.log('Service data set successfully')
+      
+      // Load availability data
+      await loadAvailabilityData()
+    } catch (error) {
+      console.error('Error loading service:', error)
+      
+      if (error.message === 'Request timeout') {
+        setError("Request timed out. Please check your connection and try again.")
+      } else if (error.response) {
+        const { status, data } = error.response
+        switch (status) {
+          case 404:
+            setError("Service not found. Please check the URL and try again.")
+            break
+          case 500:
+            setError("Server error. Please try again later.")
+            break
+          default:
+            setError(data?.error || "Failed to load service data. Please try again.")
+        }
+      } else if (error.request) {
+        setError("Network error. Please check your connection and try again.")
+      } else {
+        setError("Failed to load service data. Please try again.")
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadAvailabilityData = async () => {
+    try {
+      setAvailabilityLoading(true)
+      const availability = await serviceAvailabilityAPI.getAvailability(serviceId)
+      setAvailabilityData(availability)
+    } catch (error) {
+      console.error('Error loading availability:', error)
+      // Don't show error for availability, just use defaults
+    } finally {
+      setAvailabilityLoading(false)
+    }
+  }
+
+  const handleSaveAvailability = async () => {
+    try {
+      setAvailabilitySaving(true)
+      await serviceAvailabilityAPI.updateAvailability(serviceId, availabilityData)
+      setSuccessMessage("Availability settings updated successfully!")
+      setTimeout(() => setSuccessMessage(""), 3000)
+    } catch (error) {
+      console.error('Error saving availability:', error)
+      setError("Failed to save availability settings. Please try again.")
+    } finally {
+      setAvailabilitySaving(false)
+    }
+  }
+
+  const handleSaveService = async () => {
+    try {
+      setSaving(true)
+      setError("")
+      setSuccessMessage("")
+      
+      const updateData = {
+        name: serviceData.name,
+        description: serviceData.description,
+        price: serviceData.isFree ? 0 : serviceData.price,
+        duration: serviceData.duration,
+        category: serviceData.category,
+        modifiers: JSON.stringify(serviceData.modifiers),
+        require_payment_method: !!serviceData.require_payment_method
+      }
+      
+      await servicesAPI.update(serviceData.id, updateData)
+      
+      // Show success message
+      setSuccessMessage("Service updated successfully!")
+      setTimeout(() => setSuccessMessage(""), 3000)
+    } catch (error) {
+      console.error('Error updating service:', error)
+      setError("Failed to update service. Please try again.")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const toggleSection = (sectionId) => {
     setExpandedSection(expandedSection === sectionId ? null : sectionId)
@@ -105,33 +266,54 @@ const ServiceDetails = () => {
     setIsModifierModalOpen(true)
   }
 
-  const handleDeleteModifier = (modifierId) => {
-    if (window.confirm("Are you sure you want to delete this modifier?")) {
+  const handleSaveModifier = async (modifierData) => {
+    try {
+      let updatedModifiers
+      const currentModifiers = serviceData.modifiers || []
+      
+    if (editingModifier) {
+      // Update existing modifier
+        updatedModifiers = currentModifiers.map(mod => 
+          mod.id === editingModifier.id ? { ...modifierData, id: mod.id } : mod
+        )
+    } else {
+      // Add new modifier
+        updatedModifiers = [...currentModifiers, { ...modifierData, id: Date.now() }]
+      }
+      
       setServiceData(prev => ({
         ...prev,
-        modifiers: prev.modifiers.filter(mod => mod.id !== modifierId)
+        modifiers: updatedModifiers
       }))
+      
+      // Save to backend
+      await handleSaveService()
+      
+    setIsModifierModalOpen(false)
+    setEditingModifier(null)
+    } catch (error) {
+      console.error('Error saving modifier:', error)
+      setError("Failed to save modifier. Please try again.")
     }
   }
 
-  const handleSaveModifier = (modifierData) => {
-    if (editingModifier) {
-      // Update existing modifier
-      setServiceData(prev => ({
-        ...prev,
-        modifiers: prev.modifiers.map(mod => 
-          mod.id === editingModifier.id ? { ...modifierData, id: mod.id } : mod
-        )
-      }))
-    } else {
-      // Add new modifier
-      setServiceData(prev => ({
-        ...prev,
-        modifiers: [...prev.modifiers, { ...modifierData, id: Date.now() }]
-      }))
+  const handleDeleteModifier = async (modifierId) => {
+    if (window.confirm("Are you sure you want to delete this modifier?")) {
+      try {
+        const currentModifiers = serviceData.modifiers || []
+        const updatedModifiers = currentModifiers.filter(mod => mod.id !== modifierId)
+        setServiceData(prev => ({
+          ...prev,
+          modifiers: updatedModifiers
+        }))
+        
+        // Save to backend
+        await handleSaveService()
+      } catch (error) {
+        console.error('Error deleting modifier:', error)
+        setError("Failed to delete modifier. Please try again.")
+      }
     }
-    setIsModifierModalOpen(false)
-    setEditingModifier(null)
   }
 
   const handleSaveIntakeQuestion = (questionData) => {
@@ -284,46 +466,129 @@ const ServiceDetails = () => {
               You can override your default business hours and availability settings, and offer custom timeslots for this service using a timeslot template.
             </p>
 
+            {availabilityLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                <span className="ml-3 text-gray-600">Loading availability settings...</span>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Availability Type */}
             <div className="space-y-4">
+                  <h3 className="text-sm font-medium text-gray-900">Availability Type</h3>
+                  <div className="space-y-3">
               <div className="flex items-center space-x-3">
                 <input
                   type="radio"
-                  id="default-time-slots"
-                  name="time-slots"
+                        id="default-availability"
+                        name="availability-type"
+                        checked={availabilityData.availabilityType === 'default'}
+                        onChange={() => setAvailabilityData(prev => ({ ...prev, availabilityType: 'default' }))}
                   className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                  defaultChecked
                 />
-                <label htmlFor="default-time-slots" className="text-sm text-gray-900">
-                  Use default time slots based on your business hours and availability settings
+                      <label htmlFor="default-availability" className="text-sm text-gray-900">
+                        Use default business hours and availability settings
                 </label>
               </div>
 
               <div className="flex items-center space-x-3">
                 <input
                   type="radio"
-                  id="custom-time-slots"
-                  name="time-slots"
+                        id="custom-availability"
+                        name="availability-type"
+                        checked={availabilityData.availabilityType === 'custom'}
+                        onChange={() => setAvailabilityData(prev => ({ ...prev, availabilityType: 'custom' }))}
                   className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                 />
-                <label htmlFor="custom-time-slots" className="text-sm text-gray-900">
-                  Use a custom timeslot template
+                      <label htmlFor="custom-availability" className="text-sm text-gray-900">
+                        Use custom availability settings for this service
                 </label>
+                    </div>
+                  </div>
               </div>
 
-              <div className="pt-4 border-t border-gray-200">
-                <h3 className="text-sm font-medium text-gray-900 mb-3">Minimum booking notice</h3>
-                <div className="flex items-center space-x-3">
+                {/* Custom Availability Settings */}
+                {availabilityData.availabilityType === 'custom' && (
+                  <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                    <h4 className="text-sm font-medium text-gray-900">Custom Availability Settings</h4>
+                    
+                    {/* Minimum Booking Notice */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Minimum Booking Notice (hours)
+                      </label>
                   <input
-                    type="checkbox"
-                    id="custom-booking-notice"
-                    className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <label htmlFor="custom-booking-notice" className="text-sm text-gray-900">
-                    Set custom minimum booking notice for this service
+                        type="number"
+                        value={Math.floor(availabilityData.minimumBookingNotice / 60)}
+                        onChange={(e) => setAvailabilityData(prev => ({ 
+                          ...prev, 
+                          minimumBookingNotice: parseInt(e.target.value) * 60 
+                        }))}
+                        min="0"
+                        className="w-32 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    {/* Maximum Booking Advance */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Maximum Booking Advance (days)
                   </label>
+                      <input
+                        type="number"
+                        value={Math.floor(availabilityData.maximumBookingAdvance / 1440)}
+                        onChange={(e) => setAvailabilityData(prev => ({ 
+                          ...prev, 
+                          maximumBookingAdvance: parseInt(e.target.value) * 1440 
+                        }))}
+                        min="1"
+                        max="365"
+                        className="w-32 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
                 </div>
+
+                    {/* Booking Interval */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Booking Interval (minutes)
+                      </label>
+                      <select
+                        value={availabilityData.bookingInterval}
+                        onChange={(e) => setAvailabilityData(prev => ({ 
+                          ...prev, 
+                          bookingInterval: parseInt(e.target.value) 
+                        }))}
+                        className="w-32 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value={15}>15 minutes</option>
+                        <option value={30}>30 minutes</option>
+                        <option value={60}>1 hour</option>
+                        <option value={90}>1.5 hours</option>
+                        <option value={120}>2 hours</option>
+                      </select>
               </div>
             </div>
+                )}
+
+                {/* Save Button */}
+                <div className="flex justify-end pt-4 border-t border-gray-200">
+                  <button
+                    onClick={handleSaveAvailability}
+                    disabled={availabilitySaving}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {availabilitySaving ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>Save Availability Settings</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )
 
@@ -561,9 +826,15 @@ const ServiceDetails = () => {
               </div>
               <div className="flex items-center space-x-2">
                 <span className="text-sm text-gray-600">No</span>
-                <button className="relative inline-flex h-6 w-11 items-center rounded-full bg-gray-200">
-                  <span className="inline-block h-4 w-4 transform rounded-full bg-white transition-transform translate-x-1" />
+                <button
+                  onClick={() => setServiceData(prev => ({ ...prev, require_payment_method: !prev.require_payment_method }))}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${serviceData.require_payment_method ? "bg-blue-600" : "bg-gray-200"}`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${serviceData.require_payment_method ? "translate-x-6" : "translate-x-1"}`}
+                  />
                 </button>
+                <span className="text-sm text-gray-600">Yes</span>
               </div>
             </div>
           </div>
@@ -768,6 +1039,17 @@ const ServiceDetails = () => {
                 />
               </div>
 
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <input
+                  type="text"
+                  value={serviceData.category}
+                  onChange={(e) => setServiceData({ ...serviceData, category: e.target.value })}
+                  placeholder="e.g., Cleaning, Installation, Repair"
+                  className="w-full border border-gray-300 rounded-md px-3 py-2"
+                />
+              </div>
+
               <div className="flex gap-4 items-start">
                 <div className="flex-1">
                   <div>
@@ -778,21 +1060,23 @@ const ServiceDetails = () => {
                         <div className="flex gap-2">
                           <input
                             type="number"
-                            value={serviceData.baseDuration.hours}
-                            onChange={(e) => setServiceData({
-                              ...serviceData,
-                              baseDuration: { ...serviceData.baseDuration, hours: parseInt(e.target.value) }
-                            })}
+                            value={Math.floor(serviceData.duration / 60)}
+                            onChange={(e) => {
+                              const hours = parseInt(e.target.value) || 0
+                              const minutes = serviceData.duration % 60
+                              setServiceData({ ...serviceData, duration: hours * 60 + minutes })
+                            }}
                             className="w-20 border border-gray-300 rounded-md px-2 py-1"
                           />
                           <span className="text-sm text-gray-600 py-1">hours</span>
                           <input
                             type="number"
-                            value={serviceData.baseDuration.minutes}
-                            onChange={(e) => setServiceData({
-                              ...serviceData,
-                              baseDuration: { ...serviceData.baseDuration, minutes: parseInt(e.target.value) }
-                            })}
+                            value={serviceData.duration % 60}
+                            onChange={(e) => {
+                              const hours = Math.floor(serviceData.duration / 60)
+                              const minutes = parseInt(e.target.value) || 0
+                              setServiceData({ ...serviceData, duration: hours * 60 + minutes })
+                            }}
                             className="w-20 border border-gray-300 rounded-md px-2 py-1"
                           />
                           <span className="text-sm text-gray-600 py-1">minutes</span>
@@ -806,20 +1090,13 @@ const ServiceDetails = () => {
                         <div className="flex gap-2">
                           <span className="text-sm text-gray-600 py-1">$</span>
                           <input
-                            type="text"
-                            value={serviceData.basePrice}
-                            onChange={(e) => setServiceData({ ...serviceData, basePrice: e.target.value })}
+                            type="number"
+                            value={serviceData.price}
+                            onChange={(e) => setServiceData({ ...serviceData, price: parseFloat(e.target.value) || 0 })}
                             className="w-20 border border-gray-300 rounded-md px-2 py-1"
+                            disabled={serviceData.isFree}
                           />
                         </div>
-                      </div>
-                      <div>
-                        <label className="block text-sm text-gray-600 mb-1">Minimum price <HelpCircle className="inline-block w-4 h-4 text-gray-400" /></label>
-                        <input
-                          type="text"
-                          placeholder="Optional"
-                          className="w-32 border border-gray-300 rounded-md px-2 py-1"
-                        />
                       </div>
                     </div>
 
@@ -884,7 +1161,7 @@ const ServiceDetails = () => {
                         onChange={(e) => setServiceData({ ...serviceData, displayPrefix: e.target.value })}
                         className="w-full border border-gray-300 rounded-md px-3 py-2 mb-1"
                       />
-                      <p className="text-sm text-gray-500">$29</p>
+                      <p className="text-sm text-gray-500">${serviceData.price}</p>
                     </div>
                   </div>
 
@@ -899,6 +1176,24 @@ const ServiceDetails = () => {
                       />
                       <span className="ml-2 text-sm text-gray-600">This service is taxable</span>
                     </label>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="mt-8 pt-6 border-t border-gray-200">
+                    <button
+                      onClick={handleSaveService}
+                      disabled={saving}
+                      className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    >
+                      {saving ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Saving...</span>
+                        </>
+                      ) : (
+                        <span>Save Changes</span>
+                      )}
+                    </button>
                   </div>
                 </div>
 
@@ -923,7 +1218,8 @@ const ServiceDetails = () => {
             </a>
 
             <div className="space-y-4">
-              {serviceData.modifiers.map((modifier, index) => (
+              {serviceData.modifiers && serviceData.modifiers.length > 0 ? (
+                serviceData.modifiers.map((modifier, index) => (
                 <div key={modifier.id} className="border border-gray-200 rounded-lg">
                   <div className="flex items-center justify-between p-4">
                     <div className="flex items-center">
@@ -947,7 +1243,7 @@ const ServiceDetails = () => {
                   </div>
                   <div className="px-4 pb-4">
                     <div className="flex flex-wrap gap-2">
-                      {modifier.options.map((option, optionIndex) => (
+                        {modifier.options && modifier.options.map((option, optionIndex) => (
                         <div key={optionIndex} className="bg-gray-100 rounded-full px-3 py-1 text-sm">
                           {option.label}
                           {option.price && <span className="text-gray-500 ml-1">{option.price}</span>}
@@ -956,7 +1252,13 @@ const ServiceDetails = () => {
                     </div>
                   </div>
                 </div>
-              ))}
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No modifiers added yet.</p>
+                  <p className="text-sm mt-1">Click "New Modifier Group" to add your first modifier.</p>
+                </div>
+              )}
             </div>
 
             <button 
@@ -1085,6 +1387,62 @@ const ServiceDetails = () => {
         {/* Content */}
         <div className="flex-1 overflow-auto">
           <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            {/* Error Display */}
+            {error && (
+              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <AlertCircle className="w-5 h-5 text-red-500" />
+                  <p className="text-red-700">{error}</p>
+                </div>
+                <button
+                  onClick={loadServiceData}
+                  className="mt-2 text-red-600 hover:text-red-700 text-sm font-medium"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {/* Success Display */}
+            {successMessage && (
+              <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <div className="w-5 h-5 bg-green-500 rounded-full flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <p className="text-green-700">{successMessage}</p>
+                </div>
+              </div>
+            )}
+
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                  <p className="text-gray-600">Loading service details...</p>
+                </div>
+              </div>
+            ) : error && error.includes("not found") ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Service Not Found</h3>
+                  <p className="text-gray-500 mb-4">The service you're looking for doesn't exist or has been deleted.</p>
+                  <button
+                    onClick={() => navigate('/services')}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Back to Services
+                  </button>
+                </div>
+              </div>
+            ) : (
             <div className="space-y-4">
               {sections.map((section) => (
                 <div key={section.id} className="bg-white rounded-lg border border-gray-200">
@@ -1118,6 +1476,7 @@ const ServiceDetails = () => {
                 </div>
               ))}
             </div>
+            )}
           </div>
         </div>
       </div>

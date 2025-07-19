@@ -5,7 +5,8 @@ import JobsTabs from "../components/jobs-tabs"
 import JobsFilters from "../components/jobs-filters"
 import JobsEmptyState from "../components/jobs-empty-state"
 import JobsPagination from "../components/jobs-pagination"
-import { Plus, AlertCircle, Loader2 } from "lucide-react"
+import JobDetailsModal from "../components/job-details-modal"
+import { Plus, AlertCircle, Loader2, Eye, Calendar, Clock, MapPin, Users } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { jobsAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
@@ -14,6 +15,8 @@ const ZenbookerJobs = () => {
   const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("upcoming")
+  const [selectedJob, setSelectedJob] = useState(null)
+  const [isJobModalOpen, setIsJobModalOpen] = useState(false)
   const navigate = useNavigate()
   
   // API State
@@ -24,12 +27,20 @@ const ZenbookerJobs = () => {
     status: "",
     dateRange: "",
     teamMember: "",
-    customer: ""
+    customer: "",
+    search: "",
+    invoiceStatus: "",
+    sortBy: "scheduled_date",
+    sortOrder: "ASC"
   })
 
-  // Fetch jobs on component mount and when filters change
+  // Debounced search to prevent too many API calls
   useEffect(() => {
-    fetchJobs()
+    const timeoutId = setTimeout(() => {
+      fetchJobs()
+    }, 300) // 300ms delay
+
+    return () => clearTimeout(timeoutId)
   }, [activeTab, filters])
 
   const fetchJobs = async () => {
@@ -39,27 +50,84 @@ const ZenbookerJobs = () => {
       setLoading(true)
       setError("")
       
-      // Map tab to status filter
+      // Map tab to status filter and date logic
       let statusFilter = ""
+      let dateFilter = ""
+      
       switch (activeTab) {
         case "upcoming":
-          statusFilter = "pending,confirmed"
+          statusFilter = "pending,confirmed,in_progress"
+          dateFilter = "future" // Jobs scheduled for today and future
           break
-        case "in-progress":
-          statusFilter = "in_progress"
+        case "past":
+          statusFilter = "completed,cancelled"
+          dateFilter = "past" // Jobs from yesterday and earlier
           break
-        case "completed":
+        case "complete":
           statusFilter = "completed"
           break
-        case "cancelled":
+        case "incomplete":
+          statusFilter = "pending,confirmed,in_progress"
+          break
+        case "canceled":
           statusFilter = "cancelled"
           break
+        case "daterange":
+          // Date range will be handled by filters.dateRange
+          statusFilter = ""
+          break
+        case "all":
         default:
           statusFilter = ""
+          break
       }
       
-      const response = await jobsAPI.getAll(user.id, statusFilter)
-      setJobs(response)
+      // Build query parameters for the API call
+      const queryParams = new URLSearchParams({
+        userId: user.id
+      })
+      
+      if (statusFilter) {
+        queryParams.append('status', statusFilter)
+      }
+      
+      if (filters.search) {
+        queryParams.append('search', filters.search)
+      }
+      
+      if (dateFilter) {
+        queryParams.append('dateFilter', dateFilter)
+      }
+      
+      if (filters.dateRange) {
+        queryParams.append('dateRange', filters.dateRange)
+      }
+      
+      if (filters.sortBy) {
+        queryParams.append('sortBy', filters.sortBy)
+      }
+      
+      if (filters.sortOrder) {
+        queryParams.append('sortOrder', filters.sortOrder)
+      }
+      
+      queryParams.append('page', '1')
+      queryParams.append('limit', '50')
+      
+      const response = await jobsAPI.getAll(
+        user.id, 
+        statusFilter, 
+        filters.search, 
+        1, // page
+        50, // limit
+        dateFilter,
+        filters.dateRange,
+        filters.sortBy,
+        filters.sortOrder,
+        filters.teamMember,
+        filters.invoiceStatus
+      )
+      setJobs(response.jobs || response) // Handle both new and old response format
     } catch (error) {
       console.error('Error fetching jobs:', error)
       setError("Failed to load jobs. Please try again.")
@@ -72,34 +140,14 @@ const ZenbookerJobs = () => {
     navigate("/createjob")
   }
 
-  const handleJobUpdate = async (jobId, updateData) => {
-    try {
-      setError("")
-      await jobsAPI.update(jobId, updateData)
-      
-      // Refresh jobs list
-      fetchJobs()
-    } catch (error) {
-      console.error('Error updating job:', error)
-      
-      if (error.response) {
-        const { status, data } = error.response
-        switch (status) {
-          case 404:
-            setError("Job not found.")
-            break
-          case 500:
-            setError("Server error. Please try again later.")
-            break
-          default:
-            setError(data?.error || "Failed to update job. Please try again.")
-        }
-      } else if (error.request) {
-        setError("Network error. Please check your connection.")
-      } else {
-        setError("An unexpected error occurred.")
-      }
-    }
+  const handleJobUpdate = async () => {
+    // Refresh jobs list
+    fetchJobs()
+  }
+
+  const handleViewJob = (job) => {
+    setSelectedJob(job)
+    setIsJobModalOpen(true)
   }
 
   const handleFilterChange = (newFilters) => {
@@ -112,19 +160,61 @@ const ZenbookerJobs = () => {
 
   const getJobCount = (status) => {
     return jobs.filter(job => {
+      const jobDate = new Date(job.scheduled_date)
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      
       switch (status) {
         case "upcoming":
-          return ["pending", "confirmed"].includes(job.status)
-        case "in-progress":
-          return job.status === "in_progress"
-        case "completed":
+          return ["pending", "confirmed", "in_progress"].includes(job.status) && jobDate >= today
+        case "past":
+          return ["completed", "cancelled"].includes(job.status) && jobDate < today
+        case "complete":
           return job.status === "completed"
-        case "cancelled":
+        case "incomplete":
+          return ["pending", "confirmed", "in_progress"].includes(job.status)
+        case "canceled":
           return job.status === "cancelled"
+        case "daterange":
+          // For date range, we'll show all jobs and let the date filter handle it
+          return true
+        case "all":
         default:
           return true
       }
     }).length
+  }
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    })
+  }
+
+  const formatTime = (dateString) => {
+    const date = new Date(dateString)
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true
+    })
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed': return 'bg-green-100 text-green-800'
+      case 'in_progress': return 'bg-blue-100 text-blue-800'
+      case 'confirmed': return 'bg-yellow-100 text-yellow-800'
+      case 'cancelled': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getStatusLabel = (status) => {
+    return status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
   }
 
   return (
@@ -198,65 +288,84 @@ const ZenbookerJobs = () => {
         </div>
 
         {/* Filters */}
-        <div className="bg-white border-b border-gray-200 shadow-sm">
-          <div className="max-w-7xl mx-auto">
-            <JobsFilters 
-              filters={filters}
-              onFilterChange={handleFilterChange}
-            />
-          </div>
-        </div>
+        <JobsFilters filters={filters} onFilterChange={handleFilterChange} activeTab={activeTab} />
 
-        {/* Content Area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="max-w-7xl mx-auto w-full p-6">
+        {/* Jobs List */}
+        <div className="flex-1 overflow-auto">
+          <div className="max-w-7xl mx-auto px-6 py-6">
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-                  <p className="text-gray-600">Loading jobs...</p>
-                </div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="ml-3 text-gray-600">Loading jobs...</span>
               </div>
             ) : jobs.length === 0 ? (
-              <JobsEmptyState activeTab={activeTab} />
+              <JobsEmptyState onCreateJob={handleCreateJob} />
             ) : (
               <div className="space-y-4">
                 {jobs.map((job) => (
                   <div
                     key={job.id}
-                    className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                    className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className={`w-3 h-3 rounded-full ${
-                          job.status === 'completed' ? 'bg-green-500' :
-                          job.status === 'in_progress' ? 'bg-blue-500' :
-                          job.status === 'cancelled' ? 'bg-red-500' :
-                          'bg-yellow-500'
-                        }`} />
-                        <div>
-                          <h3 className="font-medium text-gray-900">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3 mb-3">
+                          <div className={`w-3 h-3 rounded-full ${
+                            job.status === 'completed' ? 'bg-green-500' :
+                            job.status === 'in_progress' ? 'bg-blue-500' :
+                            job.status === 'cancelled' ? 'bg-red-500' :
+                            'bg-yellow-500'
+                          }`} />
+                          <h3 className="font-medium text-gray-900 text-lg">
                             {job.service_name || 'Service'}
                           </h3>
-                          <p className="text-sm text-gray-500">
-                            {job.customer_name || 'Customer'} • {job.scheduled_date}
-                          </p>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
+                            {getStatusLabel(job.status)}
+                          </span>
                         </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                          <div className="flex items-center space-x-2 text-sm text-gray-600">
+                            <Users className="w-4 h-4" />
+                            <span>
+                              {job.customer_first_name} {job.customer_last_name}
+                            </span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2 text-sm text-gray-600">
+                            <Calendar className="w-4 h-4" />
+                            <span>{formatDate(job.scheduled_date)}</span>
+                          </div>
+                          
+                          <div className="flex items-center space-x-2 text-sm text-gray-600">
+                            <Clock className="w-4 h-4" />
+                            <span>{formatTime(job.scheduled_date)}</span>
+                          </div>
+                          
+                          {job.team_member_first_name && (
+                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                              <Users className="w-4 h-4" />
+                              <span>
+                                {job.team_member_first_name} {job.team_member_last_name}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {job.notes && (
+                          <p className="text-sm text-gray-600 mb-4">
+                            {job.notes}
+                          </p>
+                        )}
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          job.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          job.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                          job.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {job.status.replace('_', ' ')}
-                        </span>
+                      
+                      <div className="flex items-center space-x-2 ml-4">
                         <button
-                          onClick={() => navigate(`/jobs/${job.id}`)}
-                          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                          onClick={() => handleViewJob(job)}
+                          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                          title="View details"
                         >
-                          View
+                          <Eye className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -270,6 +379,19 @@ const ZenbookerJobs = () => {
           </div>
         </div>
       </div>
+
+      {/* Job Details Modal */}
+      {isJobModalOpen && selectedJob && (
+        <JobDetailsModal
+          isOpen={isJobModalOpen}
+          onClose={() => {
+            setIsJobModalOpen(false)
+            setSelectedJob(null)
+          }}
+          job={selectedJob}
+          onJobUpdate={handleJobUpdate}
+        />
+      )}
     </div>
   )
 }

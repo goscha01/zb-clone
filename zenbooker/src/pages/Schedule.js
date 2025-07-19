@@ -1,48 +1,87 @@
-import { useState } from "react"
-import { Plus, ChevronLeft, ChevronRight, Calendar, Grid3X3, MapPin, Clock, DollarSign, User, Filter } from "lucide-react"
+import { useState, useEffect, useMemo } from "react"
+import { Plus, ChevronLeft, ChevronRight, Calendar, Grid3X3, MapPin, Clock, DollarSign, User, Filter, AlertTriangle, RefreshCw } from "lucide-react"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
 import { useNavigate } from "react-router-dom"
 import JobDetailsModal from "../components/job-details-modal"
 import EditJobModal from "../components/edit-job-modal"
-
-// Mock data for demonstration
-const mockJobs = [
-  {
-    id: 1,
-    title: "Kitchen Renovation",
-    client: "John Smith",
-    time: "09:00 - 12:00",
-    duration: "3h",
-    earnings: "$450",
-    location: "123 Main St, Newark",
-    status: "confirmed",
-    type: "plumbing"
-  },
-  {
-    id: 2,
-    title: "Bathroom Repair",
-    client: "Sarah Johnson",
-    time: "14:00 - 16:30",
-    duration: "2.5h",
-    earnings: "$320",
-    location: "456 Oak Ave, Hoboken",
-    status: "pending",
-    type: "repair"
-  }
-]
+import { useAuth } from "../context/AuthContext"
+import { jobsAPI } from "../services/api"
 
 const ZenbookerSchedule = () => {
+  const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeFilter, setActiveFilter] = useState("all")
   const [scheduleSidebarOpen, setScheduleSidebarOpen] = useState(false)
   const [currentView, setCurrentView] = useState("day") // day, week, month
-  const [currentDate, setCurrentDate] = useState(new Date(2025, 5, 26)) // June 26, 2025
-  const [jobs, setJobs] = useState(mockJobs)
+  const [currentDate, setCurrentDate] = useState(new Date()) // Current date
+  const [jobs, setJobs] = useState([])
   const [selectedJob, setSelectedJob] = useState(null)
   const [showJobDetails, setShowJobDetails] = useState(false)
   const [showEditJob, setShowEditJob] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
   const navigate = useNavigate()
+
+  // Get current user with useMemo to prevent infinite re-renders
+  const currentUser = useMemo(() => user, [user])
+
+  useEffect(() => {
+    if (currentUser?.id) {
+      loadJobs()
+    } else if (!currentUser) {
+      console.log('❌ No authenticated user, redirecting to signin')
+      navigate('/signin')
+    }
+  }, [currentUser, currentView, currentDate, navigate])
+
+  const loadJobs = async () => {
+    if (!currentUser?.id) return
+    
+    try {
+      setLoading(true)
+      setError("")
+      
+      console.log('🔄 Loading jobs for user:', currentUser.id)
+      
+      // Calculate date range based on current view
+      let startDate, endDate
+      if (currentView === 'day') {
+        startDate = new Date(currentDate)
+        endDate = new Date(currentDate)
+      } else if (currentView === 'week') {
+        startDate = new Date(currentDate)
+        startDate.setDate(currentDate.getDate() - currentDate.getDay())
+        endDate = new Date(startDate)
+        endDate.setDate(startDate.getDate() + 6)
+      } else {
+        startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+        endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      }
+      
+      const response = await jobsAPI.getAll(currentUser.id, "", "", 1, 1000, "future", "", "scheduled_date", "ASC")
+      
+      // Filter jobs by date range
+      const filteredJobs = (response.jobs || response || []).filter(job => {
+        const jobDate = new Date(job.scheduled_date)
+        return jobDate >= startDate && jobDate <= endDate
+      })
+      
+      console.log('✅ Jobs loaded:', filteredJobs.length)
+      setJobs(filteredJobs)
+    } catch (error) {
+      console.error('❌ Error loading jobs:', error)
+      if (error.response?.status === 403) {
+        setError("Authentication required. Please log in again.")
+        navigate('/signin')
+      } else {
+        setError("Failed to load jobs. Please try again.")
+      }
+      setJobs([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const formatDate = (date, view) => {
     const options = { 
@@ -111,128 +150,195 @@ const ZenbookerSchedule = () => {
   }
 
   // Sidebar Component
-  const ScheduleSidebar = () => (
-    <div className="w-64 bg-white border-r border-gray-200 flex flex-col h-full">
-      <div className="p-4 border-b border-gray-200">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">JOBS ASSIGNED TO</h3>
-        <div className="space-y-2">
-          <button 
-            onClick={() => setActiveFilter("all")}
-            className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
-              activeFilter === "all" ? "bg-primary-50 text-primary-700" : "text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            <User className="w-4 h-4" />
-            <span className="text-sm font-medium">All Jobs</span>
-            <span className="ml-auto text-xs bg-gray-100 px-2 py-1 rounded-full">12</span>
-          </button>
-          <button 
-            onClick={() => setActiveFilter("unassigned")}
-            className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
-              activeFilter === "unassigned" ? "bg-primary-50 text-primary-700" : "text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            <Filter className="w-4 h-4" />
-            <span className="text-sm font-medium">Unassigned</span>
-            <span className="ml-auto text-xs bg-gray-100 px-2 py-1 rounded-full">3</span>
-          </button>
-          <button 
-            onClick={() => setActiveFilter("justweb")}
-            className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
-              activeFilter === "justweb" ? "bg-primary-50 text-primary-700" : "text-gray-700 hover:bg-gray-50"
-            }`}
-          >
-            <div className="w-4 h-4 bg-primary-500 rounded text-white text-xs flex items-center justify-center font-bold">JW</div>
-            <span className="text-sm font-medium">Just web</span>
-            <span className="ml-auto text-xs bg-gray-100 px-2 py-1 rounded-full">9</span>
-          </button>
-        </div>
-      </div>
-      
-      <div className="p-4">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-gray-900">
-            {currentView === 'day' ? jobs.length : currentView === 'week' ? '12' : '45'}
+  const ScheduleSidebar = () => {
+    // Calculate job counts
+    const totalJobs = jobs.length;
+    const unassignedJobs = jobs.filter(job => !job.team_member_id).length;
+    const assignedJobs = totalJobs - unassignedJobs;
+    
+    // Get unique team members
+    const teamMembers = [...new Set(jobs.map(job => job.team_member_id).filter(Boolean))];
+    
+    return (
+      <div className="w-64 bg-white border-r border-gray-200 flex flex-col h-full">
+        <div className="p-4 border-b border-gray-200">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">JOBS ASSIGNED TO</h3>
+          <div className="space-y-2">
+            <button 
+              onClick={() => setActiveFilter("all")}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeFilter === "all" ? "bg-blue-50 text-blue-700 border border-blue-200" : "text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <User className="w-4 h-4" />
+              <span className="text-sm font-medium">All Jobs</span>
+              <span className="ml-auto text-xs bg-gray-100 px-2 py-1 rounded-full font-medium">{totalJobs}</span>
+            </button>
+            <button 
+              onClick={() => setActiveFilter("unassigned")}
+              className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                activeFilter === "unassigned" ? "bg-orange-50 text-orange-700 border border-orange-200" : "text-gray-700 hover:bg-gray-50"
+              }`}
+            >
+              <Filter className="w-4 h-4" />
+              <span className="text-sm font-medium">Unassigned</span>
+              <span className="ml-auto text-xs bg-orange-100 px-2 py-1 rounded-full font-medium">{unassignedJobs}</span>
+            </button>
+            {teamMembers.map(memberId => {
+              const memberJobs = jobs.filter(job => job.team_member_id === memberId);
+              const member = memberJobs[0]; // Get member info from first job
+              return (
+                <button 
+                  key={memberId}
+                  onClick={() => setActiveFilter(`member-${memberId}`)}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-left transition-colors ${
+                    activeFilter === `member-${memberId}` ? "bg-green-50 text-green-700 border border-green-200" : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="w-6 h-6 bg-green-500 rounded-full text-white text-xs flex items-center justify-center font-bold">
+                    {member?.team_member_first_name?.charAt(0) || 'T'}
+                  </div>
+                  <span className="text-sm font-medium">{member?.team_member_first_name || 'Team Member'}</span>
+                  <span className="ml-auto text-xs bg-green-100 px-2 py-1 rounded-full font-medium">{memberJobs.length}</span>
+                </button>
+              );
+            })}
           </div>
-          <div className="text-sm text-gray-500">jobs</div>
-          <div className="text-xs text-gray-400 mt-1">On the schedule</div>
         </div>
         
-        <div className="mt-6 space-y-4">
+        <div className="p-4">
           <div className="text-center">
-            <div className="text-lg font-semibold text-gray-900">
-              {currentView === 'day' ? '5h 30m' : currentView === 'week' ? '32h 15m' : '128h 45m'}
-            </div>
-            <div className="text-xs text-gray-400">Est. duration</div>
+            <div className="text-2xl font-bold text-gray-900">{totalJobs}</div>
+            <div className="text-sm text-gray-500">jobs</div>
+            <div className="text-xs text-gray-400 mt-1">On the schedule</div>
           </div>
           
-          <div className="text-center">
-            <div className="text-lg font-semibold text-gray-900">
-              {currentView === 'day' ? '$770' : currentView === 'week' ? '$4,200' : '$18,500'}
+          <div className="mt-6 space-y-4">
+            <div className="text-center">
+              <div className="text-lg font-semibold text-gray-900">
+                {currentView === 'day' ? '5h 30m' : currentView === 'week' ? '32h 15m' : '128h 45m'}
+              </div>
+              <div className="text-xs text-gray-400">Est. duration</div>
             </div>
-            <div className="text-xs text-gray-400">Est. earnings</div>
+            
+            <div className="text-center">
+              <div className="text-lg font-semibold text-gray-900">
+                {currentView === 'day' ? '$770' : currentView === 'week' ? '$4,200' : '$18,500'}
+              </div>
+              <div className="text-xs text-gray-400">Est. earnings</div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   // Day View Component
   const DayView = () => (
     <div className="flex-1 bg-gray-50">
       <div className="max-w-4xl mx-auto p-6">
-        {jobs.length > 0 ? (
+        {loading ? (
+          <div className="text-center py-16">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
+              <RefreshCw className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-display font-medium text-gray-900 mb-2">Loading jobs...</h3>
+              <p className="text-gray-500 mb-6">Please wait while we fetch the scheduled jobs.</p>
+            </div>
+          </div>
+        ) : error ? (
+          <div className="text-center py-16">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12">
+              <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+              <h3 className="text-lg font-display font-medium text-gray-900 mb-2">Error: {error}</h3>
+              <p className="text-gray-500 mb-6">Failed to load jobs. Please try again later.</p>
+              <button 
+                onClick={loadJobs}
+                className="w-10 h-10 bg-primary-600 text-white rounded-full flex items-center justify-center hover:bg-primary-700 transition-all duration-200 transform hover:scale-[1.02] focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        ) : jobs.length > 0 ? (
           <div className="space-y-4">
-            {jobs.map((job) => (
-              <div key={job.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-all duration-200">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h3 className="text-lg font-display font-semibold text-gray-900">{job.title}</h3>
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        job.status === 'confirmed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {job.status}
-                      </span>
+            {jobs.map((job) => {
+              const getStatusColor = (status) => {
+                switch (status) {
+                  case 'completed': return 'bg-green-100 text-green-800 border-green-200';
+                  case 'in_progress': return 'bg-blue-100 text-blue-800 border-blue-200';
+                  case 'confirmed': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                  case 'cancelled': return 'bg-red-100 text-red-800 border-red-200';
+                  default: return 'bg-gray-100 text-gray-800 border-gray-200';
+                }
+              };
+              
+              return (
+                <div key={job.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center">
+                          <span className="text-white font-semibold text-sm">
+                            {job.team_member_first_name?.charAt(0) || job.service_name?.charAt(0) || 'J'}
+                          </span>
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                            {job.service_name || 'Service'}
+                          </h3>
+                          <p className="text-sm text-gray-600">
+                            {job.customer_first_name} {job.customer_last_name}
+                          </p>
+                        </div>
+                        <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(job.status)}`}>
+                          {job.status.replace('_', ' ')}
+                        </span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                        <div className="flex items-center space-x-2 text-gray-600">
+                          <Clock className="w-4 h-4" />
+                          <span>{new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-gray-600">
+                          <User className="w-4 h-4" />
+                          <span>{job.team_member_first_name} {job.team_member_last_name}</span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-gray-600">
+                          <MapPin className="w-4 h-4" />
+                          <span>{job.customer_address || 'Address not provided'}</span>
+                        </div>
+                        <div className="flex items-center space-x-2 text-gray-600">
+                          <DollarSign className="w-4 h-4" />
+                          <span className="font-medium text-green-600">${job.service_price || '0'}</span>
+                        </div>
+                      </div>
+                      
+                      {job.notes && (
+                        <div className="mt-4 pt-4 border-t border-gray-100">
+                          <p className="text-sm text-gray-600 italic">"{job.notes}"</p>
+                        </div>
+                      )}
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                      <div className="flex items-center space-x-2">
-                        <User className="w-4 h-4" />
-                        <span>{job.client}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4" />
-                        <span>{job.time} ({job.duration})</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4" />
-                        <span>{job.location}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <DollarSign className="w-4 h-4" />
-                        <span className="font-medium text-green-600">{job.earnings}</span>
-                      </div>
+                    <div className="flex space-x-2 ml-4">
+                      <button 
+                        onClick={() => handleEditJob(job)}
+                        className="px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200"
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => handleViewJob(job)}
+                        className="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
+                      >
+                        View
+                      </button>
                     </div>
                   </div>
-                  
-                  <div className="flex space-x-2 ml-4">
-                    <button 
-                      onClick={() => handleEditJob(job)}
-                      className="px-3 py-1 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button 
-                      onClick={() => handleViewJob(job)}
-                      className="px-3 py-1 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      View
-                    </button>
-                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-16">
@@ -361,7 +467,7 @@ const ZenbookerSchedule = () => {
         
         <div className="grid grid-cols-7 gap-px bg-gray-200">
           {generateDaysArray().map(({ date, isCurrentMonth }, index) => {
-            const dayHasJobs = jobs.some(job => new Date(job.date)?.toDateString() === date.toDateString())
+            const dayHasJobs = jobs.some(job => new Date(job.scheduled_date)?.toDateString() === date.toDateString())
             const _isToday = isToday(date)
             
             return (
@@ -385,7 +491,7 @@ const ZenbookerSchedule = () => {
                 {dayHasJobs && (
                   <div className="space-y-1">
                     {jobs
-                      .filter(job => new Date(job.date)?.toDateString() === date.toDateString())
+                      .filter(job => new Date(job.scheduled_date)?.toDateString() === date.toDateString())
                       .map((job) => (
                         <div
                           key={job.id}

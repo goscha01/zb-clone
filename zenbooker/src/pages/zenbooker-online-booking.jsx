@@ -1,29 +1,67 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
-import {
-  Copy,
-  ExternalLink,
-  Palette,
-  FileText,
-  Settings,
+import { 
+  ChevronDown, 
+  ChevronRight, 
+  Copy, 
+  ExternalLink, 
+  MapPin, 
+  Palette, 
+  Settings, 
   Code,
-  ChevronRight,
-  MapPin,
-  ChevronDown,
+  Globe,
+  MessageSquare,
+  CreditCard,
   HelpCircle,
+  FileText,
+  Upload,
+  X
 } from "lucide-react"
+import { useAuth } from "../context/AuthContext"
+import axios from "axios"
+
+// Create axios instance for API calls
+const api = axios.create({
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  timeout: 15000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Request interceptor to add auth token
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 const ZenbookerOnlineBooking = () => {
+  const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [expandedSection, setExpandedSection] = useState(null)
+  const [expandedSection, setExpandedSection] = useState("general")
+  const [customUrl, setCustomUrl] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [saveMessage, setSaveMessage] = useState("")
   const [brandingSettings, setBrandingSettings] = useState({
     primaryColor: "#4CAF50",
     headerBackground: "#ffffff",
     headerIcons: "#4CAF50",
     hideZenbookerBranding: false,
+    logo: null,
+    favicon: null,
+    heroImage: null
   })
   const [contentSettings, setContentSettings] = useState({
     heading: "Book Online",
@@ -45,6 +83,251 @@ const ZenbookerOnlineBooking = () => {
     use24Hour: false,
     allowMultipleServices: false,
   })
+  const [analyticsSettings, setAnalyticsSettings] = useState({
+    googleAnalytics: "",
+    facebookPixel: ""
+  })
+
+  // Load settings from backend
+  useEffect(() => {
+    const loadSettings = async () => {
+      if (!user?.id) return
+      
+      try {
+        setIsLoading(true)
+        const response = await api.get(`/booking-settings/${user.id}`)
+        const settings = response.data
+        
+        setBrandingSettings(settings.branding || brandingSettings)
+        setContentSettings(settings.content || contentSettings)
+        setGeneralSettings(settings.general || generalSettings)
+        setAnalyticsSettings(settings.analytics || analyticsSettings)
+        setCustomUrl(settings.customUrl || "")
+      } catch (error) {
+        console.error('Error loading settings:', error)
+        // If settings don't exist yet, that's okay - we'll use defaults
+        if (error.response?.status !== 404) {
+          setSaveMessage("Failed to load settings")
+        }
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadSettings()
+  }, [user?.id])
+
+  // Auto-save settings when they change
+  useEffect(() => {
+    if (!user?.id || isLoading) return
+    
+    const timeoutId = setTimeout(() => {
+      saveSettings('branding', brandingSettings)
+    }, 1000)
+    
+    return () => clearTimeout(timeoutId)
+  }, [brandingSettings, user?.id, isLoading])
+
+  useEffect(() => {
+    if (!user?.id || isLoading) return
+    
+    const timeoutId = setTimeout(() => {
+      saveSettings('content', contentSettings)
+    }, 1000)
+    
+    return () => clearTimeout(timeoutId)
+  }, [contentSettings, user?.id, isLoading])
+
+  useEffect(() => {
+    if (!user?.id || isLoading) return
+    
+    const timeoutId = setTimeout(() => {
+      saveSettings('general', generalSettings)
+    }, 1000)
+    
+    return () => clearTimeout(timeoutId)
+  }, [generalSettings, user?.id, isLoading])
+
+  useEffect(() => {
+    if (!user?.id || isLoading) return
+    
+    const timeoutId = setTimeout(() => {
+      saveSettings('analytics', analyticsSettings)
+    }, 1000)
+    
+    return () => clearTimeout(timeoutId)
+  }, [analyticsSettings, user?.id, isLoading])
+
+  // Save settings to backend
+  const saveSettings = async (settingsType, data) => {
+    if (!user?.id) return
+    
+    try {
+      setIsSaving(true)
+      setSaveMessage("")
+      
+      const currentSettings = {
+        branding: brandingSettings,
+        content: contentSettings,
+        general: generalSettings,
+        analytics: analyticsSettings,
+        customUrl: customUrl
+      }
+      
+      currentSettings[settingsType] = data
+      
+      await api.put(`/booking-settings/${user.id}`, currentSettings)
+      setSaveMessage("Settings saved successfully!")
+      setTimeout(() => setSaveMessage(""), 3000)
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      setSaveMessage("Failed to save settings")
+      setTimeout(() => setSaveMessage(""), 3000)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // File upload handlers
+  const handleFileUpload = async (file, type) => {
+    if (!file) return
+    
+    const formData = new FormData()
+    formData.append(type, file)
+    
+    try {
+      setIsSaving(true)
+      const response = await api.post(`/upload-${type}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      })
+      
+      const newBrandingSettings = { ...brandingSettings }
+      newBrandingSettings[type] = response.data.url
+      setBrandingSettings(newBrandingSettings)
+      
+      await saveSettings('branding', newBrandingSettings)
+      setSaveMessage(`${type} uploaded successfully!`)
+      setTimeout(() => setSaveMessage(""), 3000)
+    } catch (error) {
+      console.error(`Error uploading ${type}:`, error)
+      setSaveMessage(`Failed to upload ${type}`)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  // Generate booking URL based on user's business name
+  const generateBookingUrl = () => {
+    // Get the current domain for local development
+    const currentDomain = window.location.hostname === 'localhost' 
+      ? 'localhost:3000' 
+      : 'widget.zenbooker.com'
+    
+    // If custom URL is provided, use it
+    if (customUrl.trim()) {
+      const cleanCustomUrl = customUrl.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
+      return `${currentDomain}/#/book/${cleanCustomUrl}`
+    }
+    
+    // Otherwise use business name
+    if (!user?.businessName) {
+      return `${currentDomain}/#/book/your-business`
+    }
+    
+    // Convert business name to URL-friendly format
+    const businessSlug = user.businessName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .substring(0, 20) // Limit length
+    
+    return `${currentDomain}/#/book/${businessSlug}`
+  }
+
+  const generateQuoteUrl = () => {
+    // Get the current domain for local development
+    const currentDomain = window.location.hostname === 'localhost' 
+      ? 'localhost:3000' 
+      : 'widget.zenbooker.com'
+    
+    // If custom URL is provided, use it
+    if (customUrl.trim()) {
+      const cleanCustomUrl = customUrl.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')
+      return `${currentDomain}/#/quote/${cleanCustomUrl}`
+    }
+    
+    // Otherwise use business name
+    if (!user?.businessName) {
+      return `${currentDomain}/#/quote/your-business`
+    }
+    
+    // Convert business name to URL-friendly format
+    const businessSlug = user.businessName
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+      .substring(0, 20) // Limit length
+    
+    return `${currentDomain}/#/quote/${businessSlug}`
+  }
+
+  const bookingUrl = generateBookingUrl()
+  const quoteUrl = generateQuoteUrl()
+
+  const handleSaveCustomUrl = async () => {
+    if (!user?.id) {
+      setSaveMessage("Please sign in to save custom URL")
+      return
+    }
+    
+    if (!customUrl.trim()) {
+      setSaveMessage("Please enter a custom URL")
+      return
+    }
+    
+    setIsSaving(true)
+    setSaveMessage("")
+    
+    try {
+      await saveSettings('customUrl', customUrl)
+      setSaveMessage("Custom URL saved successfully!")
+      setTimeout(() => setSaveMessage(""), 3000)
+    } catch (error) {
+      setSaveMessage("Failed to save custom URL")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleCopyUrl = async () => {
+    try {
+      const protocol = window.location.hostname === 'localhost' ? 'http' : 'https'
+      await navigator.clipboard.writeText(`${protocol}://${bookingUrl}`)
+      setSaveMessage("Booking URL copied to clipboard!")
+      setTimeout(() => setSaveMessage(""), 3000)
+    } catch (error) {
+      setSaveMessage("Failed to copy URL")
+    }
+  }
+
+  const handleCopyQuoteUrl = async () => {
+    try {
+      const protocol = window.location.hostname === 'localhost' ? 'http' : 'https'
+      await navigator.clipboard.writeText(`${protocol}://${quoteUrl}`)
+      setSaveMessage("Quote URL copied to clipboard!")
+      setTimeout(() => setSaveMessage(""), 3000)
+    } catch (error) {
+      setSaveMessage("Failed to copy URL")
+    }
+  }
+
+  const handleViewPage = () => {
+    const protocol = window.location.hostname === 'localhost' ? 'http' : 'https'
+    window.open(`${protocol}://${bookingUrl}`, '_blank')
+  }
+
+  const handleViewQuotePage = () => {
+    const protocol = window.location.hostname === 'localhost' ? 'http' : 'https'
+    window.open(`${protocol}://${quoteUrl}`, '_blank')
+  }
 
   const toggleSection = (sectionId) => {
     setExpandedSection(expandedSection === sectionId ? null : sectionId)
@@ -115,16 +398,76 @@ const ZenbookerOnlineBooking = () => {
           <div>
             <h4 className="text-sm font-medium text-gray-900 mb-2">Logo</h4>
             <p className="text-sm text-gray-600 mb-3">The logo you'd like displayed on your booking page</p>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <button className="text-blue-600 hover:text-blue-700 text-sm">Click to upload your logo</button>
-            </div>
+            {brandingSettings.logo ? (
+              <div className="relative">
+                <img 
+                  src={brandingSettings.logo} 
+                  alt="Logo" 
+                  className="w-32 h-16 object-contain border border-gray-300 rounded"
+                />
+                <button
+                  onClick={() => {
+                    setBrandingSettings({ ...brandingSettings, logo: null })
+                    saveSettings('branding', { ...brandingSettings, logo: null })
+                  }}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <input
+                  type="file"
+                  id="logo-upload"
+                  accept="image/*"
+                  onChange={(e) => handleFileUpload(e.target.files[0], 'logo')}
+                  className="hidden"
+                />
+                <label htmlFor="logo-upload" className="cursor-pointer">
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-blue-600 hover:text-blue-700 text-sm">Click to upload your logo</p>
+                  <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 2MB</p>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Favicon */}
           <div>
             <h4 className="text-sm font-medium text-gray-900 mb-2">Favicon</h4>
             <p className="text-sm text-gray-600 mb-3">Icon displayed in the address bar of your browser</p>
-            <div className="w-12 h-12 border-2 border-dashed border-gray-300 rounded"></div>
+            {brandingSettings.favicon ? (
+              <div className="relative">
+                <img 
+                  src={brandingSettings.favicon} 
+                  alt="Favicon" 
+                  className="w-12 h-12 object-contain border border-gray-300 rounded"
+                />
+                <button
+                  onClick={() => {
+                    setBrandingSettings({ ...brandingSettings, favicon: null })
+                    saveSettings('branding', { ...brandingSettings, favicon: null })
+                  }}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="w-12 h-12 border-2 border-dashed border-gray-300 rounded flex items-center justify-center">
+                <input
+                  type="file"
+                  id="favicon-upload"
+                  accept="image/*"
+                  onChange={(e) => handleFileUpload(e.target.files[0], 'favicon')}
+                  className="hidden"
+                />
+                <label htmlFor="favicon-upload" className="cursor-pointer">
+                  <Upload className="w-4 h-4 text-gray-400" />
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Start Page Hero */}
@@ -136,9 +479,39 @@ const ZenbookerOnlineBooking = () => {
             <p className="text-sm text-gray-600 mb-3">
               Express your brand with a photo or illustration displayed at the start of the booking form
             </p>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <button className="text-blue-600 hover:text-blue-700 text-sm">Upload your custom image</button>
-            </div>
+            {brandingSettings.heroImage ? (
+              <div className="relative">
+                <img 
+                  src={brandingSettings.heroImage} 
+                  alt="Hero Image" 
+                  className="w-full h-32 object-cover border border-gray-300 rounded"
+                />
+                <button
+                  onClick={() => {
+                    setBrandingSettings({ ...brandingSettings, heroImage: null })
+                    saveSettings('branding', { ...brandingSettings, heroImage: null })
+                  }}
+                  className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center hover:bg-red-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                <input
+                  type="file"
+                  id="hero-upload"
+                  accept="image/*"
+                  onChange={(e) => handleFileUpload(e.target.files[0], 'heroImage')}
+                  className="hidden"
+                />
+                <label htmlFor="hero-upload" className="cursor-pointer">
+                  <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                  <p className="text-blue-600 hover:text-blue-700 text-sm">Upload your custom image</p>
+                  <p className="text-xs text-gray-500 mt-1">PNG, JPG up to 5MB</p>
+                </label>
+              </div>
+            )}
           </div>
 
           {/* Hide Zenbooker Branding */}
@@ -412,6 +785,8 @@ const ZenbookerOnlineBooking = () => {
               <input
                 type="text"
                 placeholder="Enter your Google Tag ID"
+                value={analyticsSettings.googleAnalytics}
+                onChange={(e) => setAnalyticsSettings({ ...analyticsSettings, googleAnalytics: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               />
             </div>
@@ -420,6 +795,8 @@ const ZenbookerOnlineBooking = () => {
               <input
                 type="text"
                 placeholder="Facebook Pixel ID"
+                value={analyticsSettings.facebookPixel}
+                onChange={(e) => setAnalyticsSettings({ ...analyticsSettings, facebookPixel: e.target.value })}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
               />
             </div>
@@ -433,9 +810,79 @@ const ZenbookerOnlineBooking = () => {
       title: "Embed your booking widget",
       description: "Add your booking form to your website. Choose from four different embed widgets.",
       content: (
-        <div className="text-center py-8">
-          <p className="text-gray-600">Widget embedding options will be displayed here.</p>
-          <button className="mt-4 text-blue-600 hover:text-blue-700 font-medium">Configure Embed Options</button>
+        <div className="space-y-6">
+          {/* Embed Options */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[
+              {
+                id: "inline",
+                title: "Inline Widget",
+                description: "Embed the booking form directly into your website",
+                code: `<iframe src="http://${bookingUrl}" width="100%" height="600" frameborder="0"></iframe>`
+              },
+              {
+                id: "popup",
+                title: "Popup Widget",
+                description: "Show booking form in a popup when button is clicked",
+                code: `<button onclick="window.open('http://${bookingUrl}', '_blank', 'width=800,height=600')">Book Now</button>`
+              },
+              {
+                id: "fullpage",
+                title: "Full Page Redirect",
+                description: "Redirect customers to the full booking page",
+                code: `<a href="http://${bookingUrl}" target="_blank">Book Your Service</a>`
+              },
+              {
+                id: "custom",
+                title: "Custom Integration",
+                description: "Use our API to build a custom booking experience",
+                code: `// API endpoint: http://localhost:5000/api/public/business/${bookingUrl.split('/').pop()}`
+              }
+            ].map((option) => (
+              <div key={option.id} className="border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-2">{option.title}</h4>
+                <p className="text-sm text-gray-600 mb-3">{option.description}</p>
+                <div className="bg-gray-50 p-3 rounded border">
+                  <code className="text-xs text-gray-700 break-all">{option.code}</code>
+                </div>
+                <button 
+                  onClick={() => navigator.clipboard.writeText(option.code)}
+                  className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                >
+                  Copy Code
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Advanced Embed Settings */}
+          <div className="border-t border-gray-200 pt-4">
+            <h4 className="font-medium text-gray-900 mb-3">Advanced Settings</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Widget Height</label>
+                <input
+                  type="number"
+                  placeholder="600"
+                  className="w-24 border border-gray-300 rounded px-2 py-1 text-sm"
+                />
+                <span className="text-xs text-gray-500 ml-2">pixels</span>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Widget Width</label>
+                <select className="border border-gray-300 rounded px-2 py-1 text-sm">
+                  <option>100%</option>
+                  <option>800px</option>
+                  <option>600px</option>
+                  <option>Custom</option>
+                </select>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input type="checkbox" id="responsive" className="rounded" />
+                <label htmlFor="responsive" className="text-sm text-gray-700">Make widget responsive</label>
+              </div>
+            </div>
+          </div>
         </div>
       ),
     },
@@ -460,6 +907,17 @@ const ZenbookerOnlineBooking = () => {
             </p>
           </div>
           <div className="flex items-center space-x-2">
+            {isSaving && (
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                <span>Saving...</span>
+              </div>
+            )}
+            {saveMessage && (
+              <div className={`text-sm ${saveMessage.includes('success') ? 'text-green-600' : 'text-red-600'}`}>
+                {saveMessage}
+              </div>
+            )}
             <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
               <option>Select a view</option>
               <option>Desktop</option>
@@ -479,113 +937,197 @@ const ZenbookerOnlineBooking = () => {
 
         {/* Content Area */}
         <div className="flex-1 overflow-auto">
-          <div className="flex flex-col lg:flex-row h-full">
-            {/* Left Panel */}
-            <div className="lg:w-1/2 p-6 bg-white border-r border-gray-200">
-              {/* Booking Page URL */}
-              <div className="mb-8">
-                <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                  YOUR BOOKING PAGE URL
-                </h3>
-                <div className="flex items-center space-x-3 mb-3">
-                  <div className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700">
-                    widget.zenbooker.com/book/justwebagency
-                  </div>
-                  <button className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">
-                    <Copy className="w-4 h-4" />
-                    <span>Copy</span>
-                  </button>
-                  <button className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50">
-                    <ExternalLink className="w-4 h-4" />
-                    <span>View page</span>
-                  </button>
-                </div>
-                <p className="text-sm text-gray-600">
-                  You can share this link with customers to let them book your services.
-                </p>
-              </div>
-
-              {/* Configuration Sections */}
-              <div className="space-y-4">
-                {configSections.map((section, index) => {
-                  const Icon = section.icon
-                  const isExpanded = expandedSection === section.id
-                  return (
-                    <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
-                      <div
-                        onClick={() => toggleSection(section.id)}
-                        className="flex items-start space-x-4 p-4 hover:bg-gray-50 cursor-pointer"
-                      >
-                        <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                          <Icon className="w-5 h-5 text-gray-600" />
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-medium text-gray-900 mb-1">{section.title}</h4>
-                          <p className="text-sm text-gray-600">{section.description}</p>
-                        </div>
-                        <ChevronDown
-                          className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${
-                            isExpanded ? "rotate-180" : ""
-                          }`}
-                        />
-                      </div>
-
-                      {isExpanded && <div className="border-t border-gray-200 p-4 bg-gray-50">{section.content}</div>}
-                    </div>
-                  )
-                })}
+          {isLoading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading booking settings...</p>
               </div>
             </div>
-
-            {/* Right Panel - Preview */}
-            <div className="lg:w-1/2 p-6 bg-gray-100 flex items-center justify-center">
-              <div className="max-w-sm w-full">
-                {/* Browser Mockup */}
-                <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-                  {/* Browser Header */}
-                  <div className="bg-gray-200 px-4 py-3 flex items-center space-x-2">
-                    <div className="flex space-x-1">
-                      <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                      <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
-                      <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+          ) : (
+            <div className="flex flex-col lg:flex-row h-full">
+              {/* Left Panel */}
+              <div className="lg:w-1/2 p-6 bg-white border-r border-gray-200">
+                {/* Booking Page URL */}
+                <div className="mb-8">
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                    YOUR BOOKING PAGE URL
+                  </h3>
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700">
+                      {bookingUrl}
                     </div>
-                    <div className="flex-1 bg-white rounded px-3 py-1 text-xs text-gray-600 flex items-center space-x-2">
-                      <div className="w-4 h-4 bg-gray-300 rounded"></div>
-                      <span>widget.zenbooker.com</span>
-                    </div>
+                    <button 
+                      onClick={handleCopyUrl}
+                      className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+                    >
+                      <Copy className="w-4 h-4" />
+                      <span>Copy</span>
+                    </button>
+                    <button 
+                      onClick={handleViewPage}
+                      className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>View page</span>
+                    </button>
                   </div>
+                  <p className="text-sm text-gray-600">
+                    You can share this link with customers to let them book your services.
+                  </p>
+                </div>
 
-                  {/* Booking Widget Content */}
-                  <div className="p-6 text-center">
-                    <h2 className="text-2xl font-bold text-gray-900 mb-4">Book Online</h2>
-                    <p className="text-gray-600 mb-6">Let's get started by entering your postal code.</p>
-
-                    <div className="flex items-center space-x-2 mb-4">
-                      <div className="flex-1 relative">
-                        <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                        <input
-                          type="text"
-                          placeholder="Postal Code"
-                          className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                        />
-                      </div>
-                      <button className="bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700">
-                        <ChevronRight className="w-5 h-5" />
+                {/* Quote Request URL */}
+                <div className="mb-8">
+                  <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                    YOUR QUOTE REQUEST URL
+                  </h3>
+                  <div className="flex items-center space-x-3 mb-3">
+                    <div className="flex-1 bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700">
+                      {quoteUrl}
+                    </div>
+                    <button 
+                      onClick={handleCopyQuoteUrl}
+                      className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+                    >
+                      <Copy className="w-4 h-4" />
+                      <span>Copy</span>
+                    </button>
+                    <button 
+                      onClick={handleViewQuotePage}
+                      className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      <span>View page</span>
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-600">
+                    Share this link with customers who need custom quotes before booking.
+                  </p>
+                  
+                  {/* Custom URL Input */}
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Custom URL (Optional)
+                    </label>
+                    <div className="flex items-center space-x-2 mb-2">
+                      <span className="text-sm text-gray-500">widget.zenbooker.com/book/</span>
+                      <input
+                        type="text"
+                        placeholder="your-custom-name"
+                        value={customUrl}
+                        onChange={(e) => setCustomUrl(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      />
+                      <button
+                        onClick={handleSaveCustomUrl}
+                        disabled={isSaving}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm font-medium hover:bg-blue-600 disabled:opacity-50"
+                      >
+                        {isSaving ? 'Saving...' : 'Save'}
                       </button>
                     </div>
+                    {saveMessage && (
+                      <p className={`text-xs ${saveMessage.includes('success') ? 'text-green-600' : 'text-red-600'}`}>
+                        {saveMessage}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Use only letters, numbers, and hyphens. This will update both your booking and quote URLs.
+                    </p>
+                  </div>
+                </div>
 
-                    <div className="text-xs text-gray-500 flex items-center justify-center space-x-1">
-                      <span>Powered by</span>
-                      <div className="w-4 h-4 bg-blue-600 rounded flex items-center justify-center">
-                        <span className="text-white font-bold text-xs">Z</span>
+                {/* Configuration Sections */}
+                <div className="space-y-4">
+                  {configSections.map((section, index) => {
+                    const Icon = section.icon
+                    const isExpanded = expandedSection === section.id
+                    return (
+                      <div key={index} className="border border-gray-200 rounded-lg overflow-hidden">
+                        <div
+                          onClick={() => toggleSection(section.id)}
+                          className="flex items-start space-x-4 p-4 hover:bg-gray-50 cursor-pointer"
+                        >
+                          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <Icon className="w-5 h-5 text-gray-600" />
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-medium text-gray-900 mb-1">{section.title}</h4>
+                            <p className="text-sm text-gray-600">{section.description}</p>
+                          </div>
+                          <ChevronDown
+                            className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${
+                              isExpanded ? "rotate-180" : ""
+                            }`}
+                          />
+                        </div>
+
+                        {isExpanded && <div className="border-t border-gray-200 p-4 bg-gray-50">{section.content}</div>}
                       </div>
-                      <span>zenbooker</span>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Right Panel - Preview */}
+              <div className="lg:w-1/2 p-6 bg-gray-100 flex items-center justify-center">
+                <div className="max-w-sm w-full">
+                  {/* Browser Mockup */}
+                  <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+                    {/* Browser Header */}
+                    <div className="bg-gray-200 px-4 py-3 flex items-center space-x-2">
+                      <div className="flex space-x-1">
+                        <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                        <div className="w-3 h-3 bg-yellow-500 rounded-full"></div>
+                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                      </div>
+                      <div className="flex-1 bg-white rounded px-3 py-1 text-xs text-gray-600 flex items-center space-x-2">
+                        <div className="w-4 h-4 bg-gray-300 rounded"></div>
+                        <span>{bookingUrl}</span>
+                      </div>
+                    </div>
+
+                    {/* Booking Widget Content */}
+                    <div className="p-6 text-center" style={{ backgroundColor: brandingSettings.headerBackground }}>
+                      <h2 className="text-2xl font-bold text-gray-900 mb-4" style={{ color: brandingSettings.primaryColor }}>
+                        {contentSettings.heading}
+                      </h2>
+                      <p className="text-gray-600 mb-6">{contentSettings.text}</p>
+
+                      <div className="flex items-center space-x-2 mb-4">
+                        <div className="flex-1 relative">
+                          <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                          <input
+                            type="text"
+                            placeholder="Postal Code"
+                            className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                            style={{ '--tw-ring-color': brandingSettings.primaryColor }}
+                          />
+                        </div>
+                        <button 
+                          className="text-white px-4 py-3 rounded-lg hover:opacity-90"
+                          style={{ backgroundColor: brandingSettings.primaryColor }}
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      {!brandingSettings.hideZenbookerBranding && (
+                        <div className="text-xs text-gray-500 flex items-center justify-center space-x-1">
+                          <span>Powered by</span>
+                          <div className="w-4 h-4 bg-blue-600 rounded flex items-center justify-center">
+                            <span className="text-white font-bold text-xs">Z</span>
+                          </div>
+                          <span>zenbooker</span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

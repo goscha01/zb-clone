@@ -46,14 +46,33 @@ const ZenbookerServices = () => {
   }
 
   const handleCreateService = async (serviceData) => {
-    if (!user?.id) return
+    if (!user?.id) {
+      console.error('No user ID found:', user);
+      setError("Please log in again to create services.");
+      return;
+    }
     
     try {
       setError("")
+      
+      console.log('Current user:', user);
+      console.log('Service data:', serviceData);
+      
+      // Convert duration to minutes for backend
+      const durationInMinutes = (serviceData.duration.hours * 60) + serviceData.duration.minutes
+      
       const newService = {
-        ...serviceData,
-        userId: user.id
+        userId: user.id,
+        name: serviceData.name,
+        description: serviceData.description || "",
+        price: serviceData.isFree ? 0 : parseFloat(serviceData.price) || 0,
+        duration: durationInMinutes,
+        category: serviceData.category || "",
+        modifiers: JSON.stringify([]), // Initialize with empty modifiers array
+        isFree: serviceData.isFree
       }
+      
+      console.log('Sending service data to backend:', newService);
       
       const response = await servicesAPI.create(newService)
       
@@ -122,10 +141,21 @@ const ZenbookerServices = () => {
     }
   }
 
-  const handleSelectTemplate = (template) => {
-    // TODO: Implement template selection
+  const handleSelectTemplate = async (template) => {
     setTemplatesModalOpen(false)
-    navigate(`/service-details`)
+    
+    // Create service from template
+    const serviceData = {
+      name: template.name,
+      description: template.description,
+      price: template.price,
+      duration: template.duration,
+      category: template.category,
+      modifiers: template.modifiers || [],
+      isFree: false
+    }
+    
+    await handleCreateService(serviceData)
   }
 
   const handleServiceClick = (serviceId) => {
@@ -224,11 +254,28 @@ const ZenbookerServices = () => {
                     >
                       <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
                       <Wrench className="w-5 h-5 text-gray-400" />
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <h3 className="font-medium text-gray-900">{service.name}</h3>
-                        <p className="text-sm text-gray-500">
-                          {service.price ? `₦${service.price}` : 'Price not set'}
-                        </p>
+                        {service.description && (
+                          <p className="text-sm text-gray-500 mt-1 line-clamp-1">
+                            {service.description}
+                          </p>
+                        )}
+                        <div className="flex items-center space-x-4 mt-2">
+                          <span className="text-sm text-gray-600">
+                            {service.price ? `$${service.price}` : 'Free'}
+                          </span>
+                          {service.duration && (
+                            <span className="text-sm text-gray-600">
+                              {Math.floor(service.duration / 60)}h {service.duration % 60}m
+                            </span>
+                          )}
+                          {service.category && (
+                            <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                              {service.category}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center space-x-4">

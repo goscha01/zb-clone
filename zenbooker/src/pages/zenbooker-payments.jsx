@@ -56,7 +56,7 @@ const ZenbookerPayments = () => {
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">Gross revenue</div>
-                    <div className="text-2xl font-bold text-gray-900">₦0</div>
+                    <div className="text-2xl font-bold text-gray-900">$0</div>
                   </div>
                 </div>
               </div>
