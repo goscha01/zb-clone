@@ -39,9 +39,10 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authAPI.signin(credentials);
       const userData = response.user;
+      const token = response.token;
       
       // Store user data and token
-      localStorage.setItem('authToken', 'dummy-token'); // In real app, use response.token
+      localStorage.setItem('authToken', token);
       localStorage.setItem('user', JSON.stringify(userData));
       
       setUser(userData);
@@ -55,9 +56,10 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await authAPI.signup(userData);
       const newUser = response.user;
+      const token = response.token;
       
       // Store user data and token
-      localStorage.setItem('authToken', 'dummy-token'); // In real app, use response.token
+      localStorage.setItem('authToken', token);
       localStorage.setItem('user', JSON.stringify(newUser));
       
       setUser(newUser);
