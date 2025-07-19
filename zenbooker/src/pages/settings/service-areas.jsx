@@ -1,15 +1,89 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
-import { ChevronLeft, MapPin } from "lucide-react"
+import { ChevronLeft, MapPin, Check, X } from "lucide-react"
+import { serviceAreasAPI, authAPI } from "../../services/api"
 
 const ServiceAreas = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [enforceServiceArea, setEnforceServiceArea] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState({ type: '', text: '' })
   const navigate = useNavigate()
+  
+  const [serviceAreasData, setServiceAreasData] = useState({
+    enforceServiceArea: true,
+    territories: []
+  })
+
+  // Get current user
+  const currentUser = authAPI.getCurrentUser()
+
+  useEffect(() => {
+    if (currentUser) {
+      loadServiceAreasData()
+    } else {
+      navigate('/signin')
+    }
+  }, [currentUser])
+
+  const loadServiceAreasData = async () => {
+    try {
+      setLoading(true)
+      const serviceAreas = await serviceAreasAPI.getServiceAreas(currentUser.id)
+      setServiceAreasData(serviceAreas)
+    } catch (error) {
+      console.error('Error loading service areas data:', error)
+      setMessage({ type: 'error', text: 'Failed to load service areas settings' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleToggleEnforceServiceArea = async () => {
+    try {
+      setSaving(true)
+      const updatedData = {
+        ...serviceAreasData,
+        enforceServiceArea: !serviceAreasData.enforceServiceArea
+      }
+      
+      await serviceAreasAPI.updateServiceAreas({
+        userId: currentUser.id,
+        enforceServiceArea: updatedData.enforceServiceArea,
+        territories: updatedData.territories
+      })
+      
+      setServiceAreasData(updatedData)
+      setMessage({ type: 'success', text: 'Service area settings updated successfully!' })
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000)
+    } catch (error) {
+      console.error('Error updating service areas:', error)
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to update service areas' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="flex-1 flex flex-col min-w-0">
+          <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading service areas settings...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -32,6 +106,22 @@ const ServiceAreas = () => {
           </div>
         </div>
 
+        {/* Message */}
+        {message.text && (
+          <div className={`px-6 py-3 ${message.type === 'success' ? 'bg-green-50 border-l-4 border-green-400' : 'bg-red-50 border-l-4 border-red-400'}`}>
+            <div className="flex items-center">
+              {message.type === 'success' ? (
+                <Check className="w-5 h-5 text-green-400 mr-2" />
+              ) : (
+                <X className="w-5 h-5 text-red-400 mr-2" />
+              )}
+              <span className={`text-sm ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
+                {message.text}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="flex-1 overflow-auto">
           <div className="max-w-5xl mx-auto p-6">
@@ -45,16 +135,17 @@ const ServiceAreas = () => {
                   </p>
                 </div>
                 <button
-                  onClick={() => setEnforceServiceArea(!enforceServiceArea)}
-                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                    enforceServiceArea ? 'bg-blue-600' : 'bg-gray-200'
+                  onClick={handleToggleEnforceServiceArea}
+                  disabled={saving}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 ${
+                    serviceAreasData.enforceServiceArea ? 'bg-blue-600' : 'bg-gray-200'
                   }`}
                   role="switch"
-                  aria-checked={enforceServiceArea}
+                  aria-checked={serviceAreasData.enforceServiceArea}
                 >
                   <span
                     className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                      enforceServiceArea ? 'translate-x-5' : 'translate-x-0'
+                      serviceAreasData.enforceServiceArea ? 'translate-x-5' : 'translate-x-0'
                     }`}
                   />
                 </button>
@@ -70,7 +161,17 @@ const ServiceAreas = () => {
                 </p>
               </div>
 
-              {/* Map and Territory Card */}
+              {serviceAreasData.territories.length === 0 ? (
+                <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+                  <p className="text-gray-500 mb-4">No territories configured yet</p>
+                  <button 
+                    onClick={() => navigate("/territories")}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700"
+                  >
+                    Add Territory
+                  </button>
+                </div>
+              ) : (
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 {/* Map */}
                 <div className="h-96 bg-green-50 relative">
@@ -109,6 +210,7 @@ const ServiceAreas = () => {
                   </div>
                 </div>
               </div>
+              )}
             </div>
           </div>
         </div>

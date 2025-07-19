@@ -1,14 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
-import { ChevronLeft } from "lucide-react"
+import { ChevronLeft, Check, X } from "lucide-react"
+import { brandingAPI, authAPI } from "../../services/api"
 
 const BrandingSettings = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState({ type: '', text: '' })
   const navigate = useNavigate()
+  
   const [settings, setSettings] = useState({
     logo: null,
     showLogoInAdmin: false,
@@ -24,13 +29,75 @@ const BrandingSettings = () => {
     "#795548", "#607D8B"
   ]
 
+  // Get current user
+  const currentUser = authAPI.getCurrentUser()
+
+  useEffect(() => {
+    if (currentUser) {
+      loadBrandingData()
+    } else {
+      navigate('/signin')
+    }
+  }, [currentUser])
+
+  const loadBrandingData = async () => {
+    try {
+      setLoading(true)
+      const branding = await brandingAPI.getBranding(currentUser.id)
+      setSettings(branding)
+    } catch (error) {
+      console.error('Error loading branding data:', error)
+      setMessage({ type: 'error', text: 'Failed to load branding settings' })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleLogoUpload = (event) => {
     const file = event.target.files[0]
     if (file) {
-      // Here you would typically handle the file upload to your server
-      // For now, we'll just store it in state
-      setSettings({ ...settings, logo: file })
+      // In a real application, you would upload the file to a server
+      // For now, we'll create a local URL and store it
+      const logoUrl = URL.createObjectURL(file)
+      setSettings({ ...settings, logo: logoUrl })
     }
+  }
+
+  const handleSaveBranding = async () => {
+    try {
+      setSaving(true)
+      await brandingAPI.updateBranding({
+        userId: currentUser.id,
+        logo: settings.logo,
+        showLogoInAdmin: settings.showLogoInAdmin,
+        primaryColor: settings.primaryColor
+      })
+      
+      setMessage({ type: 'success', text: 'Branding settings saved successfully!' })
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000)
+    } catch (error) {
+      console.error('Error saving branding settings:', error)
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to save branding settings' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="flex-1 flex flex-col min-w-0">
+          <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading branding settings...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -53,6 +120,22 @@ const BrandingSettings = () => {
             <h1 className="text-2xl font-semibold text-gray-900">Branding</h1>
           </div>
         </div>
+
+        {/* Message */}
+        {message.text && (
+          <div className={`px-6 py-3 ${message.type === 'success' ? 'bg-green-50 border-l-4 border-green-400' : 'bg-red-50 border-l-4 border-red-400'}`}>
+            <div className="flex items-center">
+              {message.type === 'success' ? (
+                <Check className="w-5 h-5 text-green-400 mr-2" />
+              ) : (
+                <X className="w-5 h-5 text-red-400 mr-2" />
+              )}
+              <span className={`text-sm ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
+                {message.text}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-auto">
@@ -96,6 +179,15 @@ const BrandingSettings = () => {
                     </label>
                   </div>
                 </div>
+                {settings.logo && (
+                  <div className="mt-4">
+                    <img 
+                      src={settings.logo} 
+                      alt="Logo preview" 
+                      className="h-16 w-auto object-contain"
+                    />
+                  </div>
+                )}
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-sm text-gray-600">Show logo in Zenbooker admin</span>
                   <button
@@ -138,6 +230,17 @@ const BrandingSettings = () => {
                     <span className="text-sm text-gray-600 uppercase">{settings.primaryColor}</span>
                   </div>
                 </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="mt-8 pt-6 border-t border-gray-200">
+                <button
+                  onClick={handleSaveBranding}
+                  disabled={saving}
+                  className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
             </div>
           </div>

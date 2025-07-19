@@ -1,38 +1,151 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
 import CreateCustomPaymentMethodModal from "../../components/create-custom-payment-method-modal"
-import { ChevronLeft, Edit, Trash2, HelpCircle } from "lucide-react"
+import { ChevronLeft, Edit, Trash2, HelpCircle, Check, AlertCircle } from "lucide-react"
+import { paymentSettingsAPI, paymentMethodsAPI } from "../../services/api"
+import { useAuth } from "../../context/AuthContext"
 
 const Payments = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [isPaymentMethodModalOpen, setIsPaymentMethodModalOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState({ type: '', text: '' })
+  
   const [settings, setSettings] = useState({
     onlineBookingTips: false,
     invoicePaymentTips: false,
     showServicePrices: true,
     showServiceDescriptions: false,
-    paymentDue: "15",
+    paymentDueDays: 15,
     paymentDueUnit: "days",
+    defaultMemo: "",
+    invoiceFooter: "",
+    paymentProcessor: null,
+    paymentProcessorConnected: false
   })
 
-  const [paymentMethods, setPaymentMethods] = useState([
-    { id: 1, name: "Cash", editable: true },
-    { id: 2, name: "Check", editable: true },
-  ])
+  const [paymentMethods, setPaymentMethods] = useState([])
+  const [editingMethod, setEditingMethod] = useState(null)
 
-  const handleSavePaymentMethod = (paymentMethod) => {
-    setPaymentMethods(prev => [...prev, paymentMethod])
+  useEffect(() => {
+    if (user) {
+      loadPaymentData()
+    }
+  }, [user])
+
+  const loadPaymentData = async () => {
+    try {
+      setLoading(true)
+      const [settingsData, methodsData] = await Promise.all([
+        paymentSettingsAPI.getPaymentSettings(),
+        paymentMethodsAPI.getPaymentMethods()
+      ])
+      
+      setSettings(settingsData)
+      setPaymentMethods(methodsData)
+    } catch (error) {
+      console.error('Error loading payment data:', error)
+      setMessage({ type: 'error', text: 'Failed to load payment settings' })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleDeletePaymentMethod = (id) => {
-    if (window.confirm("Are you sure you want to delete this payment method?")) {
-      setPaymentMethods(prev => prev.filter(method => method.id !== id))
+  const handleSaveSettings = async () => {
+    try {
+      setSaving(true)
+      await paymentSettingsAPI.updatePaymentSettings(settings)
+      setMessage({ type: 'success', text: 'Payment settings saved successfully' })
+    } catch (error) {
+      console.error('Error saving payment settings:', error)
+      setMessage({ type: 'error', text: 'Failed to save payment settings' })
+    } finally {
+      setSaving(false)
     }
+  }
+
+  const handleSetupPaymentProcessor = async () => {
+    try {
+      setSaving(true)
+      const result = await paymentSettingsAPI.setupPaymentProcessor('stripe')
+      setSettings(prev => ({
+        ...prev,
+        paymentProcessor: result.processor,
+        paymentProcessorConnected: result.connected
+      }))
+      setMessage({ type: 'success', text: 'Payment processor connected successfully' })
+    } catch (error) {
+      console.error('Error setting up payment processor:', error)
+      setMessage({ type: 'error', text: 'Failed to setup payment processor' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSavePaymentMethod = async (paymentMethod) => {
+    try {
+      if (editingMethod) {
+        await paymentMethodsAPI.updatePaymentMethod(editingMethod.id, paymentMethod)
+        setPaymentMethods(prev => 
+          prev.map(method => 
+            method.id === editingMethod.id 
+              ? { ...method, ...paymentMethod }
+              : method
+          )
+        )
+        setEditingMethod(null)
+      } else {
+        const newMethod = await paymentMethodsAPI.createPaymentMethod(paymentMethod)
+        setPaymentMethods(prev => [...prev, newMethod])
+      }
+      setIsPaymentMethodModalOpen(false)
+      setMessage({ type: 'success', text: 'Payment method saved successfully' })
+    } catch (error) {
+      console.error('Error saving payment method:', error)
+      setMessage({ type: 'error', text: 'Failed to save payment method' })
+    }
+  }
+
+  const handleDeletePaymentMethod = async (id) => {
+    if (window.confirm("Are you sure you want to delete this payment method?")) {
+      try {
+        await paymentMethodsAPI.deletePaymentMethod(id)
+        setPaymentMethods(prev => prev.filter(method => method.id !== id))
+        setMessage({ type: 'success', text: 'Payment method deleted successfully' })
+      } catch (error) {
+        console.error('Error deleting payment method:', error)
+        setMessage({ type: 'error', text: 'Failed to delete payment method' })
+      }
+    }
+  }
+
+  const handleEditPaymentMethod = (method) => {
+    setEditingMethod(method)
+    setIsPaymentMethodModalOpen(true)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <div className="flex-1 flex flex-col min-w-0">
+          <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-gray-600">Loading payment settings...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -59,6 +172,24 @@ const Payments = () => {
         {/* Content */}
         <div className="flex-1 overflow-auto">
           <div className="max-w-4xl mx-auto p-6 space-y-8">
+            {/* Message Display */}
+            {message.text && (
+              <div className={`rounded-lg p-4 ${
+                message.type === 'success' 
+                  ? 'bg-green-50 border border-green-200 text-green-800' 
+                  : 'bg-red-50 border border-red-200 text-red-800'
+              }`}>
+                <div className="flex items-center space-x-2">
+                  {message.type === 'success' ? (
+                    <Check className="w-5 h-5" />
+                  ) : (
+                    <AlertCircle className="w-5 h-5" />
+                  )}
+                  <span className="font-medium">{message.text}</span>
+                </div>
+              </div>
+            )}
+
             {/* Payment Processing */}
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h2 className="text-xl font-semibold text-gray-900 mb-4">Payment Processing</h2>
@@ -67,18 +198,36 @@ const Payments = () => {
                 book or when they receive an invoice.
               </p>
 
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
-                  <span className="text-sm font-medium text-orange-800">Payment processing not set up</span>
+              {settings.paymentProcessorConnected ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
+                    <span className="text-sm font-medium text-green-800">
+                      Payment processing connected ({settings.paymentProcessor})
+                    </span>
+                  </div>
+                  <p className="text-sm text-green-700 mt-1">
+                    Your customers can now pay online with credit cards
+                  </p>
                 </div>
-                <p className="text-sm text-orange-700 mt-1">
-                  Connect a payment processor to accept credit card payments online
-                </p>
-              </div>
+              ) : (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-orange-400 rounded-full"></div>
+                    <span className="text-sm font-medium text-orange-800">Payment processing not set up</span>
+                  </div>
+                  <p className="text-sm text-orange-700 mt-1">
+                    Connect a payment processor to accept credit card payments online
+                  </p>
+                </div>
+              )}
 
-              <button className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700">
-                Set Up Payment Processing
+              <button 
+                onClick={handleSetupPaymentProcessor}
+                disabled={saving}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Setting up...' : settings.paymentProcessorConnected ? 'Change Payment Processor' : 'Set Up Payment Processing'}
               </button>
             </div>
 
@@ -149,7 +298,10 @@ const Payments = () => {
                       )}
                     </div>
                     <div className="flex items-center space-x-2">
-                      <button className="p-1 text-gray-400 hover:text-gray-600">
+                      <button 
+                        onClick={() => handleEditPaymentMethod(method)}
+                        className="p-1 text-gray-400 hover:text-gray-600"
+                      >
                         <Edit className="w-4 h-4" />
                       </button>
                       <button 
@@ -185,6 +337,8 @@ const Payments = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Default memo</label>
                   <textarea
+                    value={settings.defaultMemo}
+                    onChange={(e) => setSettings({ ...settings, defaultMemo: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     rows={3}
                     placeholder="We appreciate your business."
@@ -199,6 +353,8 @@ const Payments = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Footer</label>
                   <textarea
+                    value={settings.invoiceFooter}
+                    onChange={(e) => setSettings({ ...settings, invoiceFooter: e.target.value })}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     rows={2}
                     placeholder="This will appear on the bottom invoice page and when printing an invoice"
@@ -215,8 +371,8 @@ const Payments = () => {
                   <div className="flex items-center space-x-2">
                     <input
                       type="number"
-                      value={settings.paymentDue}
-                      onChange={(e) => setSettings({ ...settings, paymentDue: e.target.value })}
+                      value={settings.paymentDueDays}
+                      onChange={(e) => setSettings({ ...settings, paymentDueDays: parseInt(e.target.value) || 0 })}
                       className="w-20 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                     />
                     <select
@@ -272,6 +428,17 @@ const Payments = () => {
                 </div>
               </div>
             </div>
+
+            {/* Save Button */}
+            <div className="flex justify-end">
+              <button
+                onClick={handleSaveSettings}
+                disabled={saving}
+                className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving...' : 'Save Settings'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -279,8 +446,12 @@ const Payments = () => {
       {isPaymentMethodModalOpen && (
         <CreateCustomPaymentMethodModal
           isOpen={isPaymentMethodModalOpen}
-          onClose={() => setIsPaymentMethodModalOpen(false)}
+          onClose={() => {
+            setIsPaymentMethodModalOpen(false)
+            setEditingMethod(null)
+          }}
           onSave={handleSavePaymentMethod}
+          editingMethod={editingMethod}
         />
       )}
     </div>
