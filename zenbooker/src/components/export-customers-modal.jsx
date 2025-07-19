@@ -1,11 +1,14 @@
 "use client"
 
-import { X } from "lucide-react"
+import { X, Download, Loader2 } from "lucide-react"
 import { useState } from "react"
+import { customersAPI } from "../services/api"
 
 const ExportCustomersModal = ({ isOpen, onClose }) => {
-  const [dateRange, setDateRange] = useState("Jun 22, 2025 - Jun 29, 2025")
-  const [exportType, setExportType] = useState("date_range")
+  const [dateRange, setDateRange] = useState("all")
+  const [exportType, setExportType] = useState("all_customers")
+  const [isExporting, setIsExporting] = useState(false)
+  const [error, setError] = useState("")
 
   if (!isOpen) return null
 
@@ -40,35 +43,6 @@ const ExportCustomersModal = ({ isOpen, onClose }) => {
             <div className="flex items-start space-x-3">
               <input
                 type="radio"
-                id="date_range"
-                name="export_type"
-                value="date_range"
-                checked={exportType === "date_range"}
-                onChange={(e) => setExportType(e.target.value)}
-                className="mt-1 text-primary-600 focus:ring-primary-500 rounded-full"
-              />
-              <label htmlFor="date_range" className="text-sm text-gray-900 leading-none pt-1">
-                Export customers created within this date range:
-              </label>
-            </div>
-
-            <div className="pl-7">
-              <select
-                value={dateRange}
-                onChange={(e) => setDateRange(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
-                disabled={exportType !== "date_range"}
-              >
-                <option>Jun 22, 2025 - Jun 29, 2025</option>
-                <option>Last 7 days</option>
-                <option>Last 30 days</option>
-                <option>Last 90 days</option>
-              </select>
-            </div>
-
-            <div className="flex items-start space-x-3">
-              <input
-                type="radio"
                 id="all_customers"
                 name="export_type"
                 value="all_customers"
@@ -80,23 +54,96 @@ const ExportCustomersModal = ({ isOpen, onClose }) => {
                 Export all customers
               </label>
             </div>
+
+            <div className="flex items-start space-x-3">
+              <input
+                type="radio"
+                id="csv_format"
+                name="export_type"
+                value="csv_format"
+                checked={exportType === "csv_format"}
+                onChange={(e) => setExportType(e.target.value)}
+                className="mt-1 text-primary-600 focus:ring-primary-500 rounded-full"
+              />
+              <label htmlFor="csv_format" className="text-sm text-gray-900 leading-none pt-1">
+                Export as CSV file
+              </label>
+            </div>
           </div>
+
+          {/* Error Display */}
+          {error && (
+            <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <X className="w-5 h-5 text-red-500" />
+                <p className="text-red-700 text-sm">{error}</p>
+              </div>
+            </div>
+          )}
 
           <div className="flex justify-end space-x-3 mt-8">
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              disabled={isExporting}
             >
               Cancel
             </button>
             <button
-              onClick={() => {
-                // Handle export logic here
-                onClose()
+              onClick={async () => {
+                setIsExporting(true)
+                setError("")
+                
+                try {
+                  const format = exportType === "csv_format" ? "csv" : "json"
+                  const response = await customersAPI.export(format)
+                  
+                  if (format === "csv") {
+                    // For CSV, the response is the CSV content directly
+                    const blob = new Blob([response], { type: 'text/csv' })
+                    const url = window.URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `customers_${new Date().toISOString().split('T')[0]}.csv`
+                    document.body.appendChild(a)
+                    a.click()
+                    window.URL.revokeObjectURL(url)
+                    document.body.removeChild(a)
+                  } else {
+                    // For JSON, the response is the data object
+                    const blob = new Blob([JSON.stringify(response, null, 2)], { type: 'application/json' })
+                    const url = window.URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `customers_${new Date().toISOString().split('T')[0]}.json`
+                    document.body.appendChild(a)
+                    a.click()
+                    window.URL.revokeObjectURL(url)
+                    document.body.removeChild(a)
+                  }
+                  
+                  onClose()
+                } catch (error) {
+                  console.error('Export error:', error)
+                  setError("Failed to export customers. Please try again.")
+                } finally {
+                  setIsExporting(false)
+                }
               }}
-              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              disabled={isExporting}
             >
-              Export {exportType === "date_range" ? "0" : "all"} customers
+              {isExporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Exporting...</span>
+                </>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  <span>Export Customers</span>
+                </>
+              )}
             </button>
           </div>
         </div>

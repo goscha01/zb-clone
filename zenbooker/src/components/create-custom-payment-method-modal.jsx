@@ -1,22 +1,31 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { X } from "lucide-react"
 
-const CreateCustomPaymentMethodModal = ({ isOpen, onClose, onSave }) => {
+const CreateCustomPaymentMethodModal = ({ isOpen, onClose, onSave, editingMethod }) => {
   const [formData, setFormData] = useState({
     name: "",
     description: ""
   })
 
+  useEffect(() => {
+    if (editingMethod) {
+      setFormData({
+        name: editingMethod.name || "",
+        description: editingMethod.description || ""
+      })
+    } else {
+      setFormData({ name: "", description: "" })
+    }
+  }, [editingMethod])
+
   const handleSave = () => {
     if (!formData.name.trim()) return
 
     const paymentMethod = {
-      id: Date.now(),
       name: formData.name.trim(),
-      description: formData.description.trim(),
-      editable: true
+      description: formData.description.trim()
     }
     
     onSave(paymentMethod)
@@ -36,14 +45,16 @@ const CreateCustomPaymentMethodModal = ({ isOpen, onClose, onSave }) => {
       <div className="bg-white rounded-lg w-full max-w-2xl mx-4">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Create Custom Payment Method</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {editingMethod ? 'Edit Custom Payment Method' : 'Create Custom Payment Method'}
+          </h2>
           <div className="flex items-center space-x-3">
             <button
               onClick={handleSave}
               disabled={!formData.name.trim()}
-              className="px-4 py-2 text-sm font-medium text-white bg-gray-300 rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-500 disabled:cursor-not-allowed"
+              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Save
+              {editingMethod ? 'Update' : 'Save'}
             </button>
             <button
               onClick={handleClose}

@@ -1,10 +1,14 @@
 "use client"
 
-import { X, FileText } from "lucide-react"
+import { X, FileText, AlertCircle, CheckCircle, Loader2 } from "lucide-react"
 import { useState } from "react"
+import { customersAPI } from "../services/api"
 
-const ImportCustomersModal = ({ isOpen, onClose }) => {
+const ImportCustomersModal = ({ isOpen, onClose, onImportSuccess }) => {
   const [selectedFile, setSelectedFile] = useState(null)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+  const [error, setError] = useState("")
 
   if (!isOpen) return null
 
@@ -18,6 +22,89 @@ const ImportCustomersModal = ({ isOpen, onClose }) => {
     const file = e.target.files[0]
     if (file && file.type === "text/csv") {
       setSelectedFile(file)
+      setError("")
+      setImportResult(null)
+    }
+  }
+
+  const parseCSV = (csvText) => {
+    const lines = csvText.split('\n')
+    const headers = lines[0].split(',').map(h => h.trim())
+    const customers = []
+    
+    for (let i = 1; i < lines.length; i++) {
+      if (lines[i].trim()) {
+        const values = lines[i].split(',').map(v => v.trim().replace(/^"|"$/g, ''))
+        const customer = {}
+        
+        headers.forEach((header, index) => {
+          const value = values[index] || ''
+          switch (header.toLowerCase()) {
+            case 'first name':
+              customer.firstName = value
+              break
+            case 'last name':
+              customer.lastName = value
+              break
+            case 'email':
+              customer.email = value
+              break
+            case 'phone':
+              customer.phone = value
+              break
+            case 'address':
+              customer.address = value
+              break
+            case 'notes':
+              customer.notes = value
+              break
+            case 'status':
+              customer.status = value || 'active'
+              break
+          }
+        })
+        
+        if (customer.firstName && customer.lastName) {
+          customers.push(customer)
+        }
+      }
+    }
+    
+    return customers
+  }
+
+  const handleImport = async () => {
+    if (!selectedFile) return
+    
+    setIsImporting(true)
+    setError("")
+    setImportResult(null)
+    
+    try {
+      const text = await selectedFile.text()
+      const customers = parseCSV(text)
+      
+      if (customers.length === 0) {
+        setError("No valid customers found in the CSV file")
+        return
+      }
+      
+      const result = await customersAPI.import(customers)
+      setImportResult(result)
+      
+      if (result.imported > 0) {
+        onImportSuccess && onImportSuccess(result.customers)
+      }
+      
+    } catch (error) {
+      console.error('Import error:', error)
+      if (error.response?.data?.error) {
+        setError(error.response.data.error)
+      } else {
+        setError("Failed to import customers. Please check your file format.")
+      }
+    } finally {
+      setIsImporting(false)
     }
   }
 
@@ -118,22 +205,62 @@ const ImportCustomersModal = ({ isOpen, onClose }) => {
             </div>
           </div>
 
+          {/* Error Display */}
+          {error && (
+            <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="w-5 h-5 text-red-500" />
+                <p className="text-red-700 text-sm">{error}</p>
+              </div>
+            </div>
+          )}
+
+          {/* Success Display */}
+          {importResult && (
+            <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                <p className="text-green-700 text-sm">
+                  Successfully imported {importResult.imported} customers!
+                </p>
+              </div>
+              {importResult.errors && importResult.errors.length > 0 && (
+                <div className="mt-2">
+                  <p className="text-red-600 text-sm font-medium">Errors:</p>
+                  <ul className="text-red-600 text-sm mt-1 space-y-1">
+                    {importResult.errors.slice(0, 5).map((error, index) => (
+                      <li key={index}>• {error}</li>
+                    ))}
+                    {importResult.errors.length > 5 && (
+                      <li>• ... and {importResult.errors.length - 5} more errors</li>
+                    )}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex justify-end space-x-3 mt-8">
             <button
               onClick={onClose}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              disabled={isImporting}
             >
               Cancel
             </button>
             <button
-              onClick={() => {
-                // Handle import logic here
-                onClose()
-              }}
-              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-              disabled={!selectedFile}
+              onClick={handleImport}
+              className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+              disabled={!selectedFile || isImporting}
             >
-              Import Customers
+              {isImporting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Importing...</span>
+                </>
+              ) : (
+                <span>Import Customers</span>
+              )}
             </button>
           </div>
         </div>

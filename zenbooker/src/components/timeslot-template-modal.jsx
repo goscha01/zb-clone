@@ -18,10 +18,14 @@ const defaultTemplate = {
 
 const TimeslotTemplateModal = ({ isOpen, onClose, onSave }) => {
   const [template, setTemplate] = useState(defaultTemplate)
+  const [errors, setErrors] = useState({})
 
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden'
+      // Reset form when modal opens
+      setTemplate(defaultTemplate)
+      setErrors({})
     } else {
       document.body.style.overflow = 'unset'
     }
@@ -63,6 +67,32 @@ const TimeslotTemplateModal = ({ isOpen, onClose, onSave }) => {
     })
   }
 
+  const validateTemplate = () => {
+    const newErrors = {}
+    
+    // Check if at least one day is enabled
+    const enabledDays = Object.values(template.days).filter(day => day.enabled)
+    if (enabledDays.length === 0) {
+      newErrors.general = 'At least one day must be enabled'
+    }
+    
+    // Check if enabled days have valid times
+    enabledDays.forEach(day => {
+      if (!day.startTime || !day.endTime) {
+        newErrors.general = 'All enabled days must have start and end times'
+      }
+    })
+    
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  const handleSave = () => {
+    if (validateTemplate()) {
+      onSave(template)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -83,6 +113,12 @@ const TimeslotTemplateModal = ({ isOpen, onClose, onSave }) => {
         </div>
 
         <div className="space-y-4 py-4">
+          {errors.general && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+              <p className="text-sm text-red-700">{errors.general}</p>
+            </div>
+          )}
+          
           {Object.entries(template.days).map(([day, { enabled, startTime, endTime }]) => (
             <div key={day} className="flex items-center justify-between">
               <div className="flex items-center space-x-2">
@@ -165,7 +201,7 @@ const TimeslotTemplateModal = ({ isOpen, onClose, onSave }) => {
 
         <div className="flex justify-end pt-4 border-t">
           <button
-            onClick={() => onSave(template)}
+            onClick={handleSave}
             className="inline-flex items-center justify-center whitespace-nowrap rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
           >
             Next

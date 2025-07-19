@@ -5,11 +5,12 @@ import { useState } from "react"
 
 const CustomerModal = ({ isOpen, onClose, onSave }) => {
   const [customerData, setCustomerData] = useState({
-    fullName: "",
-    primaryAddress: "",
-    aptUnit: "",
-    phoneNumber: "",
-    email: ""
+    firstName: "",
+    lastName: "",
+    address: "",
+    phone: "",
+    email: "",
+    notes: ""
   })
 
   if (!isOpen) return null
@@ -22,6 +23,13 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    
+    // Validate required fields
+    if (!customerData.firstName.trim() || !customerData.lastName.trim()) {
+      alert('First name and last name are required')
+      return
+    }
+    
     onSave(customerData)
     onClose()
   }
@@ -44,48 +52,48 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Full Name */}
+            {/* First Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name
+                First Name
               </label>
               <input
                 type="text"
-                placeholder="Full Name"
-                value={customerData.fullName}
-                onChange={(e) => setCustomerData({ ...customerData, fullName: e.target.value })}
+                placeholder="First Name"
+                value={customerData.firstName}
+                onChange={(e) => setCustomerData({ ...customerData, firstName: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
                 required
               />
             </div>
 
-            {/* Address Fields */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Primary Address
-                </label>
-                <input
-                  type="text"
-                  placeholder="Street Address"
-                  value={customerData.primaryAddress}
-                  onChange={(e) => setCustomerData({ ...customerData, primaryAddress: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Apt / Unit #
-                </label>
-                <input
-                  type="text"
-                  placeholder="Optional"
-                  value={customerData.aptUnit}
-                  onChange={(e) => setCustomerData({ ...customerData, aptUnit: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
-                />
-              </div>
+            {/* Last Name */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Last Name
+              </label>
+              <input
+                type="text"
+                placeholder="Last Name"
+                value={customerData.lastName}
+                onChange={(e) => setCustomerData({ ...customerData, lastName: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
+                required
+              />
+            </div>
+
+            {/* Address */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Address
+              </label>
+              <input
+                type="text"
+                placeholder="Street Address"
+                value={customerData.address}
+                onChange={(e) => setCustomerData({ ...customerData, address: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
+              />
             </div>
 
             {/* Phone Number */}
@@ -96,10 +104,9 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
               <input
                 type="tel"
                 placeholder="Phone Number"
-                value={customerData.phoneNumber}
-                onChange={(e) => setCustomerData({ ...customerData, phoneNumber: e.target.value })}
+                value={customerData.phone}
+                onChange={(e) => setCustomerData({ ...customerData, phone: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
-                required
               />
             </div>
 
@@ -114,7 +121,20 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
                 value={customerData.email}
                 onChange={(e) => setCustomerData({ ...customerData, email: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
-                required
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Notes
+              </label>
+              <textarea
+                placeholder="Customer notes..."
+                value={customerData.notes}
+                onChange={(e) => setCustomerData({ ...customerData, notes: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
+                rows="3"
               />
             </div>
 

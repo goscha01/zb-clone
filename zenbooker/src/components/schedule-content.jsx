@@ -19,7 +19,7 @@ const ScheduleContent = ({ selectedDate }) => {
             <div className="text-sm text-gray-600">Est. duration</div>
           </div>
           <div className="text-center">
-            <div className="text-2xl lg:text-3xl font-bold text-gray-900">₦0</div>
+            <div className="text-2xl lg:text-3xl font-bold text-gray-900">$0</div>
             <div className="text-sm text-gray-600">Est. earnings</div>
           </div>
         </div>

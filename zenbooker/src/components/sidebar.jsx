@@ -15,6 +15,7 @@ import {
   Wrench,
   Tag,
   MapPin,
+  BarChart3,
   Globe,
   Settings,
   X,
@@ -38,6 +39,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     { icon: Wrench, label: "Services", path: "/services" },
     { icon: Tag, label: "Coupons", path: "/coupons" },
     { icon: MapPin, label: "Territories", path: "/territories" },
+    { icon: BarChart3, label: "Analytics", path: "/analytics" },
     { icon: Globe, label: "Online Booking", path: "/online-booking" },
     { icon: Settings, label: "Settings", path: "/settings" },
   ]

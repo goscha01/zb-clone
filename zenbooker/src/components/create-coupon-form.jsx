@@ -1,7 +1,13 @@
 import { useState } from "react"
-import { Info } from "lucide-react"
+import { Info, Save } from "lucide-react"
+import { useAuth } from "../context/AuthContext"
+import axios from "axios"
 
 const CreateCouponForm = () => {
+  const { user } = useAuth()
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveMessage, setSaveMessage] = useState("")
+  
   const [formData, setFormData] = useState({
     code: "",
     discountType: "",
@@ -43,6 +49,80 @@ const CreateCouponForm = () => {
     // Generate a random coupon code
     const code = 'COUPON-' + Math.random().toString(36).substring(2, 8).toUpperCase()
     setFormData(prev => ({ ...prev, code }))
+  }
+
+  const handleSave = async () => {
+    if (!user?.id) {
+      setSaveMessage("Please sign in to create coupons")
+      return
+    }
+
+    if (!formData.code.trim()) {
+      setSaveMessage("Please enter a coupon code")
+      return
+    }
+
+    if (!formData.discountType) {
+      setSaveMessage("Please select a discount type")
+      return
+    }
+
+    if (!formData.discountAmount) {
+      setSaveMessage("Please enter a discount amount")
+      return
+    }
+
+    try {
+      setIsSaving(true)
+      setSaveMessage("")
+
+      const couponData = {
+        ...formData,
+        userId: user.id,
+        isActive: true
+      }
+
+      // Create axios instance for API calls
+      const api = axios.create({
+        baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+        timeout: 15000,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      // Add auth token
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await api.post('/coupons', couponData)
+      
+      setSaveMessage("Coupon created successfully!")
+      setTimeout(() => {
+        setSaveMessage("")
+        // Reset form or redirect
+        setFormData({
+          code: "",
+          discountType: "",
+          discountAmount: "",
+          applicationType: "all",
+          selectedServices: [],
+          doesntExpire: false,
+          expirationDate: "",
+          restrictBeforeExpiration: false,
+          limitTotalUses: false,
+          canCombineWithRecurring: false,
+          recurringApplicationType: "all"
+        })
+      }, 2000)
+    } catch (error) {
+      console.error('Error creating coupon:', error)
+      setSaveMessage(error.response?.data?.error || "Failed to create coupon. Please try again.")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   return (
@@ -269,6 +349,32 @@ const CreateCouponForm = () => {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Save Button and Message */}
+        <div className="mt-8 flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            {saveMessage && (
+              <div className={`text-sm ${saveMessage.includes('success') ? 'text-green-600' : 'text-red-600'}`}>
+                {saveMessage}
+              </div>
+            )}
+            {isSaving && (
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                <span>Saving...</span>
+              </div>
+            )}
+          </div>
+          
+          <button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="flex items-center space-x-2 bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            <Save className="w-4 h-4" />
+            <span>{isSaving ? 'Creating...' : 'Create Coupon'}</span>
+          </button>
         </div>
       </div>
     </div>
