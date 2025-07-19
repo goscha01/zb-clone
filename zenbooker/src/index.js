@@ -9,7 +9,7 @@ import ZenbookerDashboard from "./pages/dashboard"
 import ZenbookerRequests from "./pages/Request"
 import ZenbookerSchedule from "./pages/Schedule"
 import ZenbookerJobs from "./pages/jobs"
-import ZenbookerEstimates from "./pages/estimates"
+import ZenbookerEstimates from "./pages/zenbooker-estimates"
 import ZenbookerRecurring from "./pages/zenbooker-recurring"
 import ZenbookerPayments from "./pages/zenbooker-payments"
 import ZenbookerCustomers from "./pages/zenbooker-customers"
@@ -18,6 +18,7 @@ import ZenbookerServices from "./pages/zenbooker-services"
 import ZenbookerCoupons from "./pages/zenbooker-coupons"
 import CreateCoupon from "./pages/create-coupon"
 import ZenbookerTerritories from "./pages/zenbooker-territories"
+import Analytics from "./pages/analytics"
 import ZenbookerOnlineBooking from "./pages/zenbooker-online-booking"
 import ZenbookerWebsiteEmbed from "./pages/zenbooker-website-embed"
 import ZenbookerSettings from "./pages/zenbooker-settings"
@@ -25,6 +26,10 @@ import TeamMemberDetails from "./pages/team-member-details"
 import ServiceDetails from "./pages/service-details"
 import WhatsNewPage from "./pages/whats-new"
 import HelpPage from "./pages/help"
+import PublicBooking from "./pages/public-booking"
+import PublicQuote from "./pages/public-quote"
+import DemoPublicPages from "./pages/demo-public-pages"
+import CustomerPortal from "./pages/customer-portal"
 
 // Settings Pages
 import FeedbackReviews from "./pages/settings/feedback-reviews"
@@ -91,6 +96,7 @@ root.render(
       <Route path="coupons" element={<ZenbookerCoupons />} />
       <Route path="coupons/create" element={<CreateCoupon />} />
       <Route path="territories" element={<ZenbookerTerritories />} />
+      <Route path="analytics" element={<ProtectedRoute><Analytics /></ProtectedRoute>} />
       <Route path="online-booking" element={<ZenbookerOnlineBooking />} />
       <Route path="embed" element={<ZenbookerWebsiteEmbed />} />
       <Route path="createjob" element={<CreateJobPage />} />
@@ -134,6 +140,14 @@ root.render(
       <Route path="settings/service-areas" element={<ServiceAreas />} />
       <Route path="settings/booking-quote-requests" element={<BookingQuoteRequests />} />
       <Route path="settings/field-app" element={<FieldApp />} />
+      
+      {/* Public Booking Routes - No authentication required */}
+      <Route path="book/:userSlug" element={<PublicBooking />} />
+      <Route path="booking" element={<PublicBooking />} />
+      <Route path="quote/:userSlug" element={<PublicQuote />} />
+      <Route path="quote" element={<PublicQuote />} />
+      <Route path="demo-public-pages" element={<DemoPublicPages />} />
+      <Route path="customer-portal" element={<CustomerPortal />} />
       </Routes>
     </AuthProvider>
   </HashRouter>,
