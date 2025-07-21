@@ -28,7 +28,7 @@ cron.schedule('0 9 * * *', async () => {
   console.log('Running recurring billing check...');
   try {
     const connection = await pool.getConnection();
-    const [recurringJobs] = await connection.execute(`
+    const [recurringJobs] = await connection.query(`
       SELECT j.*, c.email, c.first_name, c.last_name, s.name as service_name, s.price
       FROM jobs j
       JOIN customers c ON j.customer_id = c.id
@@ -40,13 +40,13 @@ cron.schedule('0 9 * * *', async () => {
     
     for (const job of recurringJobs) {
       // Create new job for recurring service
-      await connection.execute(`
+      await connection.query(`
         INSERT INTO jobs (user_id, customer_id, service_id, scheduled_date, notes, status, is_recurring, recurring_frequency)
         VALUES (?, ?, ?, DATE_ADD(CURDATE(), INTERVAL ? DAY), ?, 'pending', 1, ?)
       `, [job.user_id, job.customer_id, job.service_id, job.recurring_frequency, job.notes, job.recurring_frequency]);
       
       // Update next billing date
-      await connection.execute(`
+      await connection.query(`
         UPDATE jobs SET next_billing_date = DATE_ADD(next_billing_date, INTERVAL ? DAY)
         WHERE id = ?
       `, [job.recurring_frequency, job.id]);
@@ -150,8 +150,16 @@ const upload = multer({
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: [
+    'http://localhost:3000',
+    'https://zenbooker.now2code.online',
+    'https://zenbooker.vercel.app',
+    'https://zenbooker.netlify.app',
+    process.env.FRONTEND_URL
+  ].filter(Boolean),
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -165,27 +173,30 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Database connection pool
 const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
+  host: process.env.DB_HOST || '127.0.0.1',
   user: process.env.DB_USER || 'root',
   password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'zenbooker',
-  port: process.env.DB_PORT || 3306,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
-  acquireTimeout: 60000,
-  timeout: 60000,
-  reconnect: true
+  database: process.env.DB_NAME || 'zenbooker'
 });
 
 // Test database connection
 pool.getConnection()
   .then(connection => {
     console.log('Database connected successfully');
+    console.log('Database config:', {
+      host: process.env.DB_HOST || '127.0.0.1',
+      database: process.env.DB_NAME || 'zenbooker',
+      port: process.env.DB_PORT || 3306
+    });
     connection.release();
   })
   .catch(err => {
     console.error('Database connection failed:', err);
+    console.error('Database connection error details:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno
+    });
   });
 
 // Authentication middleware
@@ -227,13 +238,23 @@ const sanitizeInput = (input) => {
 // Health check endpoint
 app.get('/api/health', async (req, res) => {
   try {
+    // Test database connection
+    const connection = await pool.getConnection();
+    connection.release();
+    
     res.json({ 
       status: 'OK', 
       message: 'ZenBooker API is running',
+      database: 'Connected',
       timestamp: new Date().toISOString()
     });
   } catch (error) {
-    res.status(500).json({ error: 'Health check failed' });
+    console.error('Health check failed:', error);
+    res.status(500).json({ 
+      error: 'Health check failed',
+      database: 'Disconnected',
+      message: error.message
+    });
   }
 });
 
@@ -269,7 +290,7 @@ app.post('/api/auth/signup', async (req, res) => {
     
     try {
       // Check if user already exists
-      const [existingUsers] = await connection.execute(
+      const [existingUsers] = await connection.query(
         'SELECT id FROM users WHERE email = ?',
         [sanitizedEmail]
       );
@@ -283,7 +304,7 @@ app.post('/api/auth/signup', async (req, res) => {
       const hashedPassword = await bcrypt.hash(password, saltRounds);
       
       // Create new user
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         'INSERT INTO users (email, password, first_name, last_name, business_name, created_at) VALUES (?, ?, ?, ?, ?, NOW())',
         [sanitizedEmail, hashedPassword, sanitizedFirstName, sanitizedLastName, sanitizedBusinessName]
       );
@@ -341,7 +362,7 @@ app.post('/api/auth/signin', async (req, res) => {
     
     try {
       // Get user with hashed password
-      const [users] = await connection.execute(
+      const [users] = await connection.query(
         'SELECT id, email, password, first_name, last_name, business_name FROM users WHERE email = ?',
         [sanitizedEmail]
       );
@@ -388,6 +409,12 @@ app.post('/api/auth/signin', async (req, res) => {
     }
   } catch (error) {
     console.error('Signin error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      errno: error.errno
+    });
     res.status(500).json({ error: 'Login failed. Please try again.' });
   }
 });
@@ -399,7 +426,7 @@ app.post('/api/auth/refresh', authenticateToken, async (req, res) => {
     
     try {
       // Get updated user data
-      const [users] = await connection.execute(
+      const [users] = await connection.query(
         'SELECT id, email, first_name, last_name, business_name FROM users WHERE id = ?',
         [req.user.userId]
       );
@@ -461,7 +488,7 @@ app.get('/api/auth/verify', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [users] = await connection.execute(
+      const [users] = await connection.query(
         'SELECT id, email, first_name, last_name, business_name FROM users WHERE id = ?',
         [req.user.userId]
       );
@@ -498,7 +525,7 @@ app.get('/api/services', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [services] = await connection.execute(
+      const [services] = await connection.query(
         'SELECT * FROM services WHERE user_id = ? ORDER BY created_at DESC',
         [userId]
       );
@@ -523,7 +550,7 @@ app.post('/api/services', async (req, res) => {
     
     try {
       // First verify the user exists
-      const [users] = await connection.execute(
+      const [users] = await connection.query(
         'SELECT id FROM users WHERE id = ?',
         [userId]
       );
@@ -533,13 +560,13 @@ app.post('/api/services', async (req, res) => {
         return res.status(400).json({ error: 'User not found. Please log in again.' });
       }
       
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         'INSERT INTO services (user_id, name, description, price, duration, category, modifiers, require_payment_method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
         [userId, name, description, price, duration, category, modifiers || null, require_payment_method ? 1 : 0]
       );
       
       // Get the created service with all fields
-      const [services] = await connection.execute(
+      const [services] = await connection.query(
         'SELECT * FROM services WHERE id = ?',
         [result.insertId]
       );
@@ -569,7 +596,7 @@ app.get('/api/services/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [services] = await connection.execute(
+      const [services] = await connection.query(
         'SELECT * FROM services WHERE id = ?',
         [id]
       );
@@ -595,7 +622,7 @@ app.put('/api/services/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         'UPDATE services SET name = ?, description = ?, price = ?, duration = ?, category = ?, modifiers = ?, require_payment_method = ?, updated_at = NOW() WHERE id = ?',
         [name, description, price, duration, category, modifiers || null, require_payment_method ? 1 : 0, id]
       );
@@ -616,7 +643,7 @@ app.delete('/api/services/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute('DELETE FROM services WHERE id = ?', [id]);
+      await connection.query('DELETE FROM services WHERE id = ?', [id]);
       
       res.json({ message: 'Service deleted successfully' });
     } finally {
@@ -730,7 +757,7 @@ app.get('/api/jobs', async (req, res) => {
       query += ' LIMIT ? OFFSET ?';
       params.push(parseInt(limit), offset);
       
-      const [jobs] = await connection.execute(query, params);
+      const [jobs] = await connection.query(query, params);
       
       // Get total count for pagination
       let countQuery = `
@@ -801,7 +828,7 @@ app.get('/api/jobs', async (req, res) => {
         }
       }
       
-      const [countResult] = await connection.execute(countQuery, countParams);
+      const [countResult] = await connection.query(countQuery, countParams);
       const total = countResult[0].total;
       
       res.json({
@@ -818,7 +845,18 @@ app.get('/api/jobs', async (req, res) => {
     }
   } catch (error) {
     console.error('Get jobs error:', error);
-    res.status(500).json({ error: 'Failed to fetch jobs' });
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      errno: error.errno,
+      sqlMessage: error.sqlMessage,
+      sqlState: error.sqlState
+    });
+    res.status(500).json({ 
+      error: 'Failed to fetch jobs',
+      details: error.message,
+      code: error.code
+    });
   }
 });
 
@@ -828,7 +866,7 @@ app.get('/api/jobs/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [jobs] = await connection.execute(`
+      const [jobs] = await connection.query(`
         SELECT 
           j.*,
           c.first_name as customer_first_name,
@@ -893,7 +931,7 @@ app.post('/api/jobs', async (req, res) => {
         ? `${scheduledDate} ${scheduledTime}:00`
         : `${scheduledDate} 09:00:00`;
       
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         `INSERT INTO jobs (
           user_id, customer_id, service_id, team_member_id, 
           scheduled_date, notes, status, created_at
@@ -910,7 +948,7 @@ app.post('/api/jobs', async (req, res) => {
       );
       
       // Get the created job with all details
-      const [jobs] = await connection.execute(`
+      const [jobs] = await connection.query(`
         SELECT 
           j.*,
           c.first_name as customer_first_name,
@@ -994,7 +1032,7 @@ app.put('/api/jobs/:id', async (req, res) => {
       
       const query = `UPDATE jobs SET ${updateFields.join(', ')} WHERE id = ?`;
       
-      await connection.execute(query, updateValues);
+      await connection.query(query, updateValues);
       
       res.json({ message: 'Job updated successfully' });
     } finally {
@@ -1012,7 +1050,7 @@ app.delete('/api/jobs/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute('DELETE FROM jobs WHERE id = ?', [id]);
+      await connection.query('DELETE FROM jobs WHERE id = ?', [id]);
       
       res.json({ message: 'Job deleted successfully' });
     } finally {
@@ -1037,7 +1075,7 @@ app.patch('/api/jobs/:id/status', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         'UPDATE jobs SET status = ?, updated_at = NOW() WHERE id = ?',
         [status, id]
       );
@@ -1061,7 +1099,7 @@ app.patch('/api/jobs/:id/assign', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         'UPDATE jobs SET team_member_id = ?, updated_at = NOW() WHERE id = ?',
         [teamMemberId || null, id]
       );
@@ -1127,7 +1165,7 @@ app.get('/api/customers', authenticateToken, async (req, res) => {
       query += ' LIMIT ? OFFSET ?';
       params.push(parseInt(limit), offset);
       
-      const [customers] = await connection.execute(query, params);
+      const [customers] = await connection.query(query, params);
       
       // Get total count for pagination
       let countQuery = 'SELECT COUNT(*) as total FROM customers WHERE user_id = ?';
@@ -1143,7 +1181,7 @@ app.get('/api/customers', authenticateToken, async (req, res) => {
         countParams.push(status);
       }
       
-      const [countResult] = await connection.execute(countQuery, countParams);
+      const [countResult] = await connection.query(countQuery, countParams);
       const total = countResult[0].total;
       
       res.json({
@@ -1199,7 +1237,7 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
     try {
       // Check if customer with same email already exists for this user
       if (sanitizedEmail) {
-        const [existingCustomers] = await connection.execute(
+        const [existingCustomers] = await connection.query(
           'SELECT id FROM customers WHERE user_id = ? AND email = ?',
           [userId, sanitizedEmail]
         );
@@ -1209,13 +1247,13 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
         }
       }
       
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         'INSERT INTO customers (user_id, first_name, last_name, email, phone, address, notes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
         [userId, sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhone, sanitizedAddress, sanitizedNotes, status]
       );
       
       // Get the created customer
-      const [customers] = await connection.execute(
+      const [customers] = await connection.query(
         'SELECT * FROM customers WHERE id = ?',
         [result.insertId]
       );
@@ -1241,7 +1279,7 @@ app.get('/api/customers/:id', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [customers] = await connection.execute(
+      const [customers] = await connection.query(
         'SELECT * FROM customers WHERE id = ? AND user_id = ?',
         [id, userId]
       );
@@ -1295,7 +1333,7 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
     
     try {
       // Check if customer exists and belongs to user
-      const [existingCustomers] = await connection.execute(
+      const [existingCustomers] = await connection.query(
         'SELECT id FROM customers WHERE id = ? AND user_id = ?',
         [id, userId]
       );
@@ -1306,7 +1344,7 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
       
       // Check if email is being changed and if it conflicts with another customer
       if (sanitizedEmail) {
-        const [emailConflict] = await connection.execute(
+        const [emailConflict] = await connection.query(
           'SELECT id FROM customers WHERE user_id = ? AND email = ? AND id != ?',
           [userId, sanitizedEmail, id]
         );
@@ -1316,13 +1354,13 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
         }
       }
       
-      await connection.execute(
+      await connection.query(
         'UPDATE customers SET first_name = ?, last_name = ?, email = ?, phone = ?, address = ?, notes = ?, status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?',
         [sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhone, sanitizedAddress, sanitizedNotes, status, id, userId]
       );
       
       // Get updated customer
-      const [customers] = await connection.execute(
+      const [customers] = await connection.query(
         'SELECT * FROM customers WHERE id = ?',
         [id]
       );
@@ -1349,7 +1387,7 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
     
     try {
       // Check if customer exists and belongs to user
-      const [existingCustomers] = await connection.execute(
+      const [existingCustomers] = await connection.query(
         'SELECT id FROM customers WHERE id = ? AND user_id = ?',
         [id, userId]
       );
@@ -1359,12 +1397,12 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
       }
       
       // Check if customer has associated jobs or estimates
-      const [jobs] = await connection.execute(
+      const [jobs] = await connection.query(
         'SELECT COUNT(*) as count FROM jobs WHERE customer_id = ?',
         [id]
       );
       
-      const [estimates] = await connection.execute(
+      const [estimates] = await connection.query(
         'SELECT COUNT(*) as count FROM estimates WHERE customer_id = ?',
         [id]
       );
@@ -1375,7 +1413,7 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
         });
       }
       
-      await connection.execute(
+      await connection.query(
         'DELETE FROM customers WHERE id = ? AND user_id = ?',
         [id, userId]
       );
@@ -1442,7 +1480,7 @@ app.post('/api/customers/import', authenticateToken, async (req, res) => {
           
           // Check for duplicate email
           if (sanitizedEmail) {
-            const [existingCustomers] = await connection.execute(
+            const [existingCustomers] = await connection.query(
               'SELECT id FROM customers WHERE user_id = ? AND email = ?',
               [userId, sanitizedEmail]
             );
@@ -1454,13 +1492,13 @@ app.post('/api/customers/import', authenticateToken, async (req, res) => {
           }
           
           // Insert customer
-          const [result] = await connection.execute(
+          const [result] = await connection.query(
             'INSERT INTO customers (user_id, first_name, last_name, email, phone, address, notes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
             [userId, sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhone, sanitizedAddress, sanitizedNotes, customer.status || 'active']
           );
           
           // Get created customer
-          const [newCustomers] = await connection.execute(
+          const [newCustomers] = await connection.query(
             'SELECT * FROM customers WHERE id = ?',
             [result.insertId]
           );
@@ -1494,7 +1532,7 @@ app.get('/api/customers/export', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [customers] = await connection.execute(
+      const [customers] = await connection.query(
         'SELECT * FROM customers WHERE user_id = ? ORDER BY created_at DESC',
         [userId]
       );
@@ -1533,7 +1571,7 @@ app.get('/api/team', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [teamMembers] = await connection.execute(
+      const [teamMembers] = await connection.query(
         'SELECT * FROM team_members WHERE user_id = ? ORDER BY created_at DESC',
         [userId]
       );
@@ -1554,7 +1592,7 @@ app.post('/api/team', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         'INSERT INTO team_members (user_id, first_name, last_name, email, phone, role, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())',
         [userId, firstName, lastName, email, phone, role]
       );
@@ -1627,7 +1665,7 @@ app.get('/api/estimates', async (req, res) => {
       console.log('Executing query:', query);
       console.log('With params:', params);
       
-      const [estimates] = await connection.execute(query, params);
+      const [estimates] = await connection.query(query, params);
       
       console.log('Found estimates:', estimates.length);
       
@@ -1649,7 +1687,7 @@ app.get('/api/estimates', async (req, res) => {
         countParams.push(customerId);
       }
       
-      const [countResult] = await connection.execute(countQuery, countParams);
+      const [countResult] = await connection.query(countQuery, countParams);
       const total = countResult[0].total;
       
       const response = {
@@ -1683,7 +1721,7 @@ app.get('/api/estimates/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [estimates] = await connection.execute(`
+      const [estimates] = await connection.query(`
         SELECT 
           e.*,
           c.first_name as customer_first_name,
@@ -1708,7 +1746,7 @@ app.get('/api/estimates/:id', async (req, res) => {
         const serviceIds = servicesData.map(service => service.serviceId);
         
         if (serviceIds.length > 0) {
-          const [services] = await connection.execute(`
+          const [services] = await connection.query(`
             SELECT id, name, description, price, duration
             FROM services 
             WHERE id IN (${serviceIds.map(() => '?').join(',')})
@@ -1759,7 +1797,7 @@ app.post('/api/estimates', async (req, res) => {
     
     try {
       // Validate customer exists
-      const [customers] = await connection.execute(
+      const [customers] = await connection.query(
         'SELECT id FROM customers WHERE id = ? AND user_id = ?',
         [customerId, userId]
       );
@@ -1770,7 +1808,7 @@ app.post('/api/estimates', async (req, res) => {
       
       // Validate services exist
       const serviceIds = services.map(service => service.serviceId);
-      const [existingServices] = await connection.execute(
+      const [existingServices] = await connection.query(
         `SELECT id FROM services WHERE id IN (${serviceIds.map(() => '?').join(',')}) AND user_id = ?`,
         [...serviceIds, userId]
       );
@@ -1782,7 +1820,7 @@ app.post('/api/estimates', async (req, res) => {
       // Calculate valid until date (default to 30 days from now)
       const validUntilDate = validUntil || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         `INSERT INTO estimates (
           user_id, customer_id, services, total_amount, 
           valid_until, notes, created_at
@@ -1798,7 +1836,7 @@ app.post('/api/estimates', async (req, res) => {
       );
       
       // Get the created estimate with customer details
-      const [estimates] = await connection.execute(`
+      const [estimates] = await connection.query(`
         SELECT 
           e.*,
           c.first_name as customer_first_name,
@@ -1876,7 +1914,7 @@ app.put('/api/estimates/:id', async (req, res) => {
       
       const query = `UPDATE estimates SET ${updateFields.join(', ')} WHERE id = ?`;
       
-      await connection.execute(query, updateValues);
+      await connection.query(query, updateValues);
       
       res.json({ message: 'Estimate updated successfully' });
     } finally {
@@ -1895,7 +1933,7 @@ app.delete('/api/estimates/:id', async (req, res) => {
     
     try {
       // Check if estimate has been converted to invoice
-      const [invoices] = await connection.execute(
+      const [invoices] = await connection.query(
         'SELECT COUNT(*) as count FROM invoices WHERE estimate_id = ?',
         [id]
       );
@@ -1906,7 +1944,7 @@ app.delete('/api/estimates/:id', async (req, res) => {
         });
       }
       
-      await connection.execute('DELETE FROM estimates WHERE id = ?', [id]);
+      await connection.query('DELETE FROM estimates WHERE id = ?', [id]);
       
       res.json({ message: 'Estimate deleted successfully' });
     } finally {
@@ -1926,7 +1964,7 @@ app.post('/api/estimates/:id/send', async (req, res) => {
     
     try {
       // Get estimate details with customer and user information
-      const [estimates] = await connection.execute(`
+      const [estimates] = await connection.query(`
         SELECT 
           e.*,
           c.first_name as customer_first_name,
@@ -1949,7 +1987,7 @@ app.post('/api/estimates/:id/send', async (req, res) => {
       const estimate = estimates[0];
       
       // Update estimate status to 'sent'
-      await connection.execute(
+      await connection.query(
         'UPDATE estimates SET status = "sent", updated_at = NOW() WHERE id = ?',
         [id]
       );
@@ -2091,7 +2129,7 @@ app.post('/api/estimates/:id/convert-to-invoice', async (req, res) => {
     
     try {
       // Get estimate details
-      const [estimates] = await connection.execute(`
+      const [estimates] = await connection.query(`
         SELECT * FROM estimates WHERE id = ?
       `, [id]);
       
@@ -2105,7 +2143,7 @@ app.post('/api/estimates/:id/convert-to-invoice', async (req, res) => {
       const calculatedDueDate = dueDate || new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
       
       // Create invoice
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         `INSERT INTO invoices (
           user_id, customer_id, estimate_id, amount, 
           total_amount, due_date, created_at
@@ -2121,7 +2159,7 @@ app.post('/api/estimates/:id/convert-to-invoice', async (req, res) => {
       );
       
       // Update estimate status to 'accepted'
-      await connection.execute(
+      await connection.query(
         'UPDATE estimates SET status = "accepted", updated_at = NOW() WHERE id = ?',
         [id]
       );
@@ -2146,7 +2184,7 @@ app.get('/api/public/services', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [services] = await connection.execute(`
+      const [services] = await connection.query(`
         SELECT id, name, description, price, duration, category
         FROM services 
         WHERE user_id = ?
@@ -2170,14 +2208,14 @@ app.get('/api/public/availability', async (req, res) => {
     
     try {
       // Get business hours and availability settings
-      const [availabilitySettings] = await connection.execute(`
+      const [availabilitySettings] = await connection.query(`
         SELECT business_hours, timeslot_templates
         FROM user_availability 
         WHERE user_id = ?
       `, [userId]);
       
       // Get existing bookings for the date
-      const [existingBookings] = await connection.execute(`
+      const [existingBookings] = await connection.query(`
         SELECT scheduled_date
         FROM jobs 
         WHERE user_id = ? AND DATE(scheduled_date) = ?
@@ -2235,7 +2273,7 @@ app.post('/api/public/bookings', async (req, res) => {
     try {
       // First, create or find customer
       let customerId;
-      const [existingCustomers] = await connection.execute(`
+      const [existingCustomers] = await connection.query(`
         SELECT id FROM customers 
         WHERE user_id = ? AND email = ?
       `, [userId, customerData.email]);
@@ -2243,14 +2281,14 @@ app.post('/api/public/bookings', async (req, res) => {
       if (existingCustomers.length > 0) {
         customerId = existingCustomers[0].id;
         // Update customer information
-        await connection.execute(`
+        await connection.query(`
           UPDATE customers 
           SET first_name = ?, last_name = ?, phone = ?, address = ?, updated_at = NOW()
           WHERE id = ?
         `, [customerData.firstName, customerData.lastName, customerData.phone, customerData.address, customerId]);
       } else {
         // Create new customer
-        const [customerResult] = await connection.execute(`
+        const [customerResult] = await connection.query(`
           INSERT INTO customers (user_id, first_name, last_name, email, phone, address, created_at)
           VALUES (?, ?, ?, ?, ?, ?, NOW())
         `, [userId, customerData.firstName, customerData.lastName, customerData.email, customerData.phone, customerData.address]);
@@ -2262,7 +2300,7 @@ app.post('/api/public/bookings', async (req, res) => {
       for (const service of services) {
         const fullScheduledDate = `${scheduledDate} ${scheduledTime}:00`;
         
-        const [bookingResult] = await connection.execute(`
+        const [bookingResult] = await connection.query(`
           INSERT INTO jobs (
             user_id, customer_id, service_id, scheduled_date, notes, status, created_at
           ) VALUES (?, ?, ?, ?, ?, 'pending', NOW())
@@ -2272,7 +2310,7 @@ app.post('/api/public/bookings', async (req, res) => {
       }
       
       // Create invoice for the booking
-      const [invoiceResult] = await connection.execute(`
+      const [invoiceResult] = await connection.query(`
         INSERT INTO invoices (
           user_id, customer_id, amount, total_amount, status, due_date, created_at
         ) VALUES (?, ?, ?, ?, 'draft', DATE_ADD(NOW(), INTERVAL 15 DAY), NOW())
@@ -2299,7 +2337,7 @@ app.get('/api/public/business-info', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [users] = await connection.execute(`
+      const [users] = await connection.query(`
         SELECT business_name, email, phone
         FROM users 
         WHERE id = ?
@@ -2328,7 +2366,7 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
     try {
       // First try with the new columns
       try {
-        const [users] = await connection.execute(
+        const [users] = await connection.query(
           'SELECT id, email, first_name, last_name, business_name, phone, email_notifications, sms_notifications, profile_picture FROM users WHERE id = ?',
           [userId]
         );
@@ -2352,7 +2390,7 @@ app.get('/api/user/profile', authenticateToken, async (req, res) => {
       } catch (columnError) {
         // If new columns don't exist, fall back to basic columns
         if (columnError.code === 'ER_BAD_FIELD_ERROR') {
-          const [users] = await connection.execute(
+          const [users] = await connection.query(
             'SELECT id, email, first_name, last_name, business_name FROM users WHERE id = ?',
             [userId]
           );
@@ -2393,7 +2431,7 @@ app.put('/api/user/profile', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         'UPDATE users SET first_name = ?, last_name = ?, phone = ?, email_notifications = ?, sms_notifications = ?, updated_at = NOW() WHERE id = ?',
         [firstName, lastName, phone, emailNotifications ? 1 : 0, smsNotifications ? 1 : 0, userId]
       );
@@ -2422,7 +2460,7 @@ app.put('/api/user/password', authenticateToken, async (req, res) => {
     
     try {
       // First verify current password
-      const [users] = await connection.execute(
+      const [users] = await connection.query(
         'SELECT password FROM users WHERE id = ?',
         [userId]
       );
@@ -2443,7 +2481,7 @@ app.put('/api/user/password', authenticateToken, async (req, res) => {
       const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
       
       // Update password
-      await connection.execute(
+      await connection.query(
         'UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?',
         [hashedNewPassword, userId]
       );
@@ -2479,7 +2517,7 @@ app.put('/api/user/email', authenticateToken, async (req, res) => {
     
     try {
       // Verify password first
-      const [users] = await connection.execute(
+      const [users] = await connection.query(
         'SELECT password FROM users WHERE id = ?',
         [userId]
       );
@@ -2496,7 +2534,7 @@ app.put('/api/user/email', authenticateToken, async (req, res) => {
       }
       
       // Check if new email already exists
-      const [existingUsers] = await connection.execute(
+      const [existingUsers] = await connection.query(
         'SELECT id FROM users WHERE email = ? AND id != ?',
         [sanitizedNewEmail, userId]
       );
@@ -2506,7 +2544,7 @@ app.put('/api/user/email', authenticateToken, async (req, res) => {
       }
       
       // Update email
-      await connection.execute(
+      await connection.query(
         'UPDATE users SET email = ?, updated_at = NOW() WHERE id = ?',
         [sanitizedNewEmail, userId]
       );
@@ -2537,7 +2575,7 @@ app.post('/api/user/profile-picture', authenticateToken, upload.single('profileP
       const fileUrl = `http://localhost:5000/uploads/${req.file.filename}`;
       
       // Update user's profile picture
-      await connection.execute(
+      await connection.query(
         'UPDATE users SET profile_picture = ?, updated_at = NOW() WHERE id = ?',
         [fileUrl, userId]
       );
@@ -2562,7 +2600,7 @@ app.get('/api/user/billing', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [billingInfo] = await connection.execute(
+      const [billingInfo] = await connection.query(
         'SELECT subscription_plan, trial_end_date, is_trial, monthly_price, card_last4 FROM user_billing WHERE user_id = ?',
         [userId]
       );
@@ -2613,7 +2651,7 @@ app.post('/api/user/billing/subscription', async (req, res) => {
       const cardLast4 = cardNumber.slice(-4);
       const trialEndDate = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
       
-      await connection.execute(
+      await connection.query(
         'INSERT INTO user_billing (user_id, subscription_plan, monthly_price, card_last4, trial_end_date, is_trial, created_at) VALUES (?, ?, ?, ?, ?, 1, NOW()) ON DUPLICATE KEY UPDATE subscription_plan = ?, monthly_price = ?, card_last4 = ?, trial_end_date = ?, is_trial = 0, updated_at = NOW()',
         [userId, plan, 29, cardLast4, trialEndDate, plan, 29, cardLast4, trialEndDate]
       );
@@ -2635,7 +2673,7 @@ app.get('/api/user/payment-settings', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [settings] = await connection.execute(
+      const [settings] = await connection.query(
         'SELECT * FROM user_payment_settings WHERE user_id = ?',
         [userId]
       );
@@ -2697,7 +2735,7 @@ app.put('/api/user/payment-settings', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         `INSERT INTO user_payment_settings (
           user_id, online_booking_tips, invoice_payment_tips, show_service_prices, 
           show_service_descriptions, payment_due_days, payment_due_unit, default_memo, 
@@ -2747,7 +2785,7 @@ app.get('/api/user/payment-methods', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [methods] = await connection.execute(
+      const [methods] = await connection.query(
         'SELECT id, name, description, is_active FROM custom_payment_methods WHERE user_id = ? AND is_active = 1 ORDER BY created_at ASC',
         [userId]
       );
@@ -2774,12 +2812,12 @@ app.post('/api/user/payment-methods', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         'INSERT INTO custom_payment_methods (user_id, name, description) VALUES (?, ?, ?)',
         [userId, name.trim(), description || null]
       );
       
-      const [newMethod] = await connection.execute(
+      const [newMethod] = await connection.query(
         'SELECT id, name, description FROM custom_payment_methods WHERE id = ?',
         [result.insertId]
       );
@@ -2807,7 +2845,7 @@ app.put('/api/user/payment-methods/:id', authenticateToken, async (req, res) => 
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         'UPDATE custom_payment_methods SET name = ?, description = ?, updated_at = NOW() WHERE id = ? AND user_id = ?',
         [name.trim(), description || null, methodId, userId]
       );
@@ -2834,7 +2872,7 @@ app.delete('/api/user/payment-methods/:id', authenticateToken, async (req, res) 
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         'UPDATE custom_payment_methods SET is_active = 0, updated_at = NOW() WHERE id = ? AND user_id = ?',
         [methodId, userId]
       );
@@ -2868,7 +2906,7 @@ app.post('/api/user/payment-processor/setup', authenticateToken, async (req, res
     try {
       // In a real application, you would integrate with the payment processor here
       // For now, we'll just mark it as connected
-      await connection.execute(
+      await connection.query(
         `INSERT INTO user_payment_settings (user_id, payment_processor, payment_processor_connected, updated_at) 
          VALUES (?, ?, 1, NOW())
          ON DUPLICATE KEY UPDATE 
@@ -2899,7 +2937,7 @@ app.get('/api/user/availability', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [availabilityInfo] = await connection.execute(
+      const [availabilityInfo] = await connection.query(
         'SELECT business_hours, timeslot_templates FROM user_availability WHERE user_id = ?',
         [userId]
       );
@@ -2939,7 +2977,7 @@ app.put('/api/user/availability', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         'INSERT INTO user_availability (user_id, business_hours, timeslot_templates, created_at) VALUES (?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE business_hours = ?, timeslot_templates = ?, updated_at = NOW()',
         [userId, JSON.stringify(businessHours), JSON.stringify(timeslotTemplates), JSON.stringify(businessHours), JSON.stringify(timeslotTemplates)]
       );
@@ -2988,7 +3026,7 @@ app.get('/api/territories', async (req, res) => {
       
       query += ` GROUP BY t.id ORDER BY t.${sortBy} ${sortOrder}`;
       
-      const [territories] = await connection.execute(query, params);
+      const [territories] = await connection.query(query, params);
       
       // Get territory statistics
       const territoryStats = territories.map(territory => ({
@@ -3022,7 +3060,7 @@ app.get('/api/territories/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [territories] = await connection.execute(`
+      const [territories] = await connection.query(`
         SELECT 
           t.*,
           COUNT(DISTINCT j.id) as total_jobs,
@@ -3047,7 +3085,7 @@ app.get('/api/territories/:id', async (req, res) => {
       territory.services = JSON.parse(territory.services || '[]');
       
       // Get territory pricing
-      const [pricing] = await connection.execute(`
+      const [pricing] = await connection.query(`
         SELECT tp.*, s.name as service_name, s.description as service_description
         FROM territory_pricing tp
         JOIN services s ON tp.service_id = s.id
@@ -3089,7 +3127,7 @@ app.post('/api/territories', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(`
+      const [result] = await connection.query(`
         INSERT INTO territories (
           user_id, name, description, location, zip_codes, radius_miles, 
           timezone, business_hours, team_members, services, pricing_multiplier, created_at
@@ -3138,7 +3176,7 @@ app.put('/api/territories/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(`
+      await connection.query(`
         UPDATE territories 
         SET name = ?, description = ?, location = ?, zip_codes = ?, 
             radius_miles = ?, timezone = ?, status = ?, business_hours = ?, 
@@ -3167,7 +3205,7 @@ app.delete('/api/territories/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute('DELETE FROM territories WHERE id = ?', [id]);
+      await connection.query('DELETE FROM territories WHERE id = ?', [id]);
       res.json({ message: 'Territory deleted successfully' });
     } finally {
       connection.release();
@@ -3185,7 +3223,7 @@ app.get('/api/territories/:id/pricing', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [pricing] = await connection.execute(`
+      const [pricing] = await connection.query(`
         SELECT tp.*, s.name as service_name, s.description as service_description
         FROM territory_pricing tp
         JOIN services s ON tp.service_id = s.id
@@ -3210,7 +3248,7 @@ app.post('/api/territories/:id/pricing', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(`
+      await connection.query(`
         INSERT INTO territory_pricing (
           territory_id, service_id, base_price, price_multiplier, 
           minimum_price, maximum_price, created_at
@@ -3262,7 +3300,7 @@ app.get('/api/invoices', async (req, res) => {
       }
       
       // Get invoices with customer info
-      const [invoices] = await connection.execute(`
+      const [invoices] = await connection.query(`
         SELECT 
           i.*,
           c.first_name as customer_first_name,
@@ -3282,7 +3320,7 @@ app.get('/api/invoices', async (req, res) => {
       `, [...params, parseInt(limit), offset]);
       
       // Get total count
-      const [countResult] = await connection.execute(`
+      const [countResult] = await connection.query(`
         SELECT COUNT(*) as total
         FROM invoices i
         LEFT JOIN customers c ON i.customer_id = c.id
@@ -3323,7 +3361,7 @@ app.get('/api/invoices/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [invoices] = await connection.execute(`
+      const [invoices] = await connection.query(`
         SELECT 
           i.*,
           c.first_name as customer_first_name,
@@ -3370,7 +3408,7 @@ app.post('/api/invoices', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(`
+      const [result] = await connection.query(`
         INSERT INTO invoices (
           user_id, customer_id, job_id, estimate_id, invoice_number,
           subtotal, tax_amount, discount_amount, total_amount,
@@ -3385,7 +3423,7 @@ app.post('/api/invoices', async (req, res) => {
       const invoiceId = result.insertId;
       
       // Get the created invoice
-      const [invoices] = await connection.execute(`
+      const [invoices] = await connection.query(`
         SELECT 
           i.*,
           c.first_name as customer_first_name,
@@ -3422,7 +3460,7 @@ app.put('/api/invoices/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(`
+      const [result] = await connection.query(`
         UPDATE invoices SET
           status = ?,
           subtotal = ?,
@@ -3443,7 +3481,7 @@ app.put('/api/invoices/:id', async (req, res) => {
       }
       
       // Get the updated invoice
-      const [invoices] = await connection.execute(`
+      const [invoices] = await connection.query(`
         SELECT 
           i.*,
           c.first_name as customer_first_name,
@@ -3477,7 +3515,7 @@ app.delete('/api/invoices/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(`
+      const [result] = await connection.query(`
         DELETE FROM invoices WHERE id = ? AND user_id = ?
       `, [id, userId]);
       
@@ -3512,7 +3550,7 @@ app.get('/api/analytics/overview', async (req, res) => {
       }
       
       // Get job statistics
-      const [jobStats] = await connection.execute(`
+      const [jobStats] = await connection.query(`
         SELECT 
           COUNT(DISTINCT j.id) as total_jobs,
           COUNT(DISTINCT CASE WHEN j.status = 'completed' THEN j.id END) as completed_jobs,
@@ -3525,7 +3563,7 @@ app.get('/api/analytics/overview', async (req, res) => {
       `, params);
       
       // Get revenue statistics
-      const [revenueStats] = await connection.execute(`
+      const [revenueStats] = await connection.query(`
         SELECT 
           SUM(i.total_amount) as total_revenue,
           AVG(i.total_amount) as avg_job_value,
@@ -3535,7 +3573,7 @@ app.get('/api/analytics/overview', async (req, res) => {
       `, params);
       
       // Get customer statistics
-      const [customerStats] = await connection.execute(`
+      const [customerStats] = await connection.query(`
         SELECT 
           COUNT(DISTINCT c.id) as total_customers,
           COUNT(DISTINCT CASE WHEN c.status = 'active' THEN c.id END) as active_customers,
@@ -3583,7 +3621,7 @@ app.get('/api/analytics/revenue', async (req, res) => {
         groupByClause = 'DATE_FORMAT(i.created_at, "%Y-%m")';
       }
       
-      const [revenueData] = await connection.execute(`
+      const [revenueData] = await connection.query(`
         SELECT 
           ${groupByClause} as date,
           SUM(i.total_amount) as revenue,
@@ -3618,7 +3656,7 @@ app.get('/api/analytics/team-performance', async (req, res) => {
         params.push(startDate, endDate);
       }
       
-      const [teamPerformance] = await connection.execute(`
+      const [teamPerformance] = await connection.query(`
         SELECT 
           tm.id,
           tm.first_name,
@@ -3667,7 +3705,7 @@ app.get('/api/analytics/customer-insights', async (req, res) => {
       }
       
       // Customer lifetime value
-      const [customerLTV] = await connection.execute(`
+      const [customerLTV] = await connection.query(`
         SELECT 
           c.id,
           c.first_name,
@@ -3687,7 +3725,7 @@ app.get('/api/analytics/customer-insights', async (req, res) => {
       `, [...params, userId]);
       
       // Customer acquisition
-      const [customerAcquisition] = await connection.execute(`
+      const [customerAcquisition] = await connection.query(`
         SELECT 
           DATE_FORMAT(c.created_at, '%Y-%m') as month,
           COUNT(DISTINCT c.id) as new_customers
@@ -3724,7 +3762,7 @@ app.get('/api/analytics/service-performance', async (req, res) => {
         params.push(startDate, endDate);
       }
       
-      const [servicePerformance] = await connection.execute(`
+      const [servicePerformance] = await connection.query(`
         SELECT 
           s.id,
           s.name,
@@ -3766,7 +3804,7 @@ app.get('/api/territories/:id/analytics', async (req, res) => {
         params.push(startDate, endDate);
       }
       
-      const [analytics] = await connection.execute(`
+      const [analytics] = await connection.query(`
         SELECT 
           COUNT(DISTINCT j.id) as total_jobs,
           COUNT(DISTINCT CASE WHEN j.status = 'completed' THEN j.id END) as completed_jobs,
@@ -3780,7 +3818,7 @@ app.get('/api/territories/:id/analytics', async (req, res) => {
       `, params);
       
       // Get monthly trends
-      const [monthlyTrends] = await connection.execute(`
+      const [monthlyTrends] = await connection.query(`
         SELECT 
           DATE_FORMAT(j.scheduled_date, '%Y-%m') as month,
           COUNT(DISTINCT j.id) as job_count,
@@ -3813,7 +3851,7 @@ app.get('/api/user/service-areas', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [serviceAreasInfo] = await connection.execute(
+      const [serviceAreasInfo] = await connection.query(
         'SELECT enforce_service_area, territories FROM user_service_areas WHERE user_id = ?',
         [userId]
       );
@@ -3845,7 +3883,7 @@ app.put('/api/user/service-areas', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         'INSERT INTO user_service_areas (user_id, enforce_service_area, territories, created_at) VALUES (?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE enforce_service_area = ?, territories = ?, updated_at = NOW()',
         [userId, enforceServiceArea ? 1 : 0, JSON.stringify(territories), enforceServiceArea ? 1 : 0, JSON.stringify(territories)]
       );
@@ -4001,19 +4039,19 @@ app.get('/api/services/:serviceId/availability', async (req, res) => {
     
     try {
       // Get service availability
-      const [availability] = await connection.execute(
+      const [availability] = await connection.query(
         'SELECT * FROM service_availability WHERE service_id = ?',
         [serviceId]
       );
       
       // Get scheduling rules
-      const [schedulingRules] = await connection.execute(
+      const [schedulingRules] = await connection.query(
         'SELECT * FROM service_scheduling_rules WHERE service_id = ? ORDER BY start_date ASC',
         [serviceId]
       );
       
       // Get timeslot templates
-      const [timeslotTemplates] = await connection.execute(
+      const [timeslotTemplates] = await connection.query(
         'SELECT * FROM service_timeslot_templates WHERE service_id = ? AND is_active = 1',
         [serviceId]
       );
@@ -4074,7 +4112,7 @@ app.put('/api/services/:serviceId/availability', async (req, res) => {
     
     try {
       // Get user ID from service
-      const [services] = await connection.execute(
+      const [services] = await connection.query(
         'SELECT user_id FROM services WHERE id = ?',
         [serviceId]
       );
@@ -4086,7 +4124,7 @@ app.put('/api/services/:serviceId/availability', async (req, res) => {
       const userId = services[0].user_id;
       
       // Insert or update service availability
-      await connection.execute(
+      await connection.query(
         `INSERT INTO service_availability 
          (service_id, user_id, availability_type, business_hours_override, timeslot_template_id, 
           minimum_booking_notice, maximum_booking_advance, booking_interval, created_at) 
@@ -4123,7 +4161,7 @@ app.post('/api/services/:serviceId/scheduling-rules', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         `INSERT INTO service_scheduling_rules 
          (service_id, rule_type, start_date, end_date, start_time, end_time, days_of_week, capacity_limit, reason, created_at) 
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
@@ -4152,7 +4190,7 @@ app.delete('/api/services/:serviceId/scheduling-rules/:ruleId', async (req, res)
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         'DELETE FROM service_scheduling_rules WHERE id = ? AND service_id = ?',
         [ruleId, serviceId]
       );
@@ -4176,7 +4214,7 @@ app.post('/api/services/:serviceId/timeslot-templates', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         `INSERT INTO service_timeslot_templates 
          (service_id, name, description, timeslots, created_at) 
          VALUES (?, ?, ?, ?, NOW())`,
@@ -4204,7 +4242,7 @@ app.put('/api/services/:serviceId/timeslot-templates/:templateId', async (req, r
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         `UPDATE service_timeslot_templates 
          SET name = ?, description = ?, timeslots = ?, is_active = ?, updated_at = NOW() 
          WHERE id = ? AND service_id = ?`,
@@ -4227,7 +4265,7 @@ app.delete('/api/services/:serviceId/timeslot-templates/:templateId', async (req
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         'DELETE FROM service_timeslot_templates WHERE id = ? AND service_id = ?',
         [templateId, serviceId]
       );
@@ -4249,7 +4287,7 @@ app.get('/api/job-templates', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [templates] = await connection.execute(`
+      const [templates] = await connection.query(`
         SELECT 
           jt.*,
           s.name as service_name,
@@ -4290,7 +4328,7 @@ app.post('/api/job-templates', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         `INSERT INTO job_templates (
           user_id, name, description, service_id, 
           estimated_duration, estimated_price, default_notes, created_at
@@ -4307,7 +4345,7 @@ app.post('/api/job-templates', async (req, res) => {
       );
       
       // Get the created template with service details
-      const [templates] = await connection.execute(`
+      const [templates] = await connection.query(`
         SELECT 
           jt.*,
           s.name as service_name,
@@ -4390,7 +4428,7 @@ app.put('/api/job-templates/:id', async (req, res) => {
       
       const query = `UPDATE job_templates SET ${updateFields.join(', ')} WHERE id = ?`;
       
-      await connection.execute(query, updateValues);
+      await connection.query(query, updateValues);
       
       res.json({ message: 'Job template updated successfully' });
     } finally {
@@ -4409,7 +4447,7 @@ app.delete('/api/job-templates/:id', async (req, res) => {
     
     try {
       // Soft delete by setting is_active to false
-      await connection.execute(
+      await connection.query(
         'UPDATE job_templates SET is_active = FALSE, updated_at = NOW() WHERE id = ?',
         [id]
       );
@@ -4471,7 +4509,7 @@ app.get('/api/team-members', async (req, res) => {
       query += ' LIMIT ? OFFSET ?';
       params.push(parseInt(limit), offset);
       
-      const [teamMembers] = await connection.execute(query, params);
+      const [teamMembers] = await connection.query(query, params);
       
       // Get total count for pagination
       let countQuery = `
@@ -4492,7 +4530,7 @@ app.get('/api/team-members', async (req, res) => {
         countParams.push(searchTerm, searchTerm, searchTerm);
       }
       
-      const [countResult] = await connection.execute(countQuery, countParams);
+      const [countResult] = await connection.query(countQuery, countParams);
       const total = countResult[0].total;
       
       res.json({
@@ -4519,7 +4557,7 @@ app.get('/api/team-members/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [teamMembers] = await connection.execute(`
+      const [teamMembers] = await connection.query(`
         SELECT 
           tm.*,
           COUNT(j.id) as total_jobs,
@@ -4537,7 +4575,7 @@ app.get('/api/team-members/:id', async (req, res) => {
       }
       
       // Get recent jobs for this team member
-      const [recentJobs] = await connection.execute(`
+      const [recentJobs] = await connection.query(`
         SELECT 
           j.*,
           c.first_name as customer_first_name,
@@ -4591,7 +4629,7 @@ app.post('/api/team-members', async (req, res) => {
     
     try {
       // Check if email already exists for this user
-      const [existing] = await connection.execute(
+      const [existing] = await connection.query(
         'SELECT id FROM team_members WHERE user_id = ? AND email = ?',
         [userId, email]
       );
@@ -4600,7 +4638,7 @@ app.post('/api/team-members', async (req, res) => {
         return res.status(400).json({ error: 'Team member with this email already exists' });
       }
       
-      const [result] = await connection.execute(
+      const [result] = await connection.query(
         `INSERT INTO team_members (
           user_id, first_name, last_name, email, phone, role, 
           skills, hourly_rate, availability, created_at
@@ -4619,7 +4657,7 @@ app.post('/api/team-members', async (req, res) => {
       );
       
       // Get the created team member
-      const [teamMembers] = await connection.execute(`
+      const [teamMembers] = await connection.query(`
         SELECT * FROM team_members WHERE id = ?
       `, [result.insertId]);
       
@@ -4710,7 +4748,7 @@ app.put('/api/team-members/:id', async (req, res) => {
       
       const query = `UPDATE team_members SET ${updateFields.join(', ')} WHERE id = ?`;
       
-      await connection.execute(query, updateValues);
+      await connection.query(query, updateValues);
       
       res.json({ message: 'Team member updated successfully' });
     } finally {
@@ -4729,7 +4767,7 @@ app.delete('/api/team-members/:id', async (req, res) => {
     
     try {
       // Check if team member has assigned jobs
-      const [assignedJobs] = await connection.execute(
+      const [assignedJobs] = await connection.query(
         'SELECT COUNT(*) as count FROM jobs WHERE team_member_id = ? AND status IN ("pending", "confirmed", "in_progress")',
         [id]
       );
@@ -4741,7 +4779,7 @@ app.delete('/api/team-members/:id', async (req, res) => {
       }
       
       // Soft delete by setting status to inactive
-      await connection.execute(
+      await connection.query(
         'UPDATE team_members SET status = "inactive", updated_at = NOW() WHERE id = ?',
         [id]
       );
@@ -4764,7 +4802,7 @@ app.get('/api/team-members/:id/availability', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [teamMember] = await connection.execute(
+      const [teamMember] = await connection.query(
         'SELECT availability FROM team_members WHERE id = ?',
         [id]
       );
@@ -4786,7 +4824,7 @@ app.get('/api/team-members/:id/availability', async (req, res) => {
         jobsParams.push(startDate, endDate);
       }
       
-      const [scheduledJobs] = await connection.execute(jobsQuery, jobsParams);
+      const [scheduledJobs] = await connection.query(jobsQuery, jobsParams);
       
       res.json({
         availability: teamMember[0].availability ? JSON.parse(teamMember[0].availability) : null,
@@ -4808,7 +4846,7 @@ app.put('/api/team-members/:id/availability', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(
+      await connection.query(
         'UPDATE team_members SET availability = ?, updated_at = NOW() WHERE id = ?',
         [JSON.stringify(availability), id]
       );
@@ -4831,7 +4869,7 @@ app.get('/api/team-analytics', async (req, res) => {
     
     try {
       // Get team performance summary
-      const [performanceSummary] = await connection.execute(`
+      const [performanceSummary] = await connection.query(`
         SELECT 
           tm.id,
           tm.first_name,
@@ -4852,7 +4890,7 @@ app.get('/api/team-analytics', async (req, res) => {
       `, startDate && endDate ? [userId, startDate, endDate] : [userId]);
       
       // Get overall team stats
-      const [teamStats] = await connection.execute(`
+      const [teamStats] = await connection.query(`
         SELECT 
           COUNT(DISTINCT tm.id) as total_team_members,
           COUNT(DISTINCT j.id) as total_jobs,
@@ -4886,7 +4924,7 @@ app.get('/api/public/user/:slug', async (req, res) => {
     
     try {
       // First try to find by business_name (slug)
-      let [users] = await connection.execute(`
+      let [users] = await connection.query(`
         SELECT id, business_name, email, phone, first_name, last_name, profile_picture
         FROM users 
         WHERE business_name = ? AND is_active = 1
@@ -4894,7 +4932,7 @@ app.get('/api/public/user/:slug', async (req, res) => {
       
       // If not found, try to find by id (for backward compatibility)
       if (users.length === 0) {
-        [users] = await connection.execute(`
+        [users] = await connection.query(`
           SELECT id, business_name, email, phone, first_name, last_name, profile_picture
           FROM users 
           WHERE id = ? AND is_active = 1
@@ -4903,7 +4941,7 @@ app.get('/api/public/user/:slug', async (req, res) => {
       
       // If still not found, try to find by original business name (for backward compatibility)
       if (users.length === 0) {
-        [users] = await connection.execute(`
+        [users] = await connection.query(`
           SELECT id, business_name, email, phone, first_name, last_name, profile_picture
           FROM users 
           WHERE business_name LIKE ? AND is_active = 1
@@ -4934,7 +4972,7 @@ app.get('/api/public/services/:userId', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [services] = await connection.execute(`
+      const [services] = await connection.query(`
         SELECT id, name, description, price, duration, category
         FROM services 
         WHERE user_id = ? AND is_active = 1
@@ -4959,7 +4997,7 @@ app.get('/api/public/availability/:userId', async (req, res) => {
     
     try {
       // Get business hours for the user
-      const [availability] = await connection.execute(`
+      const [availability] = await connection.query(`
         SELECT business_hours FROM user_availability WHERE user_id = ?
       `, [userId]);
       
@@ -4975,7 +5013,7 @@ app.get('/api/public/availability/:userId', async (req, res) => {
       };
       
       // Get existing bookings for the date
-      const [bookings] = await connection.execute(`
+      const [bookings] = await connection.query(`
         SELECT scheduled_date FROM jobs 
         WHERE user_id = ? AND DATE(scheduled_date) = ? AND status != 'cancelled'
       `, [userId, date]);
@@ -5034,7 +5072,7 @@ app.post('/api/coupons', authenticateToken, async (req, res) => {
     
     try {
       // Check if coupon code already exists
-      const [existingCoupons] = await connection.execute(
+      const [existingCoupons] = await connection.query(
         'SELECT id FROM coupons WHERE code = ?',
         [code]
       );
@@ -5044,7 +5082,7 @@ app.post('/api/coupons', authenticateToken, async (req, res) => {
       }
 
       // Create coupon
-      const [result] = await connection.execute(`
+      const [result] = await connection.query(`
         INSERT INTO coupons (
           user_id, code, discount_type, discount_amount, application_type,
           selected_services, doesnt_expire, expiration_date, restrict_before_expiration,
@@ -5076,7 +5114,7 @@ app.get('/api/coupons', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [coupons] = await connection.execute(`
+      const [coupons] = await connection.query(`
         SELECT * FROM coupons WHERE user_id = ? ORDER BY created_at DESC
       `, [userId]);
       
@@ -5100,7 +5138,7 @@ app.put('/api/coupons/:id', authenticateToken, async (req, res) => {
     
     try {
       // Verify coupon belongs to user
-      const [coupons] = await connection.execute(
+      const [coupons] = await connection.query(
         'SELECT id FROM coupons WHERE id = ? AND user_id = ?',
         [couponId, userId]
       );
@@ -5110,7 +5148,7 @@ app.put('/api/coupons/:id', authenticateToken, async (req, res) => {
       }
 
       // Update coupon
-      await connection.execute(`
+      await connection.query(`
         UPDATE coupons SET 
           code = ?, discount_type = ?, discount_amount = ?, application_type = ?,
           selected_services = ?, doesnt_expire = ?, expiration_date = ?, 
@@ -5146,7 +5184,7 @@ app.delete('/api/coupons/:id', authenticateToken, async (req, res) => {
     
     try {
       // Verify coupon belongs to user
-      const [coupons] = await connection.execute(
+      const [coupons] = await connection.query(
         'SELECT id FROM coupons WHERE id = ? AND user_id = ?',
         [couponId, userId]
       );
@@ -5156,7 +5194,7 @@ app.delete('/api/coupons/:id', authenticateToken, async (req, res) => {
       }
 
       // Delete coupon
-      await connection.execute('DELETE FROM coupons WHERE id = ?', [couponId]);
+      await connection.query('DELETE FROM coupons WHERE id = ?', [couponId]);
 
       res.json({ message: 'Coupon deleted successfully' });
     } finally {
@@ -5184,7 +5222,7 @@ app.post('/api/coupons/validate', async (req, res) => {
       let businessUserId;
       
       // First try to find by business slug
-      const [businesses] = await connection.execute(
+      const [businesses] = await connection.query(
         'SELECT id FROM users WHERE business_slug = ?',
         [businessSlug]
       );
@@ -5195,7 +5233,7 @@ app.post('/api/coupons/validate', async (req, res) => {
         // Try to parse as user ID directly
         const userId = parseInt(businessSlug);
         if (!isNaN(userId)) {
-          const [usersById] = await connection.execute(
+          const [usersById] = await connection.query(
             'SELECT id FROM users WHERE id = ?',
             [userId]
           );
@@ -5208,7 +5246,7 @@ app.post('/api/coupons/validate', async (req, res) => {
           const match = businessSlug.match(/business-(\d+)/);
           if (match) {
             const userId = parseInt(match[1]);
-            const [usersById] = await connection.execute(
+            const [usersById] = await connection.query(
               'SELECT id FROM users WHERE id = ?',
               [userId]
             );
@@ -5223,7 +5261,7 @@ app.post('/api/coupons/validate', async (req, res) => {
       }
 
       // Get coupon details
-      const [coupons] = await connection.execute(`
+      const [coupons] = await connection.query(`
         SELECT * FROM coupons 
         WHERE code = ? AND user_id = ? AND is_active = 1
       `, [code, businessUserId]);
@@ -5300,13 +5338,13 @@ app.post('/api/coupons/apply', async (req, res) => {
     
     try {
       // Record coupon usage
-      await connection.execute(`
+      await connection.query(`
         INSERT INTO coupon_usage (coupon_id, customer_id, job_id, invoice_id, discount_amount)
         VALUES (?, ?, ?, ?, ?)
       `, [couponId, customerId, jobId, invoiceId, discountAmount]);
 
       // Update coupon usage count
-      await connection.execute(`
+      await connection.query(`
         UPDATE coupons SET current_uses = current_uses + 1 WHERE id = ?
       `, [couponId]);
 
@@ -5354,7 +5392,7 @@ app.post('/api/payments/confirm-payment', authenticateToken, async (req, res) =>
       // Update invoice status
       const connection = await pool.getConnection();
       try {
-        await connection.execute(`
+        await connection.query(`
           UPDATE invoices SET 
             status = 'paid', 
             payment_date = NOW(),
@@ -5363,7 +5401,7 @@ app.post('/api/payments/confirm-payment', authenticateToken, async (req, res) =>
         `, [paymentIntentId, invoiceId]);
         
         // Get invoice details for email
-        const [invoices] = await connection.execute(`
+        const [invoices] = await connection.query(`
           SELECT i.*, c.email, c.first_name, c.last_name
           FROM invoices i
           JOIN customers c ON i.customer_id = c.id
@@ -5497,7 +5535,7 @@ app.post('/api/public/bookings', async (req, res) => {
     
     try {
       // Create or find customer
-      let [existingCustomer] = await connection.execute(`
+      let [existingCustomer] = await connection.query(`
         SELECT id FROM customers WHERE email = ? AND user_id = ?
       `, [customerData.email, userId]);
       
@@ -5505,14 +5543,14 @@ app.post('/api/public/bookings', async (req, res) => {
       if (existingCustomer.length > 0) {
         customerId = existingCustomer[0].id;
         // Update customer info
-        await connection.execute(`
+        await connection.query(`
           UPDATE customers SET 
             first_name = ?, last_name = ?, phone = ?, address = ?
           WHERE id = ?
         `, [customerData.firstName, customerData.lastName, customerData.phone, customerData.address, customerId]);
       } else {
         // Create new customer
-        const [customerResult] = await connection.execute(`
+        const [customerResult] = await connection.query(`
           INSERT INTO customers (user_id, first_name, last_name, email, phone, address, status)
           VALUES (?, ?, ?, ?, ?, ?, 'active')
         `, [userId, customerData.firstName, customerData.lastName, customerData.email, customerData.phone, customerData.address]);
@@ -5523,14 +5561,14 @@ app.post('/api/public/bookings', async (req, res) => {
       const scheduledDateTime = `${scheduledDate}T${scheduledTime}:00`;
       
       for (const service of services) {
-        await connection.execute(`
+        await connection.query(`
           INSERT INTO jobs (user_id, customer_id, service_id, scheduled_date, notes, status)
           VALUES (?, ?, ?, ?, ?, 'pending')
         `, [userId, customerId, service.id, scheduledDateTime, notes]);
       }
       
       // Create invoice
-      const [invoiceResult] = await connection.execute(`
+      const [invoiceResult] = await connection.query(`
         INSERT INTO invoices (user_id, customer_id, total_amount, status, created_at)
         VALUES (?, ?, ?, 'pending', NOW())
       `, [userId, customerId, totalAmount]);
@@ -5598,7 +5636,7 @@ app.get('/api/requests', authenticateToken, async (req, res) => {
       query += ' LIMIT ? OFFSET ?';
       params.push(parseInt(limit), offset);
       
-      const [requests] = await connection.execute(query, params);
+      const [requests] = await connection.query(query, params);
       
       // Get total count for pagination
       let countQuery = `
@@ -5620,7 +5658,7 @@ app.get('/api/requests', authenticateToken, async (req, res) => {
         countParams.push(status);
       }
       
-      const [countResult] = await connection.execute(countQuery, countParams);
+      const [countResult] = await connection.query(countQuery, countParams);
       const total = countResult[0].total;
       
       res.json({
@@ -5647,7 +5685,7 @@ app.get('/api/requests/:id', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [requests] = await connection.execute(`
+      const [requests] = await connection.query(`
         SELECT r.*, 
                c.first_name as customer_first_name, 
                c.last_name as customer_last_name,
@@ -5695,14 +5733,14 @@ app.post('/api/requests', authenticateToken, async (req, res) => {
       
       // If no customerId provided, create or find customer
       if (!customerId && customerName && customerEmail) {
-        let [existingCustomer] = await connection.execute(`
+        let [existingCustomer] = await connection.query(`
           SELECT id FROM customers WHERE email = ? AND user_id = ?
         `, [customerEmail, userId]);
         
         if (existingCustomer.length > 0) {
           actualCustomerId = existingCustomer[0].id;
         } else {
-          const [customerResult] = await connection.execute(`
+          const [customerResult] = await connection.query(`
             INSERT INTO customers (user_id, first_name, last_name, email, phone, status)
             VALUES (?, ?, ?, ?, ?, 'active')
           `, [userId, customerName.split(' ')[0], customerName.split(' ').slice(1).join(' ') || '', customerEmail, customerPhone]);
@@ -5710,7 +5748,7 @@ app.post('/api/requests', authenticateToken, async (req, res) => {
         }
       }
       
-      const [result] = await connection.execute(`
+      const [result] = await connection.query(`
         INSERT INTO requests (
           user_id, customer_id, service_id, type, status, 
           scheduled_date, scheduled_time, estimated_duration, estimated_price,
@@ -5723,7 +5761,7 @@ app.post('/api/requests', authenticateToken, async (req, res) => {
       ]);
       
       // Get the created request
-      const [requests] = await connection.execute(`
+      const [requests] = await connection.query(`
         SELECT r.*, 
                c.first_name as customer_first_name, 
                c.last_name as customer_last_name,
@@ -5759,7 +5797,7 @@ app.put('/api/requests/:id', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(`
+      await connection.query(`
         UPDATE requests SET 
           status = ?, scheduled_date = ?, scheduled_time = ?, 
           estimated_duration = ?, estimated_price = ?, notes = ?, updated_at = NOW()
@@ -5767,7 +5805,7 @@ app.put('/api/requests/:id', authenticateToken, async (req, res) => {
       `, [status, scheduledDate, scheduledTime, estimatedDuration, estimatedPrice, notes, id]);
       
       // Get the updated request
-      const [requests] = await connection.execute(`
+      const [requests] = await connection.query(`
         SELECT r.*, 
                c.first_name as customer_first_name, 
                c.last_name as customer_last_name,
@@ -5802,7 +5840,7 @@ app.delete('/api/requests/:id', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      const [result] = await connection.execute('DELETE FROM requests WHERE id = ?', [id]);
+      const [result] = await connection.query('DELETE FROM requests WHERE id = ?', [id]);
       
       if (result.affectedRows === 0) {
         return res.status(404).json({ error: 'Request not found' });
@@ -5825,7 +5863,7 @@ app.post('/api/requests/:id/approve', authenticateToken, async (req, res) => {
     
     try {
       // Get the request first
-      const [requests] = await connection.execute(`
+      const [requests] = await connection.query(`
         SELECT r.*, c.first_name, c.last_name, c.email, s.name as service_name, s.price
         FROM requests r
         LEFT JOIN customers c ON r.customer_id = c.id
@@ -5840,14 +5878,14 @@ app.post('/api/requests/:id/approve', authenticateToken, async (req, res) => {
       const request = requests[0];
       
       // Update request status
-      await connection.execute(`
+      await connection.query(`
         UPDATE requests SET status = 'approved', updated_at = NOW() WHERE id = ?
       `, [id]);
       
       // If it's a booking request, create a job AND an estimate
       if (request.type === 'booking') {
         // Create job
-        await connection.execute(`
+        await connection.query(`
           INSERT INTO jobs (user_id, customer_id, service_id, scheduled_date, notes, status)
           VALUES (?, ?, ?, ?, ?, 'confirmed')
         `, [request.user_id, request.customer_id, request.service_id, request.scheduled_date, request.notes]);
@@ -5863,7 +5901,7 @@ app.post('/api/requests/:id/approve', authenticateToken, async (req, res) => {
           status: 'draft'
         };
         
-        await connection.execute(`
+        await connection.query(`
           INSERT INTO estimates (user_id, customer_id, service_id, amount, notes, valid_until, status, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
         `, [
@@ -5895,7 +5933,7 @@ app.post('/api/requests/:id/reject', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      await connection.execute(`
+      await connection.query(`
         UPDATE requests SET 
           status = 'rejected', 
           rejection_reason = ?, 
@@ -5940,7 +5978,7 @@ app.post('/api/public/quotes', async (req, res) => {
     try {
       // First, create or find customer
       let customerId;
-      const [existingCustomers] = await connection.execute(`
+      const [existingCustomers] = await connection.query(`
         SELECT id FROM customers 
         WHERE user_id = ? AND email = ?
       `, [userId, customerData.email]);
@@ -5948,14 +5986,14 @@ app.post('/api/public/quotes', async (req, res) => {
       if (existingCustomers.length > 0) {
         customerId = existingCustomers[0].id;
         // Update customer information
-        await connection.execute(`
+        await connection.query(`
           UPDATE customers 
           SET first_name = ?, last_name = ?, phone = ?, address = ?, updated_at = NOW()
           WHERE id = ?
         `, [customerData.firstName, customerData.lastName, customerData.phone, customerData.address, customerId]);
       } else {
         // Create new customer
-        const [customerResult] = await connection.execute(`
+        const [customerResult] = await connection.query(`
           INSERT INTO customers (user_id, first_name, last_name, email, phone, address, created_at)
           VALUES (?, ?, ?, ?, ?, ?, NOW())
         `, [userId, customerData.firstName, customerData.lastName, customerData.email, customerData.phone, customerData.address]);
@@ -5963,7 +6001,7 @@ app.post('/api/public/quotes', async (req, res) => {
       }
       
       // Create quote request
-      const [requestResult] = await connection.execute(`
+      const [requestResult] = await connection.query(`
         INSERT INTO requests (
           user_id, customer_id, service_id, type, status,
           scheduled_date, scheduled_time, estimated_duration, estimated_price,
@@ -6009,7 +6047,7 @@ app.post('/api/public/bookings', async (req, res) => {
     try {
       // First, create or find customer
       let customerId;
-      const [existingCustomers] = await connection.execute(`
+      const [existingCustomers] = await connection.query(`
         SELECT id FROM customers 
         WHERE user_id = ? AND email = ?
       `, [userId, customerData.email]);
@@ -6017,14 +6055,14 @@ app.post('/api/public/bookings', async (req, res) => {
       if (existingCustomers.length > 0) {
         customerId = existingCustomers[0].id;
         // Update customer information
-        await connection.execute(`
+        await connection.query(`
           UPDATE customers 
           SET first_name = ?, last_name = ?, phone = ?, address = ?, updated_at = NOW()
           WHERE id = ?
         `, [customerData.firstName, customerData.lastName, customerData.phone, customerData.address, customerId]);
       } else {
         // Create new customer
-        const [customerResult] = await connection.execute(`
+        const [customerResult] = await connection.query(`
           INSERT INTO customers (user_id, first_name, last_name, email, phone, address, created_at)
           VALUES (?, ?, ?, ?, ?, ?, NOW())
         `, [userId, customerData.firstName, customerData.lastName, customerData.email, customerData.phone, customerData.address]);
@@ -6036,7 +6074,7 @@ app.post('/api/public/bookings', async (req, res) => {
       for (const service of services) {
         const fullScheduledDate = `${scheduledDate} ${scheduledTime}:00`;
         
-        const [bookingResult] = await connection.execute(`
+        const [bookingResult] = await connection.query(`
           INSERT INTO jobs (
             user_id, customer_id, service_id, scheduled_date, notes, status, created_at
           ) VALUES (?, ?, ?, ?, ?, 'pending', NOW())
@@ -6046,7 +6084,7 @@ app.post('/api/public/bookings', async (req, res) => {
       }
       
       // Create invoice for the booking
-      const [invoiceResult] = await connection.execute(`
+      const [invoiceResult] = await connection.query(`
         INSERT INTO invoices (
           user_id, customer_id, amount, total_amount, status, due_date, created_at
         ) VALUES (?, ?, ?, ?, 'draft', DATE_ADD(NOW(), INTERVAL 15 DAY), NOW())
@@ -6473,7 +6511,7 @@ app.use((req, res) => {
 // Start server
 app.listen(PORT, () => {
   console.log(`ZenBooker API server running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/api/health`);
+  console.log(`Health check: http://127.0.0.1:${PORT}/api/health`);
 });
 
 

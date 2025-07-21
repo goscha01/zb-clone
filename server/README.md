@@ -1,110 +1,247 @@
-# ZenBooker Backend API
+# Zenbooker Backend Setup Guide
 
-A consolidated Express.js backend for the ZenBooker application following a single-file structure pattern.
+## Overview
 
-## Features
+This document provides step-by-step instructions for setting up the Zenbooker backend server. The backend is built with Node.js, Express.js, and MySQL, providing RESTful API endpoints for the Zenbooker application.
 
-- **Single File Structure**: All API endpoints and logic contained in `server.js`
-- **MySQL Database**: Uses MySQL2 for database operations
-- **RESTful API**: Complete CRUD operations for all entities
-- **CORS Enabled**: Cross-origin requests supported
-- **Environment Configuration**: Uses dotenv for configuration
+## Prerequisites
+
+Before setting up the backend, ensure you have the following installed:
+
+- **Node.js** (version 16 or higher)
+- **MySQL** (version 8.0 or higher)
+- **npm** or **yarn** package manager
+
+## Installation Steps
+
+### 1. Navigate to the Server Directory
+
+```bash
+cd server
+```
+
+### 2. Install Dependencies
+
+```bash
+npm install
+```
+
+This will install all required packages including:
+- `express` - Web framework
+- `mysql2` - MySQL client for Node.js
+- `bcryptjs` - Password hashing
+- `jsonwebtoken` - JWT authentication
+- `cors` - Cross-origin resource sharing
+- `dotenv` - Environment variable management
+
+### 3. Database Setup
+
+#### Create MySQL Database
+
+1. Access your MySQL server:
+   ```bash
+   mysql -u root -p
+   ```
+
+2. Create the database:
+   ```sql
+   CREATE DATABASE zenbooker;
+   USE zenbooker;
+   ```
+
+3. Import the initial schema:
+   ```bash
+   mysql -u root -p zenbooker < database.sql
+   ```
+
+#### Run Database Migrations
+
+Execute the migration script to add additional tables and columns:
+
+```bash
+node run-migration.js
+```
+
+This will create all necessary tables including:
+- `users` - User accounts and authentication
+- `jobs` - Service jobs and bookings
+- `services` - Available services
+- `customers` - Customer information
+- `estimates` - Service estimates
+- `invoices` - Billing and payments
+- `team_members` - Team management
+- `territories` - Service areas
+- `coupons` - Discount codes
+
+### 4. Environment Configuration
+
+Create a `.env` file in the server directory with the following variables:
+
+```env
+# Database Configuration
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=your_mysql_password
+DB_NAME=zenbooker
+
+# JWT Configuration
+JWT_SECRET=your_super_secure_jwt_secret_key_here
+
+# Server Configuration
+PORT=5000
+NODE_ENV=production
+
+# Frontend URL (for CORS)
+FRONTEND_URL=https://your-frontend-domain.com
+```
+
+**Important Security Notes:**
+- Use a strong, unique JWT_SECRET
+- Never commit the `.env` file to version control
+- Use environment-specific passwords for production
+
+### 5. Start the Server
+
+#### Development Mode
+```bash
+npm run dev
+```
+
+#### Production Mode
+```bash
+npm start
+```
+
+The server will start on the configured port (default: 5000).
 
 ## API Endpoints
 
 ### Authentication
 - `POST /api/auth/signup` - User registration
 - `POST /api/auth/signin` - User login
+- `POST /api/auth/signout` - User logout
 
-### Services
-- `GET /api/services` - Get all services for a user
-- `POST /api/services` - Create a new service
-- `PUT /api/services/:id` - Update a service
-- `DELETE /api/services/:id` - Delete a service
+### Jobs Management
+- `GET /api/jobs` - Retrieve jobs
+- `POST /api/jobs` - Create new job
+- `PUT /api/jobs/:id` - Update job
+- `DELETE /api/jobs/:id` - Delete job
 
-### Jobs
-- `GET /api/jobs` - Get all jobs for a user
-- `POST /api/jobs` - Create a new job
-- `PUT /api/jobs/:id` - Update a job
+### Services Management
+- `GET /api/services` - Retrieve services
+- `POST /api/services` - Create new service
+- `PUT /api/services/:id` - Update service
+- `DELETE /api/services/:id` - Delete service
 
-### Customers
-- `GET /api/customers` - Get all customers for a user
-- `POST /api/customers` - Create a new customer
+### Customer Management
+- `GET /api/customers` - Retrieve customers
+- `POST /api/customers` - Create new customer
+- `PUT /api/customers/:id` - Update customer
+- `DELETE /api/customers/:id` - Delete customer
 
-### Team Members
-- `GET /api/team` - Get all team members for a user
-- `POST /api/team` - Create a new team member
+### Team Management
+- `GET /api/team-members` - Retrieve team members
+- `POST /api/team-members` - Create new team member
+- `PUT /api/team-members/:id` - Update team member
+- `DELETE /api/team-members/:id` - Delete team member
 
-### Estimates
-- `GET /api/estimates` - Get all estimates for a user
-- `POST /api/estimates` - Create a new estimate
+### Estimates & Invoices
+- `GET /api/estimates` - Retrieve estimates
+- `POST /api/estimates` - Create new estimate
+- `GET /api/invoices` - Retrieve invoices
+- `POST /api/invoices` - Create new invoice
 
-### Health Check
-- `GET /api/health` - API health status
+## Health Check
 
-## Setup Instructions
+Verify the server is running correctly:
 
-1. **Install Dependencies**
-   ```bash
-   npm install
-   ```
+```bash
+curl http://localhost:5000/api/health
+```
 
-2. **Database Setup**
-   - Create a MySQL database
-   - Import the schema from `database.sql`
-   - Create a `.env` file with your database credentials:
-   ```
-   DB_HOST=localhost
-   DB_USER=root
-   DB_PASSWORD=your_password
-   DB_NAME=zenbooker
-   DB_PORT=3306
-   PORT=5000
-   ```
-
-3. **Start the Server**
-   ```bash
-   # Development mode with auto-restart
-   npm run dev
-   
-   # Production mode
-   npm start
-   ```
-
-## Database Schema
-
-The application uses the following main tables:
-- `users` - User accounts and business information
-- `services` - Services offered by the business
-- `customers` - Customer information
-- `team_members` - Team member information
-- `jobs` - Job bookings and scheduling
-- `estimates` - Service estimates
-- `invoices` - Billing and invoicing
-- `territories` - Service areas and territories
-
-## API Response Format
-
-All API responses follow a consistent format:
-
-**Success Response:**
+Expected response:
 ```json
 {
-  "message": "Operation successful",
-  "data": {...}
+  "status": "OK",
+  "message": "ZenBooker API is running",
+  "database": "Connected",
+  "timestamp": "2025-01-21T10:00:00.000Z"
 }
 ```
 
-**Error Response:**
-```json
-{
-  "error": "Error message"
-}
+## Troubleshooting
+
+### Common Issues
+
+1. **Database Connection Failed**
+   - Verify MySQL is running
+   - Check database credentials in `.env`
+   - Ensure database exists
+
+2. **CORS Errors**
+   - Verify `FRONTEND_URL` in `.env`
+   - Check CORS configuration in `server.js`
+
+3. **JWT Authentication Issues**
+   - Verify `JWT_SECRET` is set
+   - Check token expiration settings
+
+4. **Port Already in Use**
+   - Change `PORT` in `.env`
+   - Kill existing process on port 5000
+
+### Logs
+
+Check server logs for detailed error information:
+```bash
+tail -f logs/app.log
 ```
 
-## Development Notes
+## Production Deployment
 
-- All database operations use parameterized queries to prevent SQL injection
-- Error handling is implemented for all endpoints
-- The server includes CORS middleware for frontend integration
-- Database connections are properly managed and closed after each operation 
+### Recommended Setup
+
+1. **Use a Process Manager**
+   ```bash
+   npm install -g pm2
+   pm2 start server.js --name zenbooker-backend
+   ```
+
+2. **Set Up Reverse Proxy**
+   - Configure Nginx or Apache
+   - Set up SSL certificates
+   - Configure domain routing
+
+3. **Database Optimization**
+   - Enable MySQL query caching
+   - Set up database backups
+   - Configure connection pooling
+
+4. **Security Measures**
+   - Use HTTPS only
+   - Implement rate limiting
+   - Set up firewall rules
+   - Regular security updates
+
+### Environment Variables for Production
+
+```env
+NODE_ENV=production
+PORT=5000
+DB_HOST=your_production_db_host
+DB_USER=your_production_db_user
+DB_PASSWORD=your_production_db_password
+DB_NAME=zenbooker
+JWT_SECRET=your_production_jwt_secret
+FRONTEND_URL=https://your-frontend-domain.com
+```
+
+## Support
+
+For technical support or questions regarding the backend setup, please contact your development team.
+
+---
+
+**Version:** 1.0  
+**Last Updated:** January 2025  
+**Maintained By:** Development Team 

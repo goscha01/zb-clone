@@ -2,6 +2,7 @@
 import { useState } from "react"
 import { useNavigate, useLocation } from "react-router-dom"
 import UserDropdown from "./user-dropdown"
+import { useAuth } from "../context/AuthContext"
 import {
   Home,
   MessageSquare,
@@ -25,6 +26,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
+  const { user } = useAuth()
 
   const sidebarItems = [
     { icon: Home, label: "Dashboard", path: "/dashboard" },
@@ -110,11 +112,23 @@ const Sidebar = ({ isOpen, onClose }) => {
             className="w-full flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors"
           >
             <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-medium text-sm">JW</span>
+              <span className="text-white font-medium text-sm">
+                {user?.firstName && user?.lastName 
+                  ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`
+                  : user?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'
+                }
+              </span>
             </div>
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-medium text-gray-900 truncate">Just web</p>
-              <p className="text-xs text-gray-500 truncate">Just web Agency</p>
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {user?.firstName && user?.lastName 
+                  ? `${user.firstName} ${user.lastName}`
+                  : user?.firstName || user?.email || 'User'
+                }
+              </p>
+              <p className="text-xs text-gray-500 truncate">
+                {user?.businessName || user?.email || 'Business'}
+              </p>
             </div>
           </button>
           

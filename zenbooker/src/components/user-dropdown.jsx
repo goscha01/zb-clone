@@ -3,10 +3,12 @@
 import { useState, useRef, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Wrench, Settings, Gift, HelpCircle, LogOut } from "lucide-react"
+import { useAuth } from "../context/AuthContext"
 
 const UserDropdown = ({ isOpen, onClose, onToggle }) => {
   const navigate = useNavigate()
   const dropdownRef = useRef(null)
+  const { user, logout } = useAuth()
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -25,12 +27,11 @@ const UserDropdown = ({ isOpen, onClose, onToggle }) => {
   }, [isOpen, onClose])
 
   const handleSignOut = () => {
-    // Clear any stored auth tokens
-    localStorage.removeItem("authToken")
-    localStorage.removeItem("userData")
+    // Use the logout function from AuthContext
+    logout()
     
-    // Redirect to login page
-    navigate("/login")
+    // Redirect to signin page
+    navigate("/signin")
     onClose()
     
     // Optional: Show success message
@@ -102,11 +103,23 @@ const UserDropdown = ({ isOpen, onClose, onToggle }) => {
       <div className="border-t border-gray-200 mt-2 pt-2 px-4">
         <div className="flex items-center space-x-3">
           <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-            <span className="text-white font-medium text-xs">JW</span>
+            <span className="text-white font-medium text-xs">
+              {user?.firstName && user?.lastName 
+                ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`
+                : user?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'
+              }
+            </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">Just web</p>
-            <p className="text-xs text-gray-500 truncate">Just web Agency</p>
+            <p className="text-sm font-medium text-gray-900 truncate">
+              {user?.firstName && user?.lastName 
+                ? `${user.firstName} ${user.lastName}`
+                : user?.firstName || user?.email || 'User'
+              }
+            </p>
+            <p className="text-xs text-gray-500 truncate">
+              {user?.businessName || user?.email || 'Business'}
+            </p>
           </div>
         </div>
       </div>
