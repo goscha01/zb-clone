@@ -139,7 +139,7 @@ const ZenbookerDashboard = () => {
       setError("")
       
       console.log('🔄 Fetching dashboard data for user:', user.id)
-      console.log('📊 API Base URL:', process.env.REACT_APP_API_URL || 'http://localhost:5000/api')
+      console.log('📊 API Base URL:', process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online/api')
       
       // Add delay between API calls to prevent rate limiting
       const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms))

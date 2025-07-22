@@ -63,7 +63,7 @@ const ZenbookerEstimates = () => {
       setDebugInfo(`Fetching estimates for user: ${user.id}`)
       
       console.log('Making API call to estimates with user ID:', user.id)
-      console.log('API base URL:', process.env.REACT_APP_API_URL || 'http://localhost:5000/api')
+      console.log('API base URL:', process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online/api')
       
       const response = await estimatesAPI.getAll(user.id, {
         status: filters.status,

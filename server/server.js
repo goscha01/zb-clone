@@ -153,7 +153,7 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'https://zenbooker.now2code.online',
-    'https://zenbooker.vercel.app',
+    'https://zb-clone.vercel.app',
     'https://zenbooker.netlify.app',
     process.env.FRONTEND_URL
   ].filter(Boolean),
@@ -174,9 +174,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Database connection pool
 const pool = mysql.createPool({
   host: process.env.DB_HOST || '127.0.0.1',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'zenbooker'
+  user: process.env.DB_USER || 'nowcodeo_Justweb1',
+  password: process.env.DB_PASSWORD || 'Just web08107370125',
+  database: process.env.DB_NAME || 'nowcodeo_zenbooker'
 });
 
 // Test database connection
@@ -185,7 +185,7 @@ pool.getConnection()
     console.log('Database connected successfully');
     console.log('Database config:', {
       host: process.env.DB_HOST || '127.0.0.1',
-      database: process.env.DB_NAME || 'zenbooker',
+      database: process.env.DB_NAME || 'nowcodeo_zenbooker',
       port: process.env.DB_PORT || 3306
     });
     connection.release();
@@ -204,14 +204,20 @@ const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
+  console.log('Auth check - Header:', authHeader ? 'Present' : 'Missing');
+  console.log('Auth check - Token:', token ? 'Present' : 'Missing');
+
   if (!token) {
+    console.log('Auth failed - No token provided');
     return res.status(401).json({ error: 'Access token required' });
   }
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
     if (err) {
+      console.log('Auth failed - Token verification error:', err.message);
       return res.status(403).json({ error: 'Invalid or expired token' });
     }
+    console.log('Auth successful - User ID:', user.userId);
     req.user = user;
     next();
   });
@@ -1126,27 +1132,32 @@ const validatePhone = (phone) => {
 };
 
 // Customers endpoints
-app.get('/api/customers', authenticateToken, async (req, res) => {
+app.get('/api/customers', async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const { search, status, page = 1, limit = 20, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
+    const { userId, search, status, page = 1, limit = 20, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
     
     const connection = await pool.getConnection();
     
     try {
-      let query = 'SELECT * FROM customers WHERE user_id = ?';
-      let params = [userId];
+      let query = 'SELECT * FROM customers';
+      let params = [];
+      
+      // Add user filter if userId is provided
+      if (userId) {
+        query += ' WHERE user_id = ?';
+        params.push(userId);
+      }
       
       // Add search functionality
       if (search) {
-        query += ' AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)';
+        query += userId ? ' AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)' : ' WHERE (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)';
         const searchTerm = `%${search}%`;
         params.push(searchTerm, searchTerm, searchTerm, searchTerm);
       }
       
       // Add status filter
       if (status) {
-        query += ' AND status = ?';
+        query += (userId || search) ? ' AND status = ?' : ' WHERE status = ?';
         params.push(status);
       }
       
@@ -1168,16 +1179,22 @@ app.get('/api/customers', authenticateToken, async (req, res) => {
       const [customers] = await connection.query(query, params);
       
       // Get total count for pagination
-      let countQuery = 'SELECT COUNT(*) as total FROM customers WHERE user_id = ?';
-      let countParams = [userId];
+      let countQuery = 'SELECT COUNT(*) as total FROM customers';
+      let countParams = [];
+      
+      // Add user filter if userId is provided
+      if (userId) {
+        countQuery += ' WHERE user_id = ?';
+        countParams.push(userId);
+      }
       
       if (search) {
-        countQuery += ' AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)';
+        countQuery += (userId ? ' AND' : ' WHERE') + ' (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)';
         countParams.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
       }
       
       if (status) {
-        countQuery += ' AND status = ?';
+        countQuery += (userId || search ? ' AND' : ' WHERE') + ' status = ?';
         countParams.push(status);
       }
       

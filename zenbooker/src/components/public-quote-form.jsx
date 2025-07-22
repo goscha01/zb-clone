@@ -27,7 +27,7 @@ const PublicQuoteForm = ({ businessId = 1, onSuccess }) => {
     setError('');
 
     try {
-      const response = await fetch(`http://localhost:5000/api/public/quotes`, {
+      const response = await fetch(`https://zenbookapi.now2code.online/api/public/quotes`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -25,7 +25,7 @@ import axios from "axios"
 
 // Create axios instance for API calls
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:5000/api',
+  baseURL: process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online/api',
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
@@ -836,7 +836,7 @@ const ZenbookerOnlineBooking = () => {
                 id: "custom",
                 title: "Custom Integration",
                 description: "Use our API to build a custom booking experience",
-                code: `// API endpoint: http://localhost:5000/api/public/business/${bookingUrl.split('/').pop()}`
+                code: `// API endpoint: https://zenbookapi.now2code.online/api/public/business/${bookingUrl.split('/').pop()}`
               }
             ].map((option) => (
               <div key={option.id} className="border border-gray-200 rounded-lg p-4">

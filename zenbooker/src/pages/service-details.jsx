@@ -121,7 +121,7 @@ const ServiceDetails = () => {
       
       // First check if backend is running
       try {
-        const healthResponse = await fetch('http://localhost:5000/api/health')
+        const healthResponse = await fetch('https://zenbookapi.now2code.online/api/health')
         if (!healthResponse.ok) {
           throw new Error('Backend not responding')
         }
