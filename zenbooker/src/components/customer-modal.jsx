@@ -19,7 +19,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false)
 
   // Google Places API key
-  const GOOGLE_API_KEY = "AIzaSyC_CrJWTsTHOTBd7TSzTuXOfutywZ2AyOQ"
+  const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY
 
   useEffect(() => {
     if (!isOpen) {
