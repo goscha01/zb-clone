@@ -27,7 +27,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
   const [isValidatingPhone, setIsValidatingPhone] = useState(false)
 
   // Google Places API key
-  const GOOGLE_API_KEY = "AIzaSyC_CrJWTsTHOTBd7TSzTuXOfutywZ2AyOQ"
+  const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
 
   useEffect(() => {
     if (!isOpen) {
