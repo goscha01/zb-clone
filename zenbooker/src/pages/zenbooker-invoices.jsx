@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
 import { Plus, Search, Filter, FileText, Send, Check, X, Eye, Edit, Trash2, Calendar, DollarSign, User, AlertCircle, RefreshCw, CreditCard, Receipt } from "lucide-react"
@@ -10,6 +11,7 @@ import LoadingButton from "../components/loading-button"
 
 const ZenbookerInvoices = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [invoices, setInvoices] = useState([])
   const [customers, setCustomers] = useState([])
@@ -24,10 +26,8 @@ const ZenbookerInvoices = () => {
     sortBy: "created_at",
     sortOrder: "DESC"
   })
-  const [selectedInvoice, setSelectedInvoice] = useState(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
-  const [showPreviewModal, setShowPreviewModal] = useState(false)
 
   // Initial data fetch
   useEffect(() => {
@@ -108,13 +108,11 @@ const ZenbookerInvoices = () => {
   }
 
   const handleEditInvoice = (invoice) => {
-    setSelectedInvoice(invoice)
     setShowEditModal(true)
   }
 
   const handleViewInvoice = (invoice) => {
-    setSelectedInvoice(invoice)
-    setShowPreviewModal(true)
+    navigate(`/invoices/${invoice.id}`)
   }
 
   const handleSaveInvoice = () => {
@@ -125,12 +123,11 @@ const ZenbookerInvoices = () => {
 
   const handleSendInvoiceSuccess = () => {
     fetchInvoices()
-    setShowPreviewModal(false)
   }
 
   const handleMarkAsPaid = async (invoiceId) => {
     try {
-      await invoicesAPI.update(invoiceId, { status: 'paid' })
+      await invoicesAPI.updateStatus(invoiceId, 'paid', user.id)
       fetchInvoices()
       alert('Invoice marked as paid successfully!')
     } catch (error) {
@@ -145,7 +142,7 @@ const ZenbookerInvoices = () => {
     }
     
     try {
-      await invoicesAPI.delete(invoiceId)
+      await invoicesAPI.delete(invoiceId, user.id)
       fetchInvoices()
     } catch (error) {
       console.error('Error deleting invoice:', error)
@@ -155,7 +152,7 @@ const ZenbookerInvoices = () => {
 
   const handleSendInvoice = async (invoiceId) => {
     try {
-      await invoicesAPI.update(invoiceId, { status: 'sent' })
+      await invoicesAPI.updateStatus(invoiceId, 'sent', user.id)
       fetchInvoices()
       alert('Invoice sent successfully!')
     } catch (error) {

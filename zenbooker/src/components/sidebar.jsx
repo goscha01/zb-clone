@@ -34,6 +34,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     { icon: Calendar, label: "Schedule", path: "/schedule" },
     { icon: Briefcase, label: "Jobs", path: "/jobs" },
     { icon: FileText, label: "Estimates", path: "/estimates" },
+    { icon: FileText, label: "Invoices", path: "/invoices" },
     { icon: RotateCcw, label: "Recurring", path: "/recurring" },
     { icon: CreditCard, label: "Payments", path: "/payments" },
     { icon: Users, label: "Customers", path: "/customers" },

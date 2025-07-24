@@ -152,6 +152,8 @@ const upload = multer({
 app.use(cors({
   origin: [
     'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:5173',
     'https://zenbooker.now2code.online',
     'https://zb-clone.vercel.app',
     'https://zenbooker.netlify.app',
@@ -159,8 +161,13 @@ app.use(cors({
   ].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  exposedHeaders: ['Content-Length', 'X-Requested-With']
 }));
+
+// Handle preflight requests
+app.options('*', cors());
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
@@ -247,20 +254,34 @@ app.get('/api/health', async (req, res) => {
     // Test database connection
     const connection = await pool.getConnection();
     connection.release();
-    
-    res.json({ 
-      status: 'OK', 
-      message: 'ZenBooker API is running',
-      database: 'Connected',
-      timestamp: new Date().toISOString()
-    });
+    res.json({ status: 'ok', message: 'Server is running' });
   } catch (error) {
     console.error('Health check failed:', error);
-    res.status(500).json({ 
-      error: 'Health check failed',
-      database: 'Disconnected',
-      message: error.message
+    res.status(500).json({ status: 'error', message: 'Database connection failed' });
+  }
+});
+
+// Test endpoint for invoice updates
+app.put('/api/test-invoice/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, status } = req.body;
+    
+    console.log('Test invoice update:', { id, userId, status });
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    res.json({ 
+      message: 'Test successful', 
+      invoiceId: id, 
+      userId: userId, 
+      status: status 
     });
+  } catch (error) {
+    console.error('Test invoice update error:', error);
+    res.status(500).json({ error: 'Test failed' });
   }
 });
 
@@ -664,7 +685,7 @@ app.delete('/api/services/:id', async (req, res) => {
 // Jobs endpoints
 app.get('/api/jobs', async (req, res) => {
   try {
-    const { userId, status, search, page = 1, limit = 20, dateRange, dateFilter, sortBy = 'scheduled_date', sortOrder = 'ASC', teamMember, invoiceStatus } = req.query;
+    const { userId, status, search, page = 1, limit = 20, dateRange, dateFilter, sortBy = 'scheduled_date', sortOrder = 'ASC', teamMember, invoiceStatus, customerId } = req.query;
     const connection = await pool.getConnection();
     
     try {
@@ -699,6 +720,12 @@ app.get('/api/jobs', async (req, res) => {
         query += ' AND (c.first_name LIKE ? OR c.last_name LIKE ? OR s.name LIKE ?)';
         const searchTerm = `%${search}%`;
         params.push(searchTerm, searchTerm, searchTerm);
+      }
+      
+      // Handle customer filtering
+      if (customerId) {
+        query += ' AND j.customer_id = ?';
+        params.push(customerId);
       }
       
       // Handle team member assignment filtering
@@ -788,6 +815,12 @@ app.get('/api/jobs', async (req, res) => {
         countParams.push(searchTerm, searchTerm, searchTerm);
       }
       
+      // Handle customer filtering for count query
+      if (customerId) {
+        countQuery += ' AND j.customer_id = ?';
+        countParams.push(customerId);
+      }
+      
       // Handle team member assignment filtering for count query
       if (teamMember) {
         switch (teamMember) {
@@ -843,7 +876,7 @@ app.get('/api/jobs', async (req, res) => {
           page: parseInt(page),
           limit: parseInt(limit),
           total,
-          pages: Math.ceil(total / limit)
+          totalPages: Math.ceil(total / limit)
         }
       });
     } finally {
@@ -851,18 +884,7 @@ app.get('/api/jobs', async (req, res) => {
     }
   } catch (error) {
     console.error('Get jobs error:', error);
-    console.error('Error details:', {
-      message: error.message,
-      code: error.code,
-      errno: error.errno,
-      sqlMessage: error.sqlMessage,
-      sqlState: error.sqlState
-    });
-    res.status(500).json({ 
-      error: 'Failed to fetch jobs',
-      details: error.message,
-      code: error.code
-    });
+    res.status(500).json({ error: 'Failed to fetch jobs' });
   }
 });
 
@@ -1155,10 +1177,13 @@ app.get('/api/customers', async (req, res) => {
         params.push(searchTerm, searchTerm, searchTerm, searchTerm);
       }
       
-      // Add status filter
+      // Add status filter (exclude archived by default unless specifically requested)
       if (status) {
         query += (userId || search) ? ' AND status = ?' : ' WHERE status = ?';
         params.push(status);
+      } else {
+        // Exclude archived customers by default
+        query += (userId || search) ? ' AND status != "archived"' : ' WHERE status != "archived"';
       }
       
       // Add sorting
@@ -1196,6 +1221,9 @@ app.get('/api/customers', async (req, res) => {
       if (status) {
         countQuery += (userId || search ? ' AND' : ' WHERE') + ' status = ?';
         countParams.push(status);
+      } else {
+        // Exclude archived customers by default
+        countQuery += (userId || search ? ' AND' : ' WHERE') + ' status != "archived"';
       }
       
       const [countResult] = await connection.query(countQuery, countParams);
@@ -1222,7 +1250,7 @@ app.get('/api/customers', async (req, res) => {
 app.post('/api/customers', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { firstName, lastName, email, phone, address, notes, status = 'active' } = req.body;
+    const { firstName, lastName, email, phone, address, apartment, notes, status = 'active' } = req.body;
     
     // Input validation
     if (!validateName(firstName)) {
@@ -1247,15 +1275,21 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
     const sanitizedEmail = email ? email.toLowerCase().trim() : null;
     const sanitizedPhone = phone ? phone.trim() : null;
     const sanitizedAddress = address ? sanitizeInput(address) : null;
+    const sanitizedApartment = apartment ? sanitizeInput(apartment) : null;
     const sanitizedNotes = notes ? sanitizeInput(notes) : null;
+    
+    // Combine address and apartment if both are provided
+    const fullAddress = sanitizedAddress && sanitizedApartment 
+      ? `${sanitizedAddress}, ${sanitizedApartment}`
+      : sanitizedAddress || sanitizedApartment || null;
     
     const connection = await pool.getConnection();
     
     try {
-      // Check if customer with same email already exists for this user
+      // Check if customer with same email already exists for this user (excluding archived)
       if (sanitizedEmail) {
         const [existingCustomers] = await connection.query(
-          'SELECT id FROM customers WHERE user_id = ? AND email = ?',
+          'SELECT id FROM customers WHERE user_id = ? AND email = ? AND status != "archived"',
           [userId, sanitizedEmail]
         );
         
@@ -1266,7 +1300,7 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
       
       const [result] = await connection.query(
         'INSERT INTO customers (user_id, first_name, last_name, email, phone, address, notes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-        [userId, sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhone, sanitizedAddress, sanitizedNotes, status]
+        [userId, sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhone, fullAddress, sanitizedNotes, status]
       );
       
       // Get the created customer
@@ -1319,7 +1353,7 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { id } = req.params;
-    const { firstName, lastName, email, phone, address, notes, status } = req.body;
+    const { firstName, lastName, email, phone, address, apartment, notes, status } = req.body;
     
     // Input validation
     if (!validateName(firstName)) {
@@ -1344,7 +1378,13 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
     const sanitizedEmail = email ? email.toLowerCase().trim() : null;
     const sanitizedPhone = phone ? phone.trim() : null;
     const sanitizedAddress = address ? sanitizeInput(address) : null;
+    const sanitizedApartment = apartment ? sanitizeInput(apartment) : null;
     const sanitizedNotes = notes ? sanitizeInput(notes) : null;
+    
+    // Combine address and apartment if both are provided
+    const fullAddress = sanitizedAddress && sanitizedApartment 
+      ? `${sanitizedAddress}, ${sanitizedApartment}`
+      : sanitizedAddress || sanitizedApartment || null;
     
     const connection = await pool.getConnection();
     
@@ -1359,10 +1399,10 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
         return res.status(404).json({ error: 'Customer not found' });
       }
       
-      // Check if email is being changed and if it conflicts with another customer
+      // Check if email is being changed and if it conflicts with another customer (excluding archived)
       if (sanitizedEmail) {
         const [emailConflict] = await connection.query(
-          'SELECT id FROM customers WHERE user_id = ? AND email = ? AND id != ?',
+          'SELECT id FROM customers WHERE user_id = ? AND email = ? AND id != ? AND status != "archived"',
           [userId, sanitizedEmail, id]
         );
         
@@ -1373,7 +1413,7 @@ app.put('/api/customers/:id', authenticateToken, async (req, res) => {
       
       await connection.query(
         'UPDATE customers SET first_name = ?, last_name = ?, email = ?, phone = ?, address = ?, notes = ?, status = ?, updated_at = NOW() WHERE id = ? AND user_id = ?',
-        [sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhone, sanitizedAddress, sanitizedNotes, status, id, userId]
+        [sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhone, fullAddress, sanitizedNotes, status, id, userId]
       );
       
       // Get updated customer
@@ -1430,8 +1470,9 @@ app.delete('/api/customers/:id', authenticateToken, async (req, res) => {
         });
       }
       
+      // Soft delete by setting status to 'archived' instead of hard delete
       await connection.query(
-        'DELETE FROM customers WHERE id = ? AND user_id = ?',
+        'UPDATE customers SET status = "archived", updated_at = NOW() WHERE id = ? AND user_id = ?',
         [id, userId]
       );
       
@@ -3291,7 +3332,7 @@ app.post('/api/territories/:id/pricing', async (req, res) => {
 // Invoices endpoints
 app.get('/api/invoices', async (req, res) => {
   try {
-    const { userId, search = '', status = '', page = 1, limit = 10, sortBy = 'created_at', sortOrder = 'DESC' } = req.query;
+    const { userId, search = '', status = '', page = 1, limit = 10, sortBy = 'created_at', sortOrder = 'DESC', customerId } = req.query;
     
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
@@ -3314,6 +3355,12 @@ app.get('/api/invoices', async (req, res) => {
       if (status) {
         whereClause += ' AND i.status = ?';
         params.push(status);
+      }
+      
+      // Handle customer filtering
+      if (customerId) {
+        whereClause += ' AND i.customer_id = ?';
+        params.push(customerId);
       }
       
       // Get invoices with customer info
@@ -3466,9 +3513,11 @@ app.put('/api/invoices/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { 
-      userId, status, subtotal, taxAmount, discountAmount, 
+      userId, status, amount, taxAmount, 
       totalAmount, dueDate, notes 
     } = req.body;
+    
+    console.log('Invoice update request:', { id, userId, status, amount, taxAmount, totalAmount });
     
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
@@ -3477,21 +3526,29 @@ app.put('/api/invoices/:id', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
+      // Convert string values to numbers for decimal fields
+      const amountValue = parseFloat(amount) || 0;
+      const taxAmountValue = parseFloat(taxAmount) || 0;
+      const totalAmountValue = parseFloat(totalAmount) || 0;
+      
+      console.log('Converted values:', { amountValue, taxAmountValue, totalAmountValue });
+      
       const [result] = await connection.query(`
         UPDATE invoices SET
           status = ?,
-          subtotal = ?,
+          amount = ?,
           tax_amount = ?,
-          discount_amount = ?,
           total_amount = ?,
           due_date = ?,
           notes = ?,
           updated_at = NOW()
         WHERE id = ? AND user_id = ?
       `, [
-        status, subtotal || 0, taxAmount || 0, discountAmount || 0,
-        totalAmount, dueDate || null, notes || null, id, userId
+        status, amountValue, taxAmountValue,
+        totalAmountValue, dueDate || null, notes || null, id, userId
       ]);
+      
+      console.log('Update result:', result);
       
       if (result.affectedRows === 0) {
         return res.status(404).json({ error: 'Invoice not found' });
@@ -3509,6 +3566,7 @@ app.put('/api/invoices/:id', async (req, res) => {
         WHERE i.id = ?
       `, [id]);
       
+      console.log('Updated invoice:', invoices[0]);
       res.json(invoices[0]);
       
     } finally {
@@ -3516,6 +3574,8 @@ app.put('/api/invoices/:id', async (req, res) => {
     }
   } catch (error) {
     console.error('Update invoice error:', error);
+    console.error('Request body:', req.body);
+    console.error('Invoice ID:', id);
     res.status(500).json({ error: 'Failed to update invoice' });
   }
 });
@@ -6514,6 +6574,50 @@ app.post('/api/public/business/:businessSlug/quote', async (req, res) => {
     res.status(500).json({ error: 'Failed to submit quote request' });
   }
 });
+
+// Simple invoice status update (temporary workaround)
+app.put('/api/invoices/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId, status } = req.body;
+    
+    console.log('Simple invoice status update:', { id, userId, status });
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    const connection = await pool.getConnection();
+    
+    try {
+      // Simple status update only
+      const [result] = await connection.query(`
+        UPDATE invoices SET
+          status = ?,
+          updated_at = NOW()
+        WHERE id = ? AND user_id = ?
+      `, [status, id, userId]);
+      
+      console.log('Simple update result:', result);
+      
+      if (result.affectedRows === 0) {
+        return res.status(404).json({ error: 'Invoice not found' });
+      }
+      
+      res.json({ 
+        message: 'Invoice status updated successfully',
+        invoiceId: id,
+        status: status
+      });
+      
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Simple invoice status update error:', error);
+    res.status(500).json({ error: 'Failed to update invoice status' });
+  }
+});
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -6530,6 +6634,7 @@ app.listen(PORT, () => {
   console.log(`ZenBooker API server running on port ${PORT}`);
   console.log(`Health check: http://127.0.0.1:${PORT}/api/health`);
 });
+
 
 
 

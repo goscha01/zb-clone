@@ -6,22 +6,27 @@ import MobileHeader from "../components/mobile-header"
 import CustomerModal from "../components/customer-modal"
 import ExportCustomersModal from "../components/export-customers-modal"
 import ImportCustomersModal from "../components/import-customers-modal"
-import { Search, User, Plus, AlertCircle, Loader2, Trash2 } from "lucide-react"
+import { Search, User, Plus, AlertCircle, Loader2, Trash2, Eye } from "lucide-react"
 import { customersAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
+import { useNavigate } from "react-router-dom"
 
 const ZenbookerCustomers = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [matchBookings, setMatchBookings] = useState(true)
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false)
   const [isExportModalOpen, setIsExportModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [customerToDelete, setCustomerToDelete] = useState(null)
   
   // API State
   const [customers, setCustomers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [successMessage, setSuccessMessage] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
   const [deleteLoading, setDeleteLoading] = useState(null)
 
@@ -41,7 +46,7 @@ const ZenbookerCustomers = () => {
       setLoading(true)
       setError("")
       console.log('Fetching customers for user:', user.id)
-      const response = await customersAPI.getAll()
+      const response = await customersAPI.getAll(user.id)
       console.log('Customers response:', response)
       setCustomers(response.customers || response)
     } catch (error) {
@@ -69,11 +74,16 @@ const ZenbookerCustomers = () => {
     
     try {
       setError("")
+      console.log('Saving customer:', customerData)
       const response = await customersAPI.create(customerData)
+      console.log('Customer saved successfully:', response)
       
       // Add the new customer to the list
       setCustomers(prev => [response.customer || response, ...prev])
       setIsCustomerModalOpen(false)
+      
+      // Show success message (optional)
+      console.log('Customer created successfully')
     } catch (error) {
       console.error('Error creating customer:', error)
       
@@ -94,257 +104,246 @@ const ZenbookerCustomers = () => {
       } else {
         setError("An unexpected error occurred.")
       }
+      
+      // Don't close the modal if there's an error
+      console.log('Customer creation failed, keeping modal open')
     }
   }
 
-  const handleDeleteCustomer = async (customerId) => {
-    if (!window.confirm("Are you sure you want to delete this customer?")) return
+  const handleDeleteCustomer = (customer) => {
+    setCustomerToDelete(customer)
+    setShowDeleteConfirm(true)
+  }
+
+  const confirmDeleteCustomer = async () => {
+    if (!customerToDelete) return
     
     try {
-      setDeleteLoading(customerId)
+      setDeleteLoading(customerToDelete.id)
       setError("")
+      setSuccessMessage("")
       
-      // Note: We need to add delete method to customersAPI
-      // await customersAPI.delete(customerId)
+      await customersAPI.delete(customerToDelete.id, user.id)
       
-      // For now, just remove from local state
-      setCustomers(prev => prev.filter(customer => customer.id !== customerId))
+      // Remove from local state
+      setCustomers(prev => prev.filter(customer => customer.id !== customerToDelete.id))
+      setShowDeleteConfirm(false)
+      setCustomerToDelete(null)
+      
+      // Show success message
+      setSuccessMessage(`Customer "${customerToDelete.first_name} ${customerToDelete.last_name}" deleted successfully.`)
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(""), 3000)
     } catch (error) {
       console.error('Error deleting customer:', error)
-      setError("Failed to delete customer. Please try again.")
+      
+      // Handle specific error messages from server
+      if (error.response) {
+        const { status, data } = error.response
+        switch (status) {
+          case 400:
+            setError(data?.error || "Cannot delete customer with associated jobs or estimates. Please delete the associated records first.")
+            break
+          case 404:
+            setError("Customer not found.")
+            break
+          case 500:
+            setError("Server error. Please try again later.")
+            break
+          default:
+            setError(data?.error || "Failed to delete customer. Please try again.")
+        }
+      } else {
+        setError("Network error. Please check your connection and try again.")
+      }
     } finally {
       setDeleteLoading(null)
     }
+  }
+
+  const handleViewCustomer = (customer) => {
+    // Navigate to customer details page
+    navigate(`/customer/${customer.id}`)
   }
 
   const handleRetry = () => {
     fetchCustomers()
   }
 
-  const filteredCustomers = customers.filter(customer =>
-    customer.first_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.last_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    customer.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredCustomers = customers.filter(customer => {
+    if (!searchTerm) return true
+    const searchLower = searchTerm.toLowerCase()
+    return (
+      customer.first_name?.toLowerCase().includes(searchLower) ||
+      customer.last_name?.toLowerCase().includes(searchLower) ||
+      customer.email?.toLowerCase().includes(searchLower) ||
+      customer.phone?.includes(searchTerm)
+    )
+  })
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Main Sidebar */}
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activePage="customers" />
-
-      {/* Main Content */}
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Header */}
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
-
-        {/* Desktop Header */}
-        <div className="hidden lg:flex bg-white border-b border-gray-200 px-6 py-4 items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <h1 className="text-2xl font-semibold text-gray-900">Customers</h1>
-            <span className="text-sm text-gray-500">{customers.length} customers</span>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search customers..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none w-64"
-              />
-            </div>
-            <button 
-              onClick={handleExport}
-              className="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium"
-            >
-              Export
-            </button>
-            <button 
-              onClick={handleImport}
-              className="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium"
-            >
-              Import
-            </button>
-            <button 
-              onClick={handleAddCustomer}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Customer</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile Header Content */}
-        <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-4">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">Customers</h1>
-              <span className="text-sm text-gray-500">{customers.length} customers</span>
-            </div>
-            <button 
-              onClick={handleAddCustomer}
-              className="bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center space-x-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Add Customer</span>
-            </button>
-          </div>
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search customers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-            />
-          </div>
-          <div className="flex space-x-4">
-            <button 
-              onClick={handleExport}
-              className="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium"
-            >
-              Export
-            </button>
-            <button 
-              onClick={handleImport}
-              className="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium"
-            >
-              Import
-            </button>
-          </div>
-        </div>
-
-        {/* Content Area */}
+        
         <div className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto p-6">
-            {/* Error Display */}
-            {error && (
-              <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <div className="flex items-center space-x-2">
-                  <AlertCircle className="w-5 h-5 text-red-500" />
-                  <p className="text-red-700">{error}</p>
-                </div>
-                <button
-                  onClick={handleRetry}
-                  className="mt-2 text-red-600 hover:text-red-700 text-sm font-medium"
-                >
-                  Try again
-                </button>
-              </div>
-            )}
-
-            {/* Match Bookings Toggle */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+          <div className="px-4 sm:px-6 lg:px-8 py-8">
+            {/* Header */}
+            <div className="mb-8">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-medium text-gray-900">Match Bookings</h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    When enabled, Zenbooker will try to match new bookings to existing customers by email. New customers
-                    will be automatically added here.
+                  <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Manage your customer database and track relationships
                   </p>
                 </div>
-                <div className="flex items-center">
+                <div className="flex items-center space-x-3">
                   <button
-                    onClick={() => setMatchBookings(!matchBookings)}
-                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                      matchBookings ? "bg-blue-600" : "bg-gray-200"
-                    }`}
+                    onClick={handleImport}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
-                    <span
-                      className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                        matchBookings ? "translate-x-5" : "translate-x-0"
-                      }`}
-                    />
+                    Import
+                  </button>
+                  <button
+                    onClick={handleExport}
+                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    Export
+                  </button>
+                  <button
+                    onClick={handleAddCustomer}
+                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Customer
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Customers List or Empty State */}
-            {loading ? (
-              <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
-                <p className="text-gray-600">Loading customers...</p>
+            {/* Search and Filters */}
+            <div className="mb-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search customers by name, email, or phone..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                />
               </div>
-            ) : customers.length === 0 ? (
-              <div className="bg-white rounded-lg border border-gray-200 flex-1 flex items-center justify-center p-12">
-                <div className="text-center max-w-lg">
-                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                    <User className="w-8 h-8 text-gray-400" />
+            </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <AlertCircle className="h-5 w-5 text-red-400" />
                   </div>
-                  <h3 className="text-2xl font-semibold text-gray-900 mb-4">Your Customers</h3>
-                  <p className="text-gray-600 mb-8 leading-relaxed">
-                    Keep track of all your customers right here. Add their information, see past appointments, and book
-                    new appointments for them. When a new customer books an appointment, they are automatically added
-                    here.
-                  </p>
-                  <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4">
-                    <button 
-                      onClick={handleAddCustomer}
-                      className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors"
-                    >
-                      Add Customer
-                    </button>
-                    <button 
-                      onClick={handleImport}
-                      className="text-gray-600 hover:text-gray-900 px-6 py-3 rounded-lg border border-gray-300 font-medium"
-                    >
-                      Import Customers
-                    </button>
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-red-800">Error</h3>
+                    <p className="mt-1 text-sm text-red-700">{error}</p>
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="bg-white rounded-lg border border-gray-200">
-                {filteredCustomers.length === 0 ? (
-                  <div className="p-8 text-center">
-                    <Search className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">No customers found</h3>
-                    <p className="text-gray-500">Try adjusting your search terms</p>
+            )}
+
+            {/* Success Message */}
+            {successMessage && (
+              <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <div className="h-5 w-5 text-green-400">✓</div>
                   </div>
-                ) : (
-                  filteredCustomers.map((customer, index) => (
-                    <div
-                      key={customer.id}
-                      className={`flex items-center justify-between p-4 ${
-                        index !== filteredCustomers.length - 1 ? "border-b border-gray-200" : ""
-                      }`}
+                  <div className="ml-3">
+                    <h3 className="text-sm font-medium text-green-800">Success</h3>
+                    <p className="mt-1 text-sm text-green-700">{successMessage}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Customers List */}
+            {loading ? (
+              <div className="flex justify-center items-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+              </div>
+            ) : filteredCustomers.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+                <User className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No customers found</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  {searchTerm ? "Try adjusting your search terms." : "Get started by adding your first customer."}
+                </p>
+                {!searchTerm && (
+                  <div className="mt-6">
+                    <button
+                      onClick={handleAddCustomer}
+                      className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                     >
-                      <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <span className="text-blue-600 font-medium text-sm">
-                            {customer.first_name?.[0]}{customer.last_name?.[0]}
-                          </span>
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-gray-900">
-                            {customer.first_name} {customer.last_name}
-                          </h3>
-                          <p className="text-sm text-gray-500">{customer.email}</p>
-                          {customer.phone && (
-                            <p className="text-sm text-gray-500">{customer.phone}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleDeleteCustomer(customer.id)}
-                          disabled={deleteLoading === customer.id}
-                          className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50"
-                        >
-                          {deleteLoading === customer.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  ))
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add Customer
+                    </button>
+                  </div>
                 )}
+              </div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                <ul className="divide-y divide-gray-200">
+                  {filteredCustomers.map((customer) => (
+                    <li key={customer.id}>
+                      <div className="px-4 py-4 sm:px-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-4">
+                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                              <span className="text-blue-600 font-medium text-sm">
+                                {customer.first_name?.[0]}{customer.last_name?.[0]}
+                              </span>
+                            </div>
+                            <div>
+                              <button
+                                onClick={() => handleViewCustomer(customer)}
+                                className="font-medium text-gray-900 hover:text-primary-600 cursor-pointer"
+                              >
+                                {customer.first_name} {customer.last_name}
+                              </button>
+                              <p className="text-sm text-gray-500">{customer.email}</p>
+                              {customer.phone && (
+                                <p className="text-sm text-gray-500">{customer.phone}</p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <button
+                              onClick={() => handleViewCustomer(customer)}
+                              className="text-gray-400 hover:text-gray-600 p-1"
+                              title="View customer details"
+                            >
+                              <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCustomer(customer)}
+                              disabled={deleteLoading === customer.id}
+                              className="text-red-600 hover:text-red-700 p-1 disabled:opacity-50"
+                              title="Delete customer"
+                            >
+                              {deleteLoading === customer.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
@@ -357,18 +356,56 @@ const ZenbookerCustomers = () => {
         onClose={() => setIsCustomerModalOpen(false)}
         onSave={handleCustomerSave}
       />
+
       <ExportCustomersModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}
       />
-                  <ImportCustomersModal 
-              isOpen={isImportModalOpen} 
-              onClose={() => setIsImportModalOpen(false)}
-              onImportSuccess={(newCustomers) => {
-                setCustomers(prev => [...newCustomers, ...prev])
-                setIsImportModalOpen(false)
-              }}
-            />
+
+      <ImportCustomersModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={fetchCustomers}
+      />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && customerToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-center mb-4">
+              <AlertCircle className="h-6 w-6 text-red-600 mr-3" />
+              <h3 className="text-lg font-medium text-gray-900">Delete Customer</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">
+              Are you sure you want to delete <strong>{customerToDelete.first_name} {customerToDelete.last_name}</strong>? 
+              This action cannot be undone.
+              {customerToDelete.jobs_count > 0 || customerToDelete.estimates_count > 0 ? (
+                <span className="block mt-2 text-red-600">
+                  ⚠️ This customer has associated jobs or estimates that must be deleted first.
+                </span>
+              ) : null}
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false)
+                  setCustomerToDelete(null)
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteCustomer}
+                disabled={deleteLoading === customerToDelete.id}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+              >
+                {deleteLoading === customerToDelete.id ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

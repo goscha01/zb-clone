@@ -83,7 +83,7 @@ const Analytics = () => {
     startDate.setDate(startDate.getDate() - parseInt(dateRange))
     
     const jobs = await jobsAPI.getAll(user.id, "", "", 1, 1000)
-    const invoices = await invoicesAPI.getAll(user.id, "", "", 1, 1000)
+    const invoices = await invoicesAPI.getAll(user.id, { page: 1, limit: 1000 })
     
     const filteredJobs = jobs.jobs?.filter(job => {
       const jobDate = new Date(job.scheduled_date)
@@ -122,7 +122,7 @@ const Analytics = () => {
     const startDate = new Date()
     startDate.setDate(startDate.getDate() - parseInt(dateRange))
     
-    const invoices = await invoicesAPI.getAll(user.id, "", "", 1, 1000)
+    const invoices = await invoicesAPI.getAll(user.id, { page: 1, limit: 1000 })
     const filteredInvoices = invoices.invoices?.filter(invoice => {
       const invoiceDate = new Date(invoice.created_at)
       return invoiceDate >= startDate && invoiceDate <= endDate

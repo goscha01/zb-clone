@@ -12,7 +12,11 @@ import ZenbookerJobs from "./pages/jobs"
 import ZenbookerEstimates from "./pages/zenbooker-estimates"
 import ZenbookerRecurring from "./pages/zenbooker-recurring"
 import ZenbookerPayments from "./pages/zenbooker-payments"
+import ZenbookerInvoices from "./pages/zenbooker-invoices"
 import ZenbookerCustomers from "./pages/zenbooker-customers"
+import CustomerDetails from "./pages/customer-details"
+import InvoiceDetails from "./pages/invoice-details"
+import InvoiceEdit from "./pages/invoice-edit"
 import ZenbookerTeam from "./pages/zenbooker-team"
 import ZenbookerServices from "./pages/zenbooker-services"
 import ZenbookerCoupons from "./pages/zenbooker-coupons"
@@ -87,7 +91,11 @@ root.render(
       <Route path="recurring" element={<ZenbookerRecurring />} />
       <Route path="recurring/create" element={<CreateRecurringBooking />} />
       <Route path="payments" element={<ZenbookerPayments />} />
+      <Route path="invoices" element={<ProtectedRoute><ZenbookerInvoices /></ProtectedRoute>} />
       <Route path="customers" element={<ZenbookerCustomers />} />
+      <Route path="customer/:customerId" element={<ProtectedRoute><CustomerDetails /></ProtectedRoute>} />
+      <Route path="invoices/:invoiceId" element={<ProtectedRoute><InvoiceDetails /></ProtectedRoute>} />
+      <Route path="invoices/:invoiceId/edit" element={<ProtectedRoute><InvoiceEdit /></ProtectedRoute>} />
       <Route path="team" element={<ZenbookerTeam />} />
       <Route path="team/:memberId" element={<TeamMemberDetails />} />
       <Route path="services" element={<ZenbookerServices />} />

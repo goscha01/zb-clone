@@ -155,7 +155,7 @@ const ZenbookerDashboard = () => {
       
       // Fetch invoices data
       console.log('💰 Fetching invoices...')
-      const invoicesResponse = await retryAPI(() => invoicesAPI.getAll(user.id, "", "", 1, 1000))
+      const invoicesResponse = await retryAPI(() => invoicesAPI.getAll(user.id, { page: 1, limit: 1000 }))
       const invoices = invoicesResponse.invoices || invoicesResponse || []
       console.log('✅ Invoices loaded:', invoices.length)
       

@@ -151,9 +151,9 @@ export const servicesAPI = {
 
 // Customers API functions
 export const customersAPI = {
-  getAll: async (params = {}) => {
+  getAll: async (userId, params = {}) => {
     try {
-      const queryParams = new URLSearchParams();
+      const queryParams = new URLSearchParams({ userId });
       
       if (params.search) queryParams.append('search', params.search);
       if (params.status) queryParams.append('status', params.status);
@@ -162,7 +162,7 @@ export const customersAPI = {
       if (params.sortBy) queryParams.append('sortBy', params.sortBy);
       if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
       
-      console.log('Making customers API call with params:', params);
+      console.log('Making customers API call with params:', { userId, ...params });
       const response = await api.get(`/customers?${queryParams}`);
       console.log('Customers API response:', response);
       
@@ -200,9 +200,9 @@ export const customersAPI = {
     }
   },
 
-  delete: async (id) => {
+  delete: async (id, userId) => {
     try {
-      const response = await api.delete(`/customers/${id}`);
+      const response = await api.delete(`/customers/${id}?userId=${userId}`);
       return response.data;
     } catch (error) {
       throw error;
@@ -287,18 +287,28 @@ export const estimatesAPI = {
 
 // Invoices API functions
 export const invoicesAPI = {
-  getAll: async (userId) => {
+  getAll: async (userId, params = {}) => {
     try {
-      const response = await api.get(`/invoices?userId=${userId}`);
+      const queryParams = new URLSearchParams({ userId });
+      
+      if (params.search) queryParams.append('search', params.search);
+      if (params.status) queryParams.append('status', params.status);
+      if (params.page) queryParams.append('page', params.page);
+      if (params.limit) queryParams.append('limit', params.limit);
+      if (params.sortBy) queryParams.append('sortBy', params.sortBy);
+      if (params.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+      if (params.customerId) queryParams.append('customerId', params.customerId);
+      
+      const response = await api.get(`/invoices?${queryParams}`);
       return response.data;
     } catch (error) {
       throw error;
     }
   },
 
-  getById: async (id) => {
+  getById: async (id, userId) => {
     try {
-      const response = await api.get(`/invoices/${id}`);
+      const response = await api.get(`/invoices/${id}?userId=${userId}`);
       return response.data;
     } catch (error) {
       throw error;
@@ -314,18 +324,27 @@ export const invoicesAPI = {
     }
   },
 
-  update: async (id, invoiceData) => {
+  update: async (id, invoiceData, userId) => {
     try {
-      const response = await api.put(`/invoices/${id}`, invoiceData);
+      const response = await api.put(`/invoices/${id}`, { ...invoiceData, userId });
       return response.data;
     } catch (error) {
       throw error;
     }
   },
 
-  delete: async (id) => {
+  updateStatus: async (id, status, userId) => {
     try {
-      const response = await api.delete(`/invoices/${id}`);
+      const response = await api.put(`/invoices/${id}/status`, { userId, status });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  delete: async (id, userId) => {
+    try {
+      const response = await api.delete(`/invoices/${id}?userId=${userId}`);
       return response.data;
     } catch (error) {
       throw error;
@@ -407,7 +426,7 @@ export const publicBookingAPI = {
 
 // Jobs API functions
 export const jobsAPI = {
-  getAll: async (userId, status, search, page = 1, limit = 20, dateFilter, dateRange, sortBy, sortOrder, teamMember, invoiceStatus) => {
+  getAll: async (userId, status, search, page = 1, limit = 20, dateFilter, dateRange, sortBy, sortOrder, teamMember, invoiceStatus, customerId) => {
     try {
       const params = new URLSearchParams({ userId });
       if (status) params.append('status', status);
@@ -420,6 +439,7 @@ export const jobsAPI = {
       if (sortOrder) params.append('sortOrder', sortOrder);
       if (teamMember) params.append('teamMember', teamMember);
       if (invoiceStatus) params.append('invoiceStatus', invoiceStatus);
+      if (customerId) params.append('customerId', customerId);
       const response = await api.get(`/jobs?${params}`);
       return response.data;
     } catch (error) {
