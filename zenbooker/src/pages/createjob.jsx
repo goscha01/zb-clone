@@ -100,7 +100,7 @@ export default function CreateJobPage() {
     
     try {
       const [customersData, servicesData, teamData] = await Promise.all([
-        customersAPI.getAll({ userId: user.id }),
+        customersAPI.getAll(user.id),
         servicesAPI.getAll(user.id),
         teamAPI.getAll(user.id)
       ]);
@@ -187,10 +187,24 @@ export default function CreateJobPage() {
     }
   };
 
-  const handleCustomerSave = (customerData) => {
-    setCustomers(prev => [...prev, customerData]);
-    handleCustomerSelect(customerData);
-    setIsCustomerModalOpen(false);
+  const handleCustomerSave = async (customerData) => {
+    if (!user?.id) return
+    
+    try {
+      console.log("Saving customer:", customerData)
+      const response = await customersAPI.create(customerData)
+      console.log('Customer saved successfully:', response)
+      
+      const newCustomer = response.customer || response
+      setCustomers(prev => [...prev, newCustomer]);
+      handleCustomerSelect(newCustomer);
+      
+      // Return the customer data for navigation (though in createjob we don't navigate)
+      return newCustomer
+    } catch (error) {
+      console.error('Error creating customer:', error)
+      throw error // Re-throw to prevent modal from closing
+    }
   };
 
   return (

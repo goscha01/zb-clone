@@ -115,6 +115,10 @@ const ZenbookerInvoices = () => {
     navigate(`/invoices/${invoice.id}`)
   }
 
+  const handleViewCustomer = (customerId) => {
+    navigate(`/customer/${customerId}`)
+  }
+
   const handleSaveInvoice = () => {
     fetchInvoices()
     setShowCreateModal(false)
@@ -464,7 +468,12 @@ const ZenbookerInvoices = () => {
                               </div>
                               <div className="mt-1 flex items-center text-sm text-gray-500">
                                 <User className="w-4 h-4 mr-1" />
-                                <span>{invoice.customer_first_name} {invoice.customer_last_name}</span>
+                                <button
+                                  onClick={() => handleViewCustomer(invoice.customer_id)}
+                                  className="hover:text-primary-600 hover:underline cursor-pointer transition-colors duration-200"
+                                >
+                                  {invoice.customer_first_name} {invoice.customer_last_name}
+                                </button>
                                 <span className="mx-2">•</span>
                                 <DollarSign className="w-4 h-4 mr-1" />
                                 <span>{formatCurrency(invoice.total_amount)}</span>

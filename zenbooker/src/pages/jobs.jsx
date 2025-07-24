@@ -150,6 +150,10 @@ const ZenbookerJobs = () => {
     setIsJobModalOpen(true)
   }
 
+  const handleViewCustomer = (customerId) => {
+    navigate(`/customer/${customerId}`)
+  }
+
   const handleFilterChange = (newFilters) => {
     setFilters(prev => ({ ...prev, ...newFilters }))
   }
@@ -327,9 +331,12 @@ const ZenbookerJobs = () => {
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                           <div className="flex items-center space-x-2 text-sm text-gray-600">
                             <Users className="w-4 h-4" />
-                            <span>
+                            <button
+                              onClick={() => handleViewCustomer(job.customer_id)}
+                              className="hover:text-primary-600 hover:underline cursor-pointer transition-colors duration-200"
+                            >
                               {job.customer_first_name} {job.customer_last_name}
-                            </span>
+                            </button>
                           </div>
                           
                           <div className="flex items-center space-x-2 text-sm text-gray-600">

@@ -1250,7 +1250,7 @@ app.get('/api/customers', async (req, res) => {
 app.post('/api/customers', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { firstName, lastName, email, phone, address, apartment, notes, status = 'active' } = req.body;
+    const { firstName, lastName, email, phone, address, apartment, notes, city, state, zipCode, status = 'active' } = req.body;
     
     // Input validation
     if (!validateName(firstName)) {
@@ -1286,21 +1286,17 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      // Check if customer with same email already exists for this user (excluding archived)
-      if (sanitizedEmail) {
-        const [existingCustomers] = await connection.query(
-          'SELECT id FROM customers WHERE user_id = ? AND email = ? AND status != "archived"',
-          [userId, sanitizedEmail]
-        );
-        
-        if (existingCustomers.length > 0) {
-          return res.status(400).json({ error: 'A customer with this email already exists' });
-        }
-      }
+      // Allow duplicate emails and phone numbers for multiple customers
+      // (Removed duplicate email check to allow same email for multiple customers)
+      
+      // Sanitize location fields
+      const sanitizedCity = city ? sanitizeInput(city) : null;
+      const sanitizedState = state ? sanitizeInput(state) : null;
+      const sanitizedZipCode = zipCode ? sanitizeInput(zipCode) : null;
       
       const [result] = await connection.query(
-        'INSERT INTO customers (user_id, first_name, last_name, email, phone, address, notes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-        [userId, sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhone, fullAddress, sanitizedNotes, status]
+        'INSERT INTO customers (user_id, first_name, last_name, email, phone, address, city, state, zip_code, notes, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
+        [userId, sanitizedFirstName, sanitizedLastName, sanitizedEmail, sanitizedPhone, fullAddress, sanitizedCity, sanitizedState, sanitizedZipCode, sanitizedNotes, status]
       );
       
       // Get the created customer

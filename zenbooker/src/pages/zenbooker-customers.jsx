@@ -6,7 +6,7 @@ import MobileHeader from "../components/mobile-header"
 import CustomerModal from "../components/customer-modal"
 import ExportCustomersModal from "../components/export-customers-modal"
 import ImportCustomersModal from "../components/import-customers-modal"
-import { Search, User, Plus, AlertCircle, Loader2, Trash2, Eye } from "lucide-react"
+import { Search, User, Plus, AlertCircle, Loader2, Trash2, Eye, X, Filter } from "lucide-react"
 import { customersAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
 import { useNavigate } from "react-router-dom"
@@ -29,11 +29,27 @@ const ZenbookerCustomers = () => {
   const [successMessage, setSuccessMessage] = useState("")
   const [searchTerm, setSearchTerm] = useState("")
   const [deleteLoading, setDeleteLoading] = useState(null)
+  const [selectedCity, setSelectedCity] = useState("")
+  const [showCityFilter, setShowCityFilter] = useState(false)
 
   // Fetch customers on component mount
   useEffect(() => {
     fetchCustomers()
   }, [])
+
+  // Close city filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (showCityFilter && !event.target.closest('.city-filter-container')) {
+        setShowCityFilter(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showCityFilter])
 
   const fetchCustomers = async () => {
     if (!user?.id) {
@@ -80,10 +96,12 @@ const ZenbookerCustomers = () => {
       
       // Add the new customer to the list
       setCustomers(prev => [response.customer || response, ...prev])
-      setIsCustomerModalOpen(false)
       
       // Show success message (optional)
       console.log('Customer created successfully')
+      
+      // Return the customer data for navigation
+      return response.customer || response
     } catch (error) {
       console.error('Error creating customer:', error)
       
@@ -107,6 +125,7 @@ const ZenbookerCustomers = () => {
       
       // Don't close the modal if there's an error
       console.log('Customer creation failed, keeping modal open')
+      throw error // Re-throw to prevent modal from closing
     }
   }
 
@@ -171,16 +190,39 @@ const ZenbookerCustomers = () => {
     fetchCustomers()
   }
 
+  // Get unique cities for filtering
+  const uniqueCities = [...new Set(customers.map(customer => customer.city).filter(Boolean))].sort()
+
   const filteredCustomers = customers.filter(customer => {
-    if (!searchTerm) return true
-    const searchLower = searchTerm.toLowerCase()
-    return (
-      customer.first_name?.toLowerCase().includes(searchLower) ||
-      customer.last_name?.toLowerCase().includes(searchLower) ||
-      customer.email?.toLowerCase().includes(searchLower) ||
-      customer.phone?.includes(searchTerm)
-    )
+    // Search filter
+    if (searchTerm) {
+      const searchLower = searchTerm.toLowerCase()
+      const matchesSearch = (
+        customer.first_name?.toLowerCase().includes(searchLower) ||
+        customer.last_name?.toLowerCase().includes(searchLower) ||
+        customer.email?.toLowerCase().includes(searchLower) ||
+        customer.phone?.includes(searchTerm) ||
+        customer.city?.toLowerCase().includes(searchLower) ||
+        customer.state?.toLowerCase().includes(searchLower)
+      )
+      if (!matchesSearch) return false
+    }
+    
+    // City filter
+    if (selectedCity && customer.city !== selectedCity) {
+      return false
+    }
+    
+    return true
   })
+
+  const clearSearch = () => {
+    setSearchTerm("")
+  }
+
+  const clearCityFilter = () => {
+    setSelectedCity("")
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -225,16 +267,92 @@ const ZenbookerCustomers = () => {
             </div>
 
             {/* Search and Filters */}
-            <div className="mb-6">
+            <div className="mb-6 space-y-4">
+              {/* Search Bar */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
                 <input
                   type="text"
-                  placeholder="Search customers by name, email, or phone..."
+                  placeholder="Search customers by name, email, phone, or location..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
+                {searchTerm && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filters and Results Count */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  {/* City Filter */}
+                  <div className="relative city-filter-container">
+                    <button
+                      onClick={() => setShowCityFilter(!showCityFilter)}
+                      className={`inline-flex items-center px-3 py-1.5 border rounded-md text-sm font-medium ${
+                        selectedCity 
+                          ? 'border-primary-500 text-primary-700 bg-primary-50' 
+                          : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
+                      }`}
+                    >
+                      <Filter className="w-4 h-4 mr-1" />
+                      {selectedCity || 'Filter by City'}
+                    </button>
+                    
+                    {showCityFilter && (
+                      <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-300 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
+                        <div className="p-2">
+                          <button
+                            onClick={() => {
+                              setSelectedCity("")
+                              setShowCityFilter(false)
+                            }}
+                            className="w-full text-left px-2 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
+                          >
+                            All Cities
+                          </button>
+                          {uniqueCities.map(city => (
+                            <button
+                              key={city}
+                              onClick={() => {
+                                setSelectedCity(city)
+                                setShowCityFilter(false)
+                              }}
+                              className="w-full text-left px-2 py-1 text-sm text-gray-700 hover:bg-gray-100 rounded"
+                            >
+                              {city}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Clear City Filter */}
+                  {selectedCity && (
+                    <button
+                      onClick={clearCityFilter}
+                      className="inline-flex items-center px-2 py-1 text-sm text-gray-500 hover:text-gray-700"
+                    >
+                      <X className="w-3 h-3 mr-1" />
+                      Clear city filter
+                    </button>
+                  )}
+                </div>
+
+                {/* Results Count */}
+                <div className="text-sm text-gray-500">
+                  {filteredCustomers.length} of {customers.length} customers
+                  {(searchTerm || selectedCity) && (
+                    <span className="text-gray-400"> (filtered)</span>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -278,9 +396,12 @@ const ZenbookerCustomers = () => {
                 <User className="mx-auto h-12 w-12 text-gray-400" />
                 <h3 className="mt-2 text-sm font-medium text-gray-900">No customers found</h3>
                 <p className="mt-1 text-sm text-gray-500">
-                  {searchTerm ? "Try adjusting your search terms." : "Get started by adding your first customer."}
+                  {(searchTerm || selectedCity) 
+                    ? "Try adjusting your search terms or filters." 
+                    : "Get started by adding your first customer."
+                  }
                 </p>
-                {!searchTerm && (
+                {!searchTerm && !selectedCity && (
                   <div className="mt-6">
                     <button
                       onClick={handleAddCustomer}
@@ -289,6 +410,28 @@ const ZenbookerCustomers = () => {
                       <Plus className="w-4 h-4 mr-2" />
                       Add Customer
                     </button>
+                  </div>
+                )}
+                {(searchTerm || selectedCity) && (
+                  <div className="mt-6 space-x-3">
+                    {searchTerm && (
+                      <button
+                        onClick={clearSearch}
+                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        Clear Search
+                      </button>
+                    )}
+                    {selectedCity && (
+                      <button
+                        onClick={clearCityFilter}
+                        className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                      >
+                        <X className="w-4 h-4 mr-1" />
+                        Clear City Filter
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -308,13 +451,18 @@ const ZenbookerCustomers = () => {
                             <div>
                               <button
                                 onClick={() => handleViewCustomer(customer)}
-                                className="font-medium text-gray-900 hover:text-primary-600 cursor-pointer"
+                                className="font-medium text-gray-900 hover:text-primary-600 hover:underline cursor-pointer transition-colors duration-200"
                               >
                                 {customer.first_name} {customer.last_name}
                               </button>
                               <p className="text-sm text-gray-500">{customer.email}</p>
                               {customer.phone && (
                                 <p className="text-sm text-gray-500">{customer.phone}</p>
+                              )}
+                              {(customer.city || customer.state) && (
+                                <p className="text-sm text-gray-500">
+                                  {customer.city}{customer.city && customer.state ? ', ' : ''}{customer.state}
+                                </p>
                               )}
                             </div>
                           </div>

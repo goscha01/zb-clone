@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
 import { Plus, Search, Filter, FileText, Send, Check, X, Eye, Edit, Trash2, Calendar, DollarSign, User, AlertCircle, RefreshCw } from "lucide-react"
@@ -12,6 +13,7 @@ import EstimatePreviewModal from "../components/estimate-preview-modal"
 
 const ZenbookerEstimates = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [estimates, setEstimates] = useState([])
   const [customers, setCustomers] = useState([])
@@ -134,6 +136,10 @@ const ZenbookerEstimates = () => {
   const handleViewEstimate = (estimate) => {
     setSelectedEstimate(estimate)
     setShowPreviewModal(true)
+  }
+
+  const handleViewCustomer = (customerId) => {
+    navigate(`/customer/${customerId}`)
   }
 
   const handleSaveEstimate = () => {
@@ -435,7 +441,12 @@ const ZenbookerEstimates = () => {
                               </div>
                               <div className="mt-1 flex items-center text-sm text-gray-500">
                                 <User className="w-4 h-4 mr-1" />
-                                <span>{estimate.customer_first_name} {estimate.customer_last_name}</span>
+                                <button
+                                  onClick={() => handleViewCustomer(estimate.customer_id)}
+                                  className="hover:text-primary-600 hover:underline cursor-pointer transition-colors duration-200"
+                                >
+                                  {estimate.customer_first_name} {estimate.customer_last_name}
+                                </button>
                                 <span className="mx-2">•</span>
                                 <DollarSign className="w-4 h-4 mr-1" />
                                 <span>{formatCurrency(estimate.total_amount)}</span>

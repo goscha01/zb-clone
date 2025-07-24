@@ -1,22 +1,30 @@
 "use client"
 
 import { X, MapPin, Search } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { useNavigate } from "react-router-dom"
 
 const CustomerModal = ({ isOpen, onClose, onSave }) => {
+  const navigate = useNavigate()
+  const modalRef = useRef(null)
   const [customerData, setCustomerData] = useState({
     name: "",
     address: "",
     apartment: "",
     phone: "",
     email: "",
-    notes: ""
+    notes: "",
+    city: "",
+    state: "",
+    zipCode: ""
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [validationErrors, setValidationErrors] = useState({})
   const [addressSuggestions, setAddressSuggestions] = useState([])
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false)
+  const [isValidatingEmail, setIsValidatingEmail] = useState(false)
+  const [isValidatingPhone, setIsValidatingPhone] = useState(false)
 
   // Google Places API key
   const GOOGLE_API_KEY = "AIzaSyC_CrJWTsTHOTBd7TSzTuXOfutywZ2AyOQ"
@@ -29,52 +37,80 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
         apartment: "",
         phone: "",
         email: "",
-        notes: ""
+        notes: "",
+        city: "",
+        state: "",
+        zipCode: ""
       })
       setError("")
       setValidationErrors({})
       setAddressSuggestions([])
       setShowAddressSuggestions(false)
+      setIsValidatingEmail(false)
+      setIsValidatingPhone(false)
     }
   }, [isOpen])
 
-  const handleBackdropClick = (e) => {
-    // Only close if clicking the backdrop, not the modal content
-    if (e.target === e.currentTarget) {
-      e.preventDefault()
-      onClose()
-    }
-  }
+  // Removed backdrop click handler - modal should only close via buttons or successful save
 
-  const validateEmail = (email) => {
+  const validateEmail = async (email) => {
     if (!email) return true // Email is optional
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    return emailRegex.test(email)
+    const isValidFormat = emailRegex.test(email)
+    
+    if (!isValidFormat) return false
+    
+    // Additional validation: check for common disposable email domains
+    const disposableDomains = [
+      '10minutemail.com', 'tempmail.org', 'guerrillamail.com', 'mailinator.com',
+      'yopmail.com', 'throwaway.email', 'temp-mail.org', 'fakeinbox.com'
+    ]
+    
+    const domain = email.split('@')[1]?.toLowerCase()
+    if (disposableDomains.includes(domain)) {
+      return false
+    }
+    
+    return true
   }
 
   const validatePhone = (phone) => {
     if (!phone) return true // Phone is optional
-    // Remove all non-digit characters except + for international numbers
-    const cleaned = phone.replace(/[^\d+]/g, '')
-    // Basic validation - should have at least 10 digits
-    const digits = cleaned.replace(/[^\d]/g, '')
-    return digits.length >= 10
+    // Remove all formatting characters (spaces, dashes, parentheses)
+    const cleaned = phone.replace(/[\s\-\(\)]/g, '')
+    // Server validation: must start with + or digit 1-9, then 0-15 more digits
+    const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/
+    return phoneRegex.test(cleaned)
   }
 
-  const validateField = (field, value) => {
+  const validateField = async (field, value) => {
     const errors = { ...validationErrors }
     
     switch (field) {
       case 'email':
-        if (value && !validateEmail(value)) {
-          errors.email = 'Please enter a valid email address'
+        if (value) {
+          setIsValidatingEmail(true)
+          const isValid = await validateEmail(value)
+          if (!isValid) {
+            errors.email = 'Please enter a valid email address'
+          } else {
+            delete errors.email
+          }
+          setIsValidatingEmail(false)
         } else {
           delete errors.email
         }
         break
       case 'phone':
-        if (value && !validatePhone(value)) {
-          errors.phone = 'Please enter a valid phone number (at least 10 digits)'
+        if (value) {
+          setIsValidatingPhone(true)
+          const isValid = validatePhone(value)
+          if (!isValid) {
+            errors.phone = 'Please enter a valid phone number (must start with a digit 1-9)'
+          } else {
+            delete errors.phone
+          }
+          setIsValidatingPhone(false)
         } else {
           delete errors.phone
         }
@@ -108,17 +144,17 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     return phone
   }
 
-  const handlePhoneChange = (e) => {
+  const handlePhoneChange = async (e) => {
     const value = e.target.value
     const formatted = formatPhone(value)
     setCustomerData({ ...customerData, phone: formatted })
-    validateField('phone', formatted)
+    await validateField('phone', formatted)
   }
 
-  const handleEmailChange = (e) => {
+  const handleEmailChange = async (e) => {
     const value = e.target.value
     setCustomerData({ ...customerData, email: value })
-    validateField('email', value)
+    await validateField('email', value)
   }
 
   const handleNameChange = (e) => {
@@ -134,7 +170,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     if (value.length > 3) {
       try {
         const response = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(value)}&key=${GOOGLE_API_KEY}&types=address`
+          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(value)}&key=${GOOGLE_API_KEY}&types=address&components=country:us`
         )
         const data = await response.json()
         
@@ -151,8 +187,48 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     }
   }
 
-  const handleAddressSelect = (suggestion) => {
-    setCustomerData({ ...customerData, address: suggestion.description })
+  const handleAddressSelect = async (suggestion) => {
+    try {
+      // Get detailed place information
+      const response = await fetch(
+        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${suggestion.place_id}&key=${GOOGLE_API_KEY}&fields=address_components,formatted_address`
+      )
+      const data = await response.json()
+      
+      if (data.result) {
+        const place = data.result
+        let city = ""
+        let state = ""
+        let zipCode = ""
+        
+        // Extract address components
+        place.address_components.forEach(component => {
+          if (component.types.includes('locality')) {
+            city = component.long_name
+          } else if (component.types.includes('administrative_area_level_1')) {
+            state = component.short_name
+          } else if (component.types.includes('postal_code')) {
+            zipCode = component.long_name
+          }
+        })
+        
+        setCustomerData({
+          ...customerData,
+          address: suggestion.description,
+          city: city,
+          state: state,
+          zipCode: zipCode
+        })
+      } else {
+        // Fallback if detailed info not available
+        setCustomerData({ ...customerData, address: suggestion.description })
+      }
+    } catch (error) {
+      console.error('Error fetching place details:', error)
+      // Fallback to just the description
+      setCustomerData({ ...customerData, address: suggestion.description })
+    }
+    
     setShowAddressSuggestions(false)
   }
 
@@ -169,14 +245,14 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     }
     
     // Validate email if provided
-    if (customerData.email && !validateEmail(customerData.email)) {
-      setError('Please enter a valid email address (e.g., email@example.com)')
+    if (customerData.email && !(await validateEmail(customerData.email))) {
+      setError('Please enter a valid email address')
       return
     }
     
     // Validate phone if provided
     if (customerData.phone && !validatePhone(customerData.phone)) {
-      setError('Please enter a valid phone number (at least 10 digits)')
+      setError('Please enter a valid phone number (must start with a digit 1-9)')
       return
     }
     
@@ -188,20 +264,35 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
       const firstName = nameParts[0] || ""
       const lastName = nameParts.slice(1).join(' ') || ""
       
+      // Format phone number for server (remove all formatting, keep only digits and +)
+      const formattedPhone = customerData.phone ? customerData.phone.replace(/[\s\-\(\)]/g, '') : ''
+      
       const customerToSave = {
         firstName,
         lastName,
         address: customerData.address,
         apartment: customerData.apartment,
-        phone: customerData.phone,
+        phone: formattedPhone,
         email: customerData.email,
-        notes: customerData.notes
+        notes: customerData.notes,
+        city: customerData.city,
+        state: customerData.state,
+        zipCode: customerData.zipCode
       }
       
       console.log('Submitting customer data:', customerToSave)
-      await onSave(customerToSave)
-      console.log('Customer saved successfully, closing modal')
+      const result = await onSave(customerToSave)
+      console.log('Customer saved successfully:', result)
+      
+      // Close modal
       onClose()
+      
+      // Navigate to customer details page if we have the customer ID
+      if (result && result.customer && result.customer.id) {
+        navigate(`/customer/${result.customer.id}`)
+      } else if (result && result.id) {
+        navigate(`/customer/${result.id}`)
+      }
     } catch (error) {
       console.error('Error in customer modal submit:', error)
       setError(error.message || 'Failed to save customer. Please try again.')
@@ -216,9 +307,11 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
   return (
     <div 
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
-      onClick={handleBackdropClick}
     >
-      <div className="bg-white rounded-xl w-full max-w-md relative my-6">
+      <div 
+        ref={modalRef}
+        className="bg-white rounded-xl w-full max-w-md relative my-6"
+      >
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900">New Customer</h2>
@@ -312,15 +405,22 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Phone Number
               </label>
-              <input
-                type="tel"
-                placeholder="(555) 123-4567"
-                value={customerData.phone}
-                onChange={handlePhoneChange}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${
-                  validationErrors.phone ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
-                }`}
-              />
+              <div className="relative">
+                <input
+                  type="tel"
+                  placeholder="(555) 123-4567"
+                  value={customerData.phone}
+                  onChange={handlePhoneChange}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${
+                    validationErrors.phone ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
+                  }`}
+                />
+                {isValidatingPhone && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500"></div>
+                  </div>
+                )}
+              </div>
               {validationErrors.phone && (
                 <p className="mt-1 text-sm text-red-600">{validationErrors.phone}</p>
               )}
@@ -331,15 +431,22 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Email
               </label>
-              <input
-                type="email"
-                placeholder="email@example.com"
-                value={customerData.email}
-                onChange={handleEmailChange}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${
-                  validationErrors.email ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
-                }`}
-              />
+              <div className="relative">
+                <input
+                  type="email"
+                  placeholder="email@example.com"
+                  value={customerData.email}
+                  onChange={handleEmailChange}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${
+                    validationErrors.email ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
+                  }`}
+                />
+                {isValidatingEmail && (
+                  <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500"></div>
+                  </div>
+                )}
+              </div>
               {validationErrors.email && (
                 <p className="mt-1 text-sm text-red-600">{validationErrors.email}</p>
               )}
@@ -373,12 +480,6 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
               <button
                 type="submit"
                 disabled={loading || Object.keys(validationErrors).length > 0}
-                onClick={(e) => {
-                  if (loading || Object.keys(validationErrors).length > 0) {
-                    e.preventDefault()
-                    return
-                  }
-                }}
                 className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? "Saving..." : "Save Customer"}

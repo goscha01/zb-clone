@@ -297,10 +297,20 @@ const ZenbookerDashboard = () => {
     }
   }
 
-  const handleSaveCustomer = (customerData) => {
-    console.log("Saving customer:", customerData)
-    setShowCustomerModal(false)
-    // Here you would typically make an API call to save the customer
+  const handleSaveCustomer = async (customerData) => {
+    if (!user?.id) return
+    
+    try {
+      console.log("Saving customer:", customerData)
+      const response = await customersAPI.create(customerData)
+      console.log('Customer saved successfully:', response)
+      
+      // Return the customer data for navigation
+      return response.customer || response
+    } catch (error) {
+      console.error('Error creating customer:', error)
+      throw error // Re-throw to prevent modal from closing
+    }
   }
 
   const newOptions = [

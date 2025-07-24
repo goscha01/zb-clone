@@ -128,6 +128,10 @@ const ZenbookerSchedule = () => {
     setShowJobDetails(true)
   }
 
+  const handleViewCustomer = (customerId) => {
+    navigate(`/customer/${customerId}`)
+  }
+
   const handleEditJob = (job) => {
     setSelectedJob(job)
     setShowEditJob(true)
@@ -286,9 +290,12 @@ const ZenbookerSchedule = () => {
                           <h3 className="text-lg font-semibold text-gray-900 mb-1">
                             {job.service_name || 'Service'}
                           </h3>
-                          <p className="text-sm text-gray-600">
+                          <button
+                            onClick={() => handleViewCustomer(job.customer_id)}
+                            className="text-sm text-gray-600 hover:text-primary-600 hover:underline cursor-pointer transition-colors duration-200"
+                          >
                             {job.customer_first_name} {job.customer_last_name}
-                          </p>
+                          </button>
                         </div>
                         <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(job.status)}`}>
                           {job.status.replace('_', ' ')}

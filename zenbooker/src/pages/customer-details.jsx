@@ -7,6 +7,7 @@ import { customersAPI, jobsAPI, estimatesAPI, invoicesAPI } from "../services/ap
 import { useAuth } from "../context/AuthContext"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
+import JobDetailsModal from "../components/job-details-modal"
 
 const CustomerDetails = () => {
   const { customerId } = useParams()
@@ -20,6 +21,8 @@ const CustomerDetails = () => {
   const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [selectedJob, setSelectedJob] = useState(null)
+  const [isJobModalOpen, setIsJobModalOpen] = useState(false)
 
   useEffect(() => {
     if (customerId && user?.id) {
@@ -72,6 +75,21 @@ const CustomerDetails = () => {
           setError("Failed to delete customer.")
         })
     }
+  }
+
+  const handleViewJob = (job) => {
+    setSelectedJob(job)
+    setIsJobModalOpen(true)
+  }
+
+  const handleJobModalClose = () => {
+    setIsJobModalOpen(false)
+    setSelectedJob(null)
+  }
+
+  const handleJobUpdate = () => {
+    // Refresh customer data when job is updated
+    fetchCustomerData()
   }
 
   const formatDate = (dateString) => {
@@ -354,7 +372,7 @@ const CustomerDetails = () => {
                                       {job.status.replace('_', ' ')}
                                     </span>
                                     <button
-                                      onClick={() => navigate(`/jobs/${job.id}`)}
+                                      onClick={() => handleViewJob(job)}
                                       className="text-primary-600 hover:text-primary-700 text-sm font-medium"
                                     >
                                       View
@@ -438,6 +456,14 @@ const CustomerDetails = () => {
           </div>
         </div>
       </div>
+
+      {/* Job Details Modal */}
+      <JobDetailsModal
+        isOpen={isJobModalOpen}
+        onClose={handleJobModalClose}
+        job={selectedJob}
+        onJobUpdate={handleJobUpdate}
+      />
     </div>
   )
 }
