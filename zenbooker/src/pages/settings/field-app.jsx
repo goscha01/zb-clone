@@ -14,12 +14,12 @@ const FieldApp = () => {
   const [notification, setNotification] = useState(null)
   const [copied, setCopied] = useState(false)
   const [settings, setSettings] = useState({
-    appUrl: "zenbooker.com/apps/T7504600450639579613791781800",
+    appUrl: `${window.location.origin}/team-member/login`,
     promptInstall: true,
     installedTeammates: 0,
     notificationsEnabled: 0,
     branding: {
-      appName: "MaidUp",
+      appName: "ZenBooker Field App",
       primaryColor: "#2563EB",
       secondaryColor: "#10B981",
       logoUrl: null,

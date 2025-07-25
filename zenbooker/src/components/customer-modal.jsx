@@ -27,7 +27,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
   const [isValidatingPhone, setIsValidatingPhone] = useState(false)
 
   // API base URL - will use backend proxy for Google Places API
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online'
+  const API_BASE_URL = 'https://zenbookapi.now2code.online/api'
 
   useEffect(() => {
     if (!isOpen) {
@@ -117,7 +117,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
         break
       case 'name':
         if (!value.trim()) {
-          errors.name = 'Customer name is required'
+          errors.name = 'Full name is required'
         } else {
           delete errors.name
         }
@@ -240,7 +240,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     
     // Validate required fields
     if (!customerData.name.trim()) {
-      setError('Customer name is required')
+      setError('Full name is required')
       return
     }
     
@@ -259,17 +259,15 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     setLoading(true)
     
     try {
-      // Split name into first and last name
-      const nameParts = customerData.name.trim().split(' ')
-      const firstName = nameParts[0] || ""
-      const lastName = nameParts.slice(1).join(' ') || ""
+      // Use full name as both first and last name to satisfy database requirements
+      const fullName = customerData.name.trim()
       
       // Format phone number for server (remove all formatting, keep only digits and +)
       const formattedPhone = customerData.phone ? customerData.phone.replace(/[\s\-\(\)]/g, '') : ''
       
       const customerToSave = {
-        firstName,
-        lastName,
+        firstName: fullName, // Store full name in firstName field
+        lastName: "", // Keep lastName empty or use a placeholder
         address: customerData.address,
         apartment: customerData.apartment,
         phone: formattedPhone,
@@ -336,11 +334,11 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
             {/* Customer Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Customer Name *
+                Full Name *
               </label>
               <input
                 type="text"
-                placeholder="First and Last Name"
+                placeholder="Enter customer's full name"
                 value={customerData.name}
                 onChange={handleNameChange}
                 className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${

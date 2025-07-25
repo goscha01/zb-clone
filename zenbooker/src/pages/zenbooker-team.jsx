@@ -6,6 +6,7 @@ import { useAuth } from "../context/AuthContext"
 import { teamAPI } from "../services/api"
 import AddTeamMemberModal from "../components/add-team-member-modal"
 import LoadingButton from "../components/loading-button"
+import { useNavigate } from "react-router-dom"
 
 const ZenbookerTeam = () => {
   const { user } = useAuth()
@@ -27,6 +28,8 @@ const ZenbookerTeam = () => {
     sortBy: "first_name",
     sortOrder: "ASC"
   })
+
+  const navigate = useNavigate()
 
   // Initial data fetch
   useEffect(() => {
@@ -116,8 +119,8 @@ const ZenbookerTeam = () => {
   }
 
   const handleViewMember = (member) => {
-    setSelectedMember(member)
-    // You can implement a detailed view modal here
+    // Navigate to team member details page
+    navigate(`/team/${member.id}`)
   }
 
   const handleDeleteMember = async (memberId) => {
@@ -466,7 +469,7 @@ const ZenbookerTeam = () => {
       <AddTeamMemberModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onSave={handleMemberUpdate}
+        onSuccess={handleMemberUpdate}
         userId={user?.id}
       />
 
@@ -474,9 +477,9 @@ const ZenbookerTeam = () => {
       <AddTeamMemberModal
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
-        onSave={handleMemberUpdate}
+        onSuccess={handleMemberUpdate}
         member={selectedMember}
-        isEdit={true}
+        isEditing={true}
         userId={user?.id}
       />
     </div>

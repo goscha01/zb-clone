@@ -23,6 +23,8 @@ const CustomerDetails = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [selectedJob, setSelectedJob] = useState(null)
   const [isJobModalOpen, setIsJobModalOpen] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
     if (customerId && user?.id) {
@@ -65,15 +67,20 @@ const CustomerDetails = () => {
   }
 
   const handleDeleteCustomer = () => {
-    if (window.confirm(`Are you sure you want to delete ${customer.first_name} ${customer.last_name}?`)) {
-      customersAPI.delete(customerId)
-        .then(() => {
-          navigate('/customers')
-        })
-        .catch(error => {
-          console.error('Error deleting customer:', error)
-          setError("Failed to delete customer.")
-        })
+    setShowDeleteConfirm(true)
+  }
+
+  const confirmDeleteCustomer = async () => {
+    try {
+      setDeleteLoading(true)
+      await customersAPI.delete(customerId)
+      navigate('/customers')
+    } catch (error) {
+      console.error('Error deleting customer:', error)
+      setError("Failed to delete customer.")
+      setShowDeleteConfirm(false)
+    } finally {
+      setDeleteLoading(false)
     }
   }
 
@@ -464,6 +471,42 @@ const CustomerDetails = () => {
         job={selectedJob}
         onJobUpdate={handleJobUpdate}
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && customer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-center mb-4">
+              <AlertCircle className="h-6 w-6 text-red-600 mr-3" />
+              <h3 className="text-lg font-medium text-gray-900">Delete Customer</h3>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">
+              Are you sure you want to delete <strong>{customer.first_name} {customer.last_name}</strong>? 
+              This action cannot be undone.
+              {(jobs.length > 0 || estimates.length > 0 || invoices.length > 0) ? (
+                <span className="block mt-2 text-red-600">
+                  ⚠️ This customer has associated jobs, estimates, or invoices that must be deleted first.
+                </span>
+              ) : null}
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteCustomer}
+                disabled={deleteLoading}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+              >
+                {deleteLoading ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

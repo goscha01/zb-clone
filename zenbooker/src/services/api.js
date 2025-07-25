@@ -492,9 +492,9 @@ export const jobsAPI = {
     }
   },
 
-  assignTeamMember: async (id, teamMemberId) => {
+  assignToTeamMember: async (jobId, teamMemberId) => {
     try {
-      const response = await api.patch(`/jobs/${id}/assign`, { teamMemberId });
+      const response = await api.post(`/jobs/${jobId}/assign`, { teamMemberId });
       return response.data;
     } catch (error) {
       throw error;
@@ -533,7 +533,7 @@ export const teamAPI = {
 
   create: async (teamMemberData) => {
     try {
-      const response = await api.post('/team-members', teamMemberData);
+      const response = await api.post('/team-members/register', teamMemberData);
       return response.data;
     } catch (error) {
       throw error;

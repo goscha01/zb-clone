@@ -10,6 +10,7 @@ import { Search, User, Plus, AlertCircle, Loader2, Trash2, Eye, X, Filter } from
 import { customersAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
 import { useNavigate } from "react-router-dom"
+import he from 'he';
 
 const ZenbookerCustomers = () => {
   const { user } = useAuth()
@@ -449,21 +450,27 @@ const ZenbookerCustomers = () => {
                               </span>
                             </div>
                             <div>
+                              <div className="flex flex-row justify-start items-center gap-3">
                               <button
                                 onClick={() => handleViewCustomer(customer)}
-                                className="font-medium text-gray-900 hover:text-primary-600 hover:underline cursor-pointer transition-colors duration-200"
+                                style={{textDecoration: 'none'}}
+                                className="font-bold decoration-none text-gray-900 hover:text-primary-600 hover:underline cursor-pointer transition-colors duration-200"
                               >
-                                {customer.first_name} {customer.last_name}
+                                {customer.first_name} {customer.last_name} 
                               </button>
-                              <p className="text-sm text-gray-500">{customer.email}</p>
+                              {(customer.city || customer.state) && (
+                            
+
+                               <p className="text-xs text-gray-500">
+                                 {he.decode(`${customer.city}${customer.city && customer.state ? ', ' : ''}${customer.state}`)}
+                               </p>
+                              )}
+                              </div>
+                              {/* <p className="text-sm text-gray-500">{customer.email}</p> */}
                               {customer.phone && (
                                 <p className="text-sm text-gray-500">{customer.phone}</p>
                               )}
-                              {(customer.city || customer.state) && (
-                                <p className="text-sm text-gray-500">
-                                  {customer.city}{customer.city && customer.state ? ', ' : ''}{customer.state}
-                                </p>
-                              )}
+                              
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">

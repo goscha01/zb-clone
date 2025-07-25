@@ -12,6 +12,7 @@ const validator = require('validator');
 const nodemailer = require('nodemailer');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const cron = require('node-cron');
+const https = require('https');
 require('dotenv').config();
 
 // Email configuration
@@ -1257,9 +1258,9 @@ app.post('/api/customers', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'First name must be between 2 and 50 characters' });
     }
     
-    if (!validateName(lastName)) {
-      return res.status(400).json({ error: 'Last name must be between 2 and 50 characters' });
-    }
+    // if (!validateName(lastName)) {
+    //   return res.status(400).json({ error: 'Last name must be between 2 and 50 characters' });
+    // }
     
     if (email && !validateCustomerEmail(email)) {
       return res.status(400).json({ error: 'Please provide a valid email address' });
@@ -4683,13 +4684,15 @@ app.post('/api/team-members', async (req, res) => {
       lastName, 
       email, 
       phone, 
+      username,
+      password,
       role, 
       skills, 
       hourlyRate,
       availability 
     } = req.body;
     
-    if (!userId || !firstName || !lastName || !email) {
+    if (!userId || !firstName || !lastName || !email || !username || !password) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
     
@@ -4701,27 +4704,32 @@ app.post('/api/team-members', async (req, res) => {
     const connection = await pool.getConnection();
     
     try {
-      // Check if email already exists for this user
+      // Check if username or email already exists for this user
       const [existing] = await connection.query(
-        'SELECT id FROM team_members WHERE user_id = ? AND email = ?',
-        [userId, email]
+        'SELECT id FROM team_members WHERE user_id = ? AND (email = ? OR username = ?)',
+        [userId, email, username]
       );
       
       if (existing.length > 0) {
-        return res.status(400).json({ error: 'Team member with this email already exists' });
+        return res.status(400).json({ error: 'Team member with this email or username already exists' });
       }
+      
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
       
       const [result] = await connection.query(
         `INSERT INTO team_members (
-          user_id, first_name, last_name, email, phone, role, 
-          skills, hourly_rate, availability, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          user_id, first_name, last_name, email, phone, username, password, role, 
+          skills, hourly_rate, availability, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())`,
         [
           userId, 
           firstName, 
           lastName, 
           email, 
           phone || null, 
+          username,
+          hashedPassword,
           role || null, 
           skills ? JSON.stringify(skills) : null,
           hourlyRate || null,
@@ -4734,9 +4742,12 @@ app.post('/api/team-members', async (req, res) => {
         SELECT * FROM team_members WHERE id = ?
       `, [result.insertId]);
       
+      const teamMember = teamMembers[0];
+      delete teamMember.password; // Don't send password back
+      
       res.status(201).json({
         message: 'Team member created successfully',
-        teamMember: teamMembers[0]
+        teamMember
       });
     } finally {
       connection.release();
@@ -4755,6 +4766,8 @@ app.put('/api/team-members/:id', async (req, res) => {
       lastName, 
       email, 
       phone, 
+      username,
+      password,
       role, 
       skills, 
       hourlyRate,
@@ -4789,6 +4802,17 @@ app.put('/api/team-members/:id', async (req, res) => {
       if (phone !== undefined) {
         updateFields.push('phone = ?');
         updateValues.push(phone);
+      }
+      
+      if (username !== undefined) {
+        updateFields.push('username = ?');
+        updateValues.push(username);
+      }
+      
+      if (password !== undefined) {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        updateFields.push('password = ?');
+        updateValues.push(hashedPassword);
       }
       
       if (role !== undefined) {
@@ -4931,6 +4955,292 @@ app.put('/api/team-members/:id/availability', async (req, res) => {
   } catch (error) {
     console.error('Update team member availability error:', error);
     res.status(500).json({ error: 'Failed to update team member availability' });
+  }
+});
+
+// Team member authentication endpoints
+app.post('/api/team-members/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const connection = await pool.getConnection();
+    
+    try {
+      // Find team member by username or email
+      const [teamMembers] = await connection.query(
+        'SELECT * FROM team_members WHERE (username = ? OR email = ?) AND is_active = 1',
+        [username, username]
+      );
+      
+      if (teamMembers.length === 0) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      
+      const teamMember = teamMembers[0];
+      
+      // Check password (handle case where password might not be set for existing team members)
+      if (!teamMember.password) {
+        return res.status(401).json({ error: 'Account not set up for login. Please contact your manager.' });
+      }
+      
+      const isValidPassword = await bcrypt.compare(password, teamMember.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+      
+      // Update last login
+      await connection.query(
+        'UPDATE team_members SET last_login = NOW() WHERE id = ?',
+        [teamMember.id]
+      );
+      
+      // Generate session token
+      const sessionToken = jwt.sign(
+        { 
+          teamMemberId: teamMember.id, 
+          userId: teamMember.user_id,
+          type: 'team_member'
+        },
+        JWT_SECRET,
+        { expiresIn: '7d' }
+      );
+      
+      // Store session (with error handling in case table doesn't exist yet)
+      try {
+        await connection.query(
+          'INSERT INTO team_member_sessions (team_member_id, session_token, device_info, ip_address, expires_at) VALUES (?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))',
+          [teamMember.id, sessionToken, req.headers['user-agent'], req.ip]
+        );
+      } catch (sessionError) {
+        console.warn('Session storage failed (table may not exist):', sessionError.message);
+        // Continue without session storage for now
+      }
+      
+      // Remove password from response
+      delete teamMember.password;
+      
+      res.json({
+        message: 'Login successful',
+        teamMember,
+        token: sessionToken
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Team member login error:', error);
+    
+    // Provide more specific error messages
+    if (error.code === 'ER_NO_SUCH_TABLE') {
+      res.status(500).json({ error: 'Database tables not set up. Please contact administrator.' });
+    } else if (error.code === 'ECONNREFUSED') {
+      res.status(500).json({ error: 'Database connection failed. Please try again.' });
+    } else {
+      res.status(500).json({ error: 'Login failed. Please try again.' });
+    }
+  }
+});
+
+app.post('/api/team-members/register', async (req, res) => {
+  try {
+    const { 
+      userId, 
+      firstName, 
+      lastName, 
+      email, 
+      phone, 
+      username, 
+      password, 
+      role,
+      skills,
+      hourlyRate 
+    } = req.body;
+    
+    const connection = await pool.getConnection();
+    
+    try {
+      // Check if username or email already exists
+      const [existing] = await connection.query(
+        'SELECT id FROM team_members WHERE (username = ? OR email = ?) AND user_id = ?',
+        [username, email, userId]
+      );
+      
+      if (existing.length > 0) {
+        return res.status(400).json({ error: 'Username or email already exists' });
+      }
+      
+      // Hash password
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      // Create team member
+      const [result] = await connection.query(`
+        INSERT INTO team_members (
+          user_id, first_name, last_name, email, phone, username, password, 
+          role, skills, hourly_rate, status, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW())`,
+        [
+          userId, firstName, lastName, email, phone, username, hashedPassword,
+          role, JSON.stringify(skills || []), hourlyRate
+        ]
+      );
+      
+      // Get the created team member
+      const [teamMembers] = await connection.query(
+        'SELECT * FROM team_members WHERE id = ?',
+        [result.insertId]
+      );
+      
+      const teamMember = teamMembers[0];
+      delete teamMember.password;
+      
+      res.json({
+        message: 'Team member registered successfully',
+        teamMember
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Team member registration error:', error);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+app.post('/api/team-members/logout', async (req, res) => {
+  try {
+    const { token } = req.body;
+    const connection = await pool.getConnection();
+    
+    try {
+      // Remove session
+      await connection.query(
+        'DELETE FROM team_member_sessions WHERE session_token = ?',
+        [token]
+      );
+      
+      res.json({ message: 'Logout successful' });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Team member logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Team member dashboard endpoints
+app.get('/api/team-members/dashboard/:teamMemberId', async (req, res) => {
+  try {
+    const { teamMemberId } = req.params;
+    const { startDate, endDate } = req.query;
+    const connection = await pool.getConnection();
+    
+    try {
+      // Get team member info
+      const [teamMembers] = await connection.query(
+        'SELECT * FROM team_members WHERE id = ?',
+        [teamMemberId]
+      );
+      
+      if (teamMembers.length === 0) {
+        return res.status(404).json({ error: 'Team member not found' });
+      }
+      
+      const teamMember = teamMembers[0];
+      
+      // Get jobs assigned to this team member
+      const [jobs] = await connection.query(`
+        SELECT 
+          j.*,
+          c.first_name as customer_first_name,
+          c.last_name as customer_last_name,
+          c.phone as customer_phone,
+          c.address as customer_address,
+          s.name as service_name,
+          s.duration
+        FROM jobs j
+        LEFT JOIN customers c ON j.customer_id = c.id
+        LEFT JOIN services s ON j.service_id = s.id
+        WHERE j.team_member_id = ?
+        AND j.scheduled_date BETWEEN ? AND ?
+        ORDER BY j.scheduled_date ASC
+      `, [teamMemberId, startDate || '2024-01-01', endDate || '2030-12-31']);
+      
+      // Calculate stats
+      const today = new Date().toISOString().split('T')[0];
+      const todayJobs = jobs.filter(job => job.scheduled_date.split('T')[0] === today);
+      const completedJobs = jobs.filter(job => job.status === 'completed');
+      
+      const stats = {
+        totalJobs: jobs.length,
+        todayJobs: todayJobs.length,
+        completedJobs: completedJobs.length,
+        avgJobValue: completedJobs.length > 0 
+          ? completedJobs.reduce((sum, job) => sum + (job.invoice_amount || 0), 0) / completedJobs.length 
+          : 0
+      };
+      
+      // Get notifications
+      const [notifications] = await connection.query(`
+        SELECT * FROM team_member_notifications 
+        WHERE team_member_id = ? 
+        ORDER BY created_at DESC 
+        LIMIT 10
+      `, [teamMemberId]);
+      
+      res.json({
+        teamMember: {
+          id: teamMember.id,
+          first_name: teamMember.first_name,
+          last_name: teamMember.last_name,
+          email: teamMember.email,
+          phone: teamMember.phone,
+          role: teamMember.role,
+          username: teamMember.username,
+          status: teamMember.status,
+          hourly_rate: teamMember.hourly_rate,
+          skills: teamMember.skills,
+          availability: teamMember.availability
+        },
+        jobs: jobs,
+        stats: stats,
+        notifications: notifications
+      });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Team member dashboard error:', error);
+    res.status(500).json({ error: 'Failed to load dashboard data' });
+  }
+});
+
+// Team member job actions
+app.put('/api/team-members/jobs/:jobId/status', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { teamMemberId, status, notes } = req.body;
+    const connection = await pool.getConnection();
+    
+    try {
+      // Update job status
+      await connection.query(
+        'UPDATE jobs SET status = ?, notes = CONCAT(IFNULL(notes, ""), "\n", ?), updated_at = NOW() WHERE id = ? AND team_member_id = ?',
+        [status, notes || '', jobId, teamMemberId]
+      );
+      
+      // Create notification for business owner
+      await connection.query(`
+        INSERT INTO team_member_notifications (team_member_id, type, title, message, data)
+        VALUES (?, 'job_completed', 'Job Status Updated', ?, ?)
+      `, [teamMemberId, `Job #${jobId} status updated to ${status}`, JSON.stringify({ jobId, status })]);
+      
+      res.json({ message: 'Job status updated successfully' });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Update job status error:', error);
+    res.status(500).json({ error: 'Failed to update job status' });
   }
 });
 
@@ -6614,6 +6924,83 @@ app.put('/api/invoices/:id/status', async (req, res) => {
     res.status(500).json({ error: 'Failed to update invoice status' });
   }
 });
+// Google Places API endpoints
+app.get('/api/places/autocomplete', async (req, res) => {
+  try {
+    const { input } = req.query;
+    
+    if (!input || input.length < 3) {
+      return res.json({ predictions: [] });
+    }
+    
+    const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || "AIzaSyC_CrJWTsTHOTBd7TSzTuXOfutywZ2AyOQ";
+    
+    const url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_API_KEY}&types=address&components=country:us`;
+    
+    https.get(url, (response) => {
+      let data = '';
+      
+      response.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      response.on('end', () => {
+        try {
+          const jsonData = JSON.parse(data);
+          res.json(jsonData);
+        } catch (error) {
+          console.error('Error parsing Google Places response:', error);
+          res.status(500).json({ error: 'Failed to parse address suggestions' });
+        }
+      });
+    }).on('error', (error) => {
+      console.error('Google Places autocomplete error:', error);
+      res.status(500).json({ error: 'Failed to fetch address suggestions' });
+    });
+  } catch (error) {
+    console.error('Google Places autocomplete error:', error);
+    res.status(500).json({ error: 'Failed to fetch address suggestions' });
+  }
+});
+
+app.get('/api/places/details', async (req, res) => {
+  try {
+    const { place_id } = req.query;
+    
+    if (!place_id) {
+      return res.status(400).json({ error: 'place_id is required' });
+    }
+    
+    const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY || "AIzaSyC_CrJWTsTHOTBd7TSzTuXOfutywZ2AyOQ";
+    
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${place_id}&key=${GOOGLE_API_KEY}&fields=address_components,formatted_address`;
+    
+    https.get(url, (response) => {
+      let data = '';
+      
+      response.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      response.on('end', () => {
+        try {
+          const jsonData = JSON.parse(data);
+          res.json(jsonData);
+        } catch (error) {
+          console.error('Error parsing Google Places response:', error);
+          res.status(500).json({ error: 'Failed to parse place details' });
+        }
+      });
+    }).on('error', (error) => {
+      console.error('Google Places details error:', error);
+      res.status(500).json({ error: 'Failed to fetch place details' });
+    });
+  } catch (error) {
+    console.error('Google Places details error:', error);
+    res.status(500).json({ error: 'Failed to fetch place details' });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -6629,6 +7016,54 @@ app.use((req, res) => {
 app.listen(PORT, () => {
   console.log(`ZenBooker API server running on port ${PORT}`);
   console.log(`Health check: http://127.0.0.1:${PORT}/api/health`);
+});
+
+// Assign job to team member
+app.post('/api/jobs/:jobId/assign', async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const { teamMemberId } = req.body;
+    const connection = await pool.getConnection();
+    
+    try {
+      // Update the job with team member assignment
+      await connection.query(
+        'UPDATE jobs SET team_member_id = ? WHERE id = ?',
+        [teamMemberId, jobId]
+      );
+      
+      // Create a notification for the team member
+      if (teamMemberId) {
+        const [jobData] = await connection.query(`
+          SELECT j.*, c.first_name, c.last_name, s.name as service_name
+          FROM jobs j
+          LEFT JOIN customers c ON j.customer_id = c.id
+          LEFT JOIN services s ON j.service_id = s.id
+          WHERE j.id = ?
+        `, [jobId]);
+        
+        if (jobData.length > 0) {
+          const job = jobData[0];
+          await connection.query(`
+            INSERT INTO team_member_notifications 
+            (team_member_id, type, title, message, data) 
+            VALUES (?, 'job_assigned', 'New Job Assigned', ?, ?)
+          `, [
+            teamMemberId,
+            `You have been assigned a new job: ${job.service_name} for ${job.first_name} ${job.last_name}`,
+            JSON.stringify({ jobId: job.id, serviceName: job.service_name, customerName: `${job.first_name} ${job.last_name}` })
+          ]);
+        }
+      }
+      
+      res.json({ message: 'Job assigned successfully' });
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error('Job assignment error:', error);
+    res.status(500).json({ error: 'Failed to assign job' });
+  }
 });
 
 

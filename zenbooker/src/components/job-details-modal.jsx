@@ -59,26 +59,34 @@ const JobDetailsModal = ({ isOpen, onClose, job, onJobUpdate }) => {
     try {
       setLoading(true)
       setError("")
+      setSuccessMessage("")
+      
+      const scheduledDateTime = new Date(`${formData.scheduledDate}T${formData.scheduledTime}`)
       
       const updateData = {
-        scheduledDate: formData.scheduledDate,
-        scheduledTime: formData.scheduledTime,
+        scheduled_date: scheduledDateTime.toISOString(),
         notes: formData.notes,
-        status: formData.status,
-        teamMemberId: formData.teamMemberId || null
+        status: formData.status
       }
-
+      
+      // If team member assignment changed, assign the job
+      if (formData.teamMemberId !== job.team_member_id) {
+        if (formData.teamMemberId) {
+          await jobsAPI.assignToTeamMember(job.id, formData.teamMemberId)
+        } else {
+          // Remove assignment
+          await jobsAPI.assignToTeamMember(job.id, null)
+        }
+      }
+      
       await jobsAPI.update(job.id, updateData)
       
       setSuccessMessage("Job updated successfully!")
-      setEditing(false)
-      
-      // Refresh job data
-      if (onJobUpdate) {
+      setTimeout(() => {
         onJobUpdate()
-      }
+        onClose()
+      }, 1000)
       
-      setTimeout(() => setSuccessMessage(""), 3000)
     } catch (error) {
       console.error('Error updating job:', error)
       setError("Failed to update job. Please try again.")

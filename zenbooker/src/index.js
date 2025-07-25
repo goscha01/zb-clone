@@ -74,12 +74,17 @@ import TeamMemberInvite from "./pages/settings/team-member-invite"
 import RecurringAssignment from "./pages/settings/recurring-assignment"
 import JobOffer from "./pages/settings/job-offer"
 import JobAssignmentTeam from "./pages/settings/job-assignment-team"
+import TeamMemberLogin from "./pages/team-member-login"
+import TeamMemberDashboard from "./pages/team-member-dashboard"
+import TeamMemberFieldApp from "./pages/team-member-field-app"
+import { TeamMemberAuthProvider } from "./context/TeamMemberAuthContext"
 
 const root = ReactDOM.createRoot(document.getElementById("root"))
 root.render(
   <HashRouter>
     <AuthProvider>
-      <Routes>
+      <TeamMemberAuthProvider>
+        <Routes>
       <Route index element={<App />} />
       <Route path="signup" element={<SignupForm />} />
       <Route path="signin" element={<SignInForm />} />
@@ -156,7 +161,13 @@ root.render(
       <Route path="quote" element={<PublicQuote />} />
       <Route path="demo-public-pages" element={<DemoPublicPages />} />
       <Route path="customer-portal" element={<CustomerPortal />} />
+      
+      {/* Team Member Routes */}
+      <Route path="team-member/login" element={<TeamMemberLogin />} />
+      <Route path="team-member/dashboard" element={<TeamMemberDashboard />} />
+      <Route path="team-member/field-app" element={<TeamMemberFieldApp />} />
       </Routes>
+    </TeamMemberAuthProvider>
     </AuthProvider>
   </HashRouter>,
 )
