@@ -26,8 +26,8 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
   const [isValidatingEmail, setIsValidatingEmail] = useState(false)
   const [isValidatingPhone, setIsValidatingPhone] = useState(false)
 
-  // Google Places API key
-  const GOOGLE_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_API_KEY;
+  // API base URL - will use backend proxy for Google Places API
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online'
 
   useEffect(() => {
     if (!isOpen) {
@@ -170,7 +170,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     if (value.length > 3) {
       try {
         const response = await fetch(
-          `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(value)}&key=${GOOGLE_API_KEY}&types=address&components=country:us`
+          `${API_BASE_URL}/api/places/autocomplete?input=${encodeURIComponent(value)}`
         )
         const data = await response.json()
         
@@ -191,7 +191,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     try {
       // Get detailed place information
       const response = await fetch(
-        `https://maps.googleapis.com/maps/api/place/details/json?place_id=${suggestion.place_id}&key=${GOOGLE_API_KEY}&fields=address_components,formatted_address`
+        `${API_BASE_URL}/api/places/details?place_id=${suggestion.place_id}`
       )
       const data = await response.json()
       
