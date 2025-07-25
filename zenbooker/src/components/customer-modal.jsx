@@ -170,7 +170,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     if (value.length > 3) {
       try {
         const response = await fetch(
-          `${API_BASE_URL}/api/places/autocomplete?input=${encodeURIComponent(value)}`
+          `${API_BASE_URL}/places/autocomplete?input=${encodeURIComponent(value)}`
         )
         const data = await response.json()
         
@@ -191,7 +191,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     try {
       // Get detailed place information
       const response = await fetch(
-        `${API_BASE_URL}/api/places/details?place_id=${suggestion.place_id}`
+        `${API_BASE_URL}/places/details?place_id=${suggestion.place_id}`
       )
       const data = await response.json()
       
