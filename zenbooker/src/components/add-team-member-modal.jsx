@@ -87,10 +87,10 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
   }, [isOpen, member, isEditing])
 
   const handleBackdropClick = (e) => {
-    // Only close if clicking the backdrop, not the modal content
-    if (e.target === e.currentTarget) {
-      onClose()
-    }
+    // Prevent closing when clicking outside - modal should only close via buttons
+    // if (e.target === e.currentTarget) {
+    //   onClose()
+    // }
   }
 
   const validateEmail = (email) => {
@@ -248,7 +248,6 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
   return (
     <div 
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
-      onClick={handleBackdropClick}
     >
       <div className="bg-white rounded-xl w-full max-w-2xl relative my-6 max-h-[90vh] overflow-y-auto">
         <div className="p-6">
