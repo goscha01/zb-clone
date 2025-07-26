@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
 import JobDetailsModal from "../components/job-details-modal"
+import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const CustomerDetails = () => {
   const { customerId } = useParams()
@@ -233,7 +234,7 @@ const CustomerDetails = () => {
                       {customer.phone && (
                         <div className="flex items-center">
                           <Phone className="w-4 h-4 text-gray-400 mr-3" />
-                          <span className="text-sm text-gray-900">{customer.phone}</span>
+                          <span className="text-sm text-gray-900">{formatPhoneNumber(customer.phone)}</span>
                         </div>
                       )}
                       

@@ -1,4 +1,5 @@
 import React from 'react'
+import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const BookingConfirmationEmail = ({ booking, businessInfo }) => {
   const formatCurrency = (amount) => {
@@ -176,7 +177,7 @@ const BookingConfirmationEmail = ({ booking, businessInfo }) => {
                 Phone
               </p>
               <p style={{ color: '#1f2937', fontSize: '16px', margin: '0' }}>
-                {booking.customerData?.phone}
+                {booking.customerData?.phone ? formatPhoneNumber(booking.customerData.phone) : 'Not provided'}
               </p>
             </div>
             

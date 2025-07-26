@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Calendar, Clock, User, Phone, Mail, MapPin, CreditCard, CheckCircle, AlertCircle, FileText, Eye, Download, RefreshCw } from "lucide-react"
+import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const CustomerPortal = () => {
   const [loading, setLoading] = useState(true)
@@ -273,7 +274,7 @@ const CustomerPortal = () => {
               <Phone className="w-5 h-5 text-gray-400" />
               <div>
                 <p className="text-sm text-gray-500">Phone</p>
-                <p className="font-medium">{customer?.phone}</p>
+                <p className="font-medium">{customer?.phone ? formatPhoneNumber(customer.phone) : 'No phone'}</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">

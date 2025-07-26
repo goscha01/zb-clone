@@ -46,6 +46,8 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
         lastName: member.last_name || "",
         email: member.email || "",
         phone: member.phone || "",
+        username: member.username || "", // Add username
+        password: "", // Leave password empty for editing
         role: member.role || "",
         skills: member.skills ? JSON.parse(member.skills) : [],
         hourlyRate: member.hourly_rate || "",
@@ -179,12 +181,14 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
       return
     }
     
-    if (!formData.password) {
+    // Only require password for new members, not when editing
+    if (!isEditing && !formData.password) {
       setError("Password is required")
       return
     }
     
-    if (formData.password.length < 6) {
+    // Only validate password length if password is provided (for new members or password changes)
+    if (formData.password && formData.password.length < 6) {
       setError("Password must be at least 6 characters long")
       return
     }
@@ -212,11 +216,15 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
         email: formData.email,
         phone: formData.phone,
         username: formData.username,
-        password: formData.password,
         role: formData.role,
         skills: formData.skills,
         hourlyRate: formData.hourlyRate ? parseFloat(formData.hourlyRate) : null,
         availability: formData.availability
+      }
+
+      // Only include password if it's provided (for new members or password changes)
+      if (formData.password) {
+        memberData.password = formData.password
       }
 
       if (isEditing && member) {
@@ -344,7 +352,7 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
               
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Password *
+                  Password {!isEditing ? '*' : '(leave blank to keep current)'}
                 </label>
                 <input
                   type="password"

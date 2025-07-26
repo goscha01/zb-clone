@@ -6,11 +6,12 @@ import MobileHeader from "../components/mobile-header"
 import CustomerModal from "../components/customer-modal"
 import ExportCustomersModal from "../components/export-customers-modal"
 import ImportCustomersModal from "../components/import-customers-modal"
-import { Search, User, Plus, AlertCircle, Loader2, Trash2, Eye, X, Filter } from "lucide-react"
+import { Search, User, Plus, AlertCircle, Loader2, Trash2, Eye, X, Filter, Phone, Mail, Edit } from "lucide-react"
 import { customersAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
 import { useNavigate } from "react-router-dom"
 import he from 'he';
+import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const ZenbookerCustomers = () => {
   const { user } = useAuth()
@@ -184,6 +185,12 @@ const ZenbookerCustomers = () => {
 
   const handleViewCustomer = (customer) => {
     // Navigate to customer details page
+    navigate(`/customer/${customer.id}`)
+  }
+
+  const handleEditCustomer = (customer) => {
+    // For now, navigate to customer details page where editing can be done
+    // In the future, this could open an edit modal directly
     navigate(`/customer/${customer.id}`)
   }
 
@@ -466,10 +473,23 @@ const ZenbookerCustomers = () => {
                                </p>
                               )}
                               </div>
-                              {/* <p className="text-sm text-gray-500">{customer.email}</p> */}
-                              {customer.phone && (
-                                <p className="text-sm text-gray-500">{customer.phone}</p>
-                              )}
+                              <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+                                <div className="flex flex-col space-y-1 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-4">
+                                  <div className="flex items-center space-x-2">
+                                    <Phone className="w-4 h-4 text-gray-400" />
+                                    <span className="text-sm text-gray-600">
+                                      {customer.phone ? formatPhoneNumber(customer.phone) : 'No phone'}
+                                    </span>
+                                  </div>
+                                  {/* {customer.email && (
+                                    <div className="flex items-center space-x-2">
+                                      <Mail className="w-4 h-4 text-gray-400" />
+                                      <span className="text-sm text-gray-600">{customer.email}</span>
+                                    </div>
+                                  )} */}
+                                </div>
+                                
+                              </div>
                               
                             </div>
                           </div>

@@ -7,6 +7,7 @@ import { invoicesAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
+import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const InvoiceDetails = () => {
   const { invoiceId } = useParams()
@@ -284,7 +285,7 @@ const InvoiceDetails = () => {
                           <p className="text-sm text-gray-500 mt-1">{invoice.customer_email}</p>
                         )}
                         {invoice.customer_phone && (
-                          <p className="text-sm text-gray-500">{invoice.customer_phone}</p>
+                          <p className="text-sm text-gray-500">{formatPhoneNumber(invoice.customer_phone)}</p>
                         )}
                       </div>
                       

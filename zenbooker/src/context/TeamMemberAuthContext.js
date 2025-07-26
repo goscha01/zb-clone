@@ -20,7 +20,7 @@ export const TeamMemberAuthProvider = ({ children }) => {
 
   // Create axios instance for team member API calls
   const teamMemberApi = axios.create({
-    baseURL: process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online',
+    baseURL: 'https://zenbookapi.now2code.online',
     timeout: 15000,
     headers: {
       'Content-Type': 'application/json',

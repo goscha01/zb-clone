@@ -24,6 +24,7 @@ import {
   BarChart3
 } from "lucide-react"
 import { useTeamMemberAuth } from "../context/TeamMemberAuthContext"
+import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const TeamMemberFieldApp = () => {
   const navigate = useNavigate()
@@ -282,13 +283,15 @@ const TeamMemberFieldApp = () => {
                         {job.customer_first_name} {job.customer_last_name}
                       </span>
                     </div>
-                    <div className="flex items-center space-x-2 mb-1">
-                      <MapPin className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-600">{job.customer_address}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Phone className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-gray-600">{job.customer_phone}</span>
+                    <div className="flex flex-col space-y-1 sm:flex-row sm:space-y-0 sm:space-x-4">
+                      <div className="flex items-center space-x-2">
+                        <MapPin className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm text-gray-600">{job.customer_address}</span>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Phone className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm text-gray-600">{formatPhoneNumber(job.customer_phone)}</span>
+                      </div>
                     </div>
                   </div>
 

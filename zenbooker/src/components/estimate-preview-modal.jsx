@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { X, Send, Check, Download, Printer, User, Calendar, DollarSign, FileText, Phone, Mail, MapPin } from "lucide-react"
 import { estimatesAPI } from "../services/api"
+import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const EstimatePreviewModal = ({ isOpen, onClose, estimate, onSend, onConvertToInvoice }) => {
   const [loading, setLoading] = useState(false)
@@ -129,7 +130,7 @@ const EstimatePreviewModal = ({ isOpen, onClose, estimate, onSend, onConvertToIn
               {estimate.customer_phone && (
                 <div className="flex items-center space-x-2">
                   <Phone className="w-4 h-4 text-gray-400" />
-                  <span className="text-gray-900">{estimate.customer_phone}</span>
+                  <span className="text-gray-900">{formatPhoneNumber(estimate.customer_phone)}</span>
                 </div>
               )}
               {estimate.customer_address && (

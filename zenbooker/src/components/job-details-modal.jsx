@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { X, Calendar, Clock, MapPin, Users, Edit, Save, Check, AlertCircle } from "lucide-react"
 import { jobsAPI, teamAPI } from "../services/api"
+import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const JobDetailsModal = ({ isOpen, onClose, job, onJobUpdate }) => {
   const [editing, setEditing] = useState(false)
@@ -234,24 +235,24 @@ const JobDetailsModal = ({ isOpen, onClose, job, onJobUpdate }) => {
           <div>
             <h3 className="text-sm font-medium text-gray-900 mb-3">Customer Information</h3>
             <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-              <div className="flex justify-between">
+              <div className="flex flex-col space-y-1 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                 <span className="text-sm text-gray-600">Name:</span>
                 <span className="text-sm font-medium">{job.customer_first_name} {job.customer_last_name}</span>
               </div>
               {job.customer_email && (
-                <div className="flex justify-between">
+                <div className="flex flex-col space-y-1 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                   <span className="text-sm text-gray-600">Email:</span>
                   <span className="text-sm">{job.customer_email}</span>
                 </div>
               )}
               {job.customer_phone && (
-                <div className="flex justify-between">
+                <div className="flex flex-col space-y-1 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                   <span className="text-sm text-gray-600">Phone:</span>
-                  <span className="text-sm">{job.customer_phone}</span>
+                  <span className="text-sm">{formatPhoneNumber(job.customer_phone)}</span>
                 </div>
               )}
               {job.customer_address && (
-                <div className="flex justify-between">
+                <div className="flex flex-col space-y-1 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                   <span className="text-sm text-gray-600">Address:</span>
                   <span className="text-sm">{job.customer_address}</span>
                 </div>
