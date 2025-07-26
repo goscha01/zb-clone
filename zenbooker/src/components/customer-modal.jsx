@@ -4,7 +4,7 @@ import { X, MapPin, Search } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 
-const CustomerModal = ({ isOpen, onClose, onSave }) => {
+const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false }) => {
   const navigate = useNavigate()
   const modalRef = useRef(null)
   const [customerData, setCustomerData] = useState({
@@ -30,6 +30,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
   const API_BASE_URL = 'https://zenbookapi.now2code.online/api'
 
   useEffect(() => {
+    console.log('CustomerModal useEffect:', { isOpen, isEditing, customer })
     if (!isOpen) {
       setCustomerData({
         name: "",
@@ -48,8 +49,22 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
       setShowAddressSuggestions(false)
       setIsValidatingEmail(false)
       setIsValidatingPhone(false)
+    } else if (isEditing && customer) {
+      // Populate form with existing customer data for editing
+      console.log('Populating form with customer data:', customer)
+      setCustomerData({
+        name: `${customer.first_name || ""} ${customer.last_name || ""}`.trim(),
+        address: customer.address || "",
+        apartment: customer.apartment || "",
+        phone: customer.phone || "",
+        email: customer.email || "",
+        notes: customer.notes || "",
+        city: customer.city || "",
+        state: customer.state || "",
+        zipCode: customer.zip_code || ""
+      })
     }
-  }, [isOpen])
+  }, [isOpen, isEditing, customer])
 
   // Removed backdrop click handler - modal should only close via buttons or successful save
 
@@ -300,6 +315,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
     }
   }
 
+  console.log('CustomerModal render:', { isOpen, isEditing, customer })
   if (!isOpen) return null
 
   return (
@@ -312,7 +328,7 @@ const CustomerModal = ({ isOpen, onClose, onSave }) => {
       >
         <div className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">New Customer</h2>
+            <h2 className="text-xl font-semibold text-gray-900">{isEditing ? 'Edit Customer' : 'New Customer'}</h2>
             <button
               onClick={(e) => {
                 e.preventDefault()

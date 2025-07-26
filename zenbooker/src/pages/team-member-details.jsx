@@ -75,13 +75,33 @@ const TeamMemberDetails = () => {
       setLoading(true)
       setError("")
       
+      console.log('Fetching team member details for ID:', memberId)
+      
+      if (!memberId) {
+        throw new Error('No team member ID provided')
+      }
+      
       const response = await teamAPI.getById(memberId)
-      setTeamMember(response)
+      console.log('Team member response:', response)
+      
+      if (!response) {
+        throw new Error('No response from API')
+      }
+      
+      // The API returns { teamMember, jobs } structure
+      const teamMemberData = response.teamMember || response
+      
+      if (!teamMemberData) {
+        throw new Error('No team member data in response')
+      }
+      
+      console.log('Setting team member data:', teamMemberData)
+      setTeamMember(teamMemberData)
       
       // Parse availability if it exists
-      if (response.availability) {
+      if (teamMemberData.availability) {
         try {
-          const availability = JSON.parse(response.availability)
+          const availability = JSON.parse(teamMemberData.availability)
           setWorkingHours(availability.workingHours || workingHours)
           setCustomAvailability(availability.customAvailability || [])
         } catch (e) {
@@ -90,18 +110,17 @@ const TeamMemberDetails = () => {
       }
       
       // Parse territories if they exist
-      if (response.territories) {
+      if (teamMemberData.territories) {
         try {
-          const territoriesData = JSON.parse(response.territories)
+          const territoriesData = JSON.parse(teamMemberData.territories)
           setTerritories(territoriesData)
         } catch (e) {
           console.log('Could not parse territories:', e)
         }
       }
-      
     } catch (error) {
       console.error('Error fetching team member details:', error)
-      setError("Failed to load team member details.")
+      setError(`Failed to load team member details: ${error.message}`)
     } finally {
       setLoading(false)
     }

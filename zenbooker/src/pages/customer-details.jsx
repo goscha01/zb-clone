@@ -8,6 +8,7 @@ import { useAuth } from "../context/AuthContext"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
 import JobDetailsModal from "../components/job-details-modal"
+import CustomerModal from "../components/customer-modal"
 import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const CustomerDetails = () => {
@@ -26,6 +27,7 @@ const CustomerDetails = () => {
   const [isJobModalOpen, setIsJobModalOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   useEffect(() => {
     if (customerId && user?.id) {
@@ -63,8 +65,9 @@ const CustomerDetails = () => {
   }
 
   const handleEditCustomer = () => {
-    // Navigate to edit customer page or open edit modal
-    navigate(`/customer/${customerId}/edit`)
+    // Open edit modal instead of navigating to non-existent route
+    console.log('Opening edit modal for customer:', customer)
+    setShowEditModal(true)
   }
 
   const handleDeleteCustomer = () => {
@@ -201,7 +204,7 @@ const CustomerDetails = () => {
                         className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
                       >
                         <Edit className="w-4 h-4 mr-2" />
-                        Edit
+                        Edit 
                       </button>
                       <button
                         onClick={handleDeleteCustomer}
@@ -508,6 +511,27 @@ const CustomerDetails = () => {
           </div>
         </div>
       )}
+
+      {/* Edit Customer Modal */}
+      <CustomerModal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        onSave={async (updatedCustomer) => {
+          try {
+            // Call the API to update the customer
+            const result = await customersAPI.update(customerId, updatedCustomer)
+            setShowEditModal(false)
+            setCustomer(result)
+            fetchCustomerData() // Refresh the data
+            return result
+          } catch (error) {
+            console.error('Error updating customer:', error)
+            throw error
+          }
+        }}
+        customer={customer} // Pass current customer data for editing
+        isEditing={true}
+      />
     </div>
   )
 }
