@@ -478,6 +478,8 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
                   placeholder="(555) 123-4567"
                   value={customerData.phone}
                   onChange={handlePhoneChange}
+                  maxLength={15}
+                  autoComplete="tel"
                   className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${
                     validationErrors.phone ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
                   }`}
