@@ -14,7 +14,7 @@ import he from 'he';
 import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const ZenbookerCustomers = () => {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [matchBookings, setMatchBookings] = useState(true)
@@ -34,10 +34,15 @@ const ZenbookerCustomers = () => {
   const [selectedCity, setSelectedCity] = useState("")
   const [showCityFilter, setShowCityFilter] = useState(false)
 
-  // Fetch customers on component mount
+  // Fetch customers when user is available
   useEffect(() => {
-    fetchCustomers()
-  }, [])
+    if (!authLoading && user?.id) {
+      fetchCustomers()
+    } else if (!authLoading && !user?.id) {
+      // If auth is done loading but no user, redirect to signin
+      navigate('/signin')
+    }
+  }, [user?.id, authLoading])
 
   // Close city filter dropdown when clicking outside
   useEffect(() => {
@@ -232,6 +237,15 @@ const ZenbookerCustomers = () => {
     setSelectedCity("")
   }
 
+  // Show loading spinner while auth is loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
@@ -243,29 +257,29 @@ const ZenbookerCustomers = () => {
           <div className="px-4 sm:px-6 lg:px-8 py-8">
             {/* Header */}
             <div className="mb-8">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
                   <p className="mt-1 text-sm text-gray-500">
                     Manage your customer database and track relationships
                   </p>
                 </div>
-                <div className="flex items-center space-x-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
                   <button
                     onClick={handleImport}
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                    className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     Import
                   </button>
                   <button
                     onClick={handleExport}
-                    className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                    className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     Export
                   </button>
                   <button
                     onClick={handleAddCustomer}
-                    className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+                    className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Add Customer

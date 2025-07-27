@@ -281,7 +281,10 @@ const CustomerPortal = () => {
               <MapPin className="w-5 h-5 text-gray-400" />
               <div>
                 <p className="text-sm text-gray-500">Address</p>
-                <p className="font-medium">{customer?.address}</p>
+                <p className="font-medium">
+                  {customer?.address}
+                  {customer?.suite && `, ${customer.suite}`}
+                </p>
               </div>
             </div>
           </div>

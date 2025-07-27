@@ -10,7 +10,7 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
   const [customerData, setCustomerData] = useState({
     name: "",
     address: "",
-    apartment: "",
+    suite: "",
     phone: "",
     email: "",
     notes: "",
@@ -29,13 +29,60 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
   // API base URL - will use backend proxy for Google Places API
   const API_BASE_URL = 'https://zenbookapi.now2code.online/api'
 
+  // Function to parse combined address into street address and suite
+  const parseCombinedAddress = (combinedAddress) => {
+    if (!combinedAddress) return { address: "", suite: "" }
+    
+    // Common patterns for suite indicators
+    const suitePatterns = [
+      /,\s*(apt|apartment|unit|suite|ste|#|no|number)\s*\.?\s*([^,]+)/i,
+      /,\s*([^,]+)\s*(apt|apartment|unit|suite|ste|#|no|number)\s*\.?\s*([^,]+)/i,
+      /,\s*([^,]+)$/ // Last part after comma
+    ]
+    
+    // Try to match suite patterns
+    for (const pattern of suitePatterns) {
+      const match = combinedAddress.match(pattern)
+      if (match) {
+        // Extract the suite part and the rest as address
+        const suitePart = match[0].replace(/^,\s*/, '') // Remove leading comma and space
+        const addressPart = combinedAddress.replace(match[0], '').trim()
+        return {
+          address: addressPart,
+          suite: suitePart
+        }
+      }
+    }
+    
+    // If no pattern matches, check if there's a comma (common separator)
+    const commaIndex = combinedAddress.lastIndexOf(',')
+    if (commaIndex > 0) {
+      const addressPart = combinedAddress.substring(0, commaIndex).trim()
+      const suitePart = combinedAddress.substring(commaIndex + 1).trim()
+      
+      // Only split if the part after comma looks like a suite
+      if (suitePart && suitePart.length < 20) { // Reasonable length for suite
+        return {
+          address: addressPart,
+          suite: suitePart
+        }
+      }
+    }
+    
+    // If no clear separation, return the whole thing as address
+    return {
+      address: combinedAddress,
+      suite: ""
+    }
+  }
+
   useEffect(() => {
     console.log('CustomerModal useEffect:', { isOpen, isEditing, customer })
     if (!isOpen) {
       setCustomerData({
         name: "",
         address: "",
-        apartment: "",
+        suite: "",
         phone: "",
         email: "",
         notes: "",
@@ -52,10 +99,14 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
     } else if (isEditing && customer) {
       // Populate form with existing customer data for editing
       console.log('Populating form with customer data:', customer)
+      
+      // Parse the combined address if it exists (for backward compatibility)
+      const parsedAddress = parseCombinedAddress(customer.address)
+      
       setCustomerData({
         name: `${customer.first_name || ""} ${customer.last_name || ""}`.trim(),
-        address: customer.address || "",
-        apartment: customer.apartment || "",
+        address: customer.suite ? customer.address : parsedAddress.address,
+        suite: customer.suite || parsedAddress.suite,
         phone: customer.phone || "",
         email: customer.email || "",
         notes: customer.notes || "",
@@ -284,7 +335,7 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
         firstName: fullName, // Store full name in firstName field
         lastName: "", // Keep lastName empty or use a placeholder
         address: customerData.address,
-        apartment: customerData.apartment,
+        suite: customerData.suite,
         phone: formattedPhone,
         email: customerData.email,
         notes: customerData.notes,
@@ -320,33 +371,35 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
 
   return (
     <div 
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
+      className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto"
     >
       <div 
         ref={modalRef}
-        className="bg-white rounded-xl w-full max-w-md relative my-6"
+        className="bg-white rounded-xl w-full max-w-md relative my-4 sm:my-6 max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] overflow-hidden flex flex-col"
       >
-        <div className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-semibold text-gray-900">{isEditing ? 'Edit Customer' : 'New Customer'}</h2>
-            <button
-              onClick={(e) => {
-                e.preventDefault()
-                onClose()
-              }}
-              className="text-gray-400 hover:text-gray-500 hover:bg-gray-100 p-1 rounded-full transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+        {/* Header - Fixed */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">{isEditing ? 'Edit Customer' : 'New Customer'}</h2>
+          <button
+            onClick={(e) => {
+              e.preventDefault()
+              onClose()
+            }}
+            className="text-gray-400 hover:text-gray-500 hover:bg-gray-100 p-1 rounded-full transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-6">
           {error && (
             <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
               <p className="text-sm text-red-800">{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+          <form id="customer-form" onSubmit={handleSubmit} className="space-y-6" noValidate>
             {/* Customer Name */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -400,16 +453,16 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
               </div>
             </div>
 
-            {/* Apartment/Unit */}
+            {/* Suite */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Apartment/Unit
+                Suite
               </label>
               <input
                 type="text"
-                placeholder="Apt, Unit, Suite, etc."
-                value={customerData.apartment}
-                onChange={(e) => setCustomerData({ ...customerData, apartment: e.target.value })}
+                placeholder="Suite, Apt, Unit, etc."
+                value={customerData.suite}
+                onChange={(e) => setCustomerData({ ...customerData, suite: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
               />
             </div>
@@ -480,26 +533,29 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
               />
             </div>
 
-            <div className="flex justify-end space-x-3 pt-2">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.preventDefault()
-                  onClose()
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading || Object.keys(validationErrors).length > 0}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Saving..." : "Save Customer"}
-              </button>
-            </div>
           </form>
+        </div>
+
+        {/* Footer - Fixed */}
+        <div className="flex justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault()
+              onClose()
+            }}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="customer-form"
+            disabled={loading || Object.keys(validationErrors).length > 0}
+            className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? "Saving..." : "Save Customer"}
+          </button>
         </div>
       </div>
     </div>

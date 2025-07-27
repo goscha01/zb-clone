@@ -254,7 +254,10 @@ const JobDetailsModal = ({ isOpen, onClose, job, onJobUpdate }) => {
               {job.customer_address && (
                 <div className="flex flex-col space-y-1 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                   <span className="text-sm text-gray-600">Address:</span>
-                  <span className="text-sm">{job.customer_address}</span>
+                  <span className="text-sm">
+                    {job.customer_address}
+                    {job.customer_suite && `, ${job.customer_suite}`}
+                  </span>
                 </div>
               )}
             </div>

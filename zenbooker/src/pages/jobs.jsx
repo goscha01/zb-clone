@@ -12,7 +12,7 @@ import { jobsAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
 
 const ZenbookerJobs = () => {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("upcoming")
   const [selectedJob, setSelectedJob] = useState(null)
@@ -36,12 +36,17 @@ const ZenbookerJobs = () => {
 
   // Debounced search to prevent too many API calls
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      fetchJobs()
-    }, 300) // 300ms delay
+    if (!authLoading && user?.id) {
+      const timeoutId = setTimeout(() => {
+        fetchJobs()
+      }, 300) // 300ms delay
 
-    return () => clearTimeout(timeoutId)
-  }, [activeTab, filters])
+      return () => clearTimeout(timeoutId)
+    } else if (!authLoading && !user?.id) {
+      // If auth is done loading but no user, redirect to signin
+      navigate('/signin')
+    }
+  }, [activeTab, filters, user?.id, authLoading])
 
   const fetchJobs = async () => {
     if (!user?.id) return
@@ -219,6 +224,15 @@ const ZenbookerJobs = () => {
 
   const getStatusLabel = (status) => {
     return status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  // Show loading spinner while auth is loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      </div>
+    )
   }
 
   return (

@@ -14,7 +14,7 @@ import { formatPhoneNumber } from "../utils/phoneFormatter"
 const CustomerDetails = () => {
   const { customerId } = useParams()
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [customer, setCustomer] = useState(null)
   const [jobs, setJobs] = useState([])
   const [estimates, setEstimates] = useState([])
@@ -30,10 +30,14 @@ const CustomerDetails = () => {
   const [showEditModal, setShowEditModal] = useState(false)
 
   useEffect(() => {
-    if (customerId && user?.id) {
+    // Wait for auth to finish loading before trying to fetch data
+    if (!authLoading && customerId && user?.id) {
       fetchCustomerData()
+    } else if (!authLoading && !user?.id) {
+      // If auth is done loading but no user, redirect to signin
+      navigate('/signin')
     }
-  }, [customerId, user?.id])
+  }, [customerId, user?.id, authLoading])
 
   const fetchCustomerData = async () => {
     try {
@@ -124,6 +128,15 @@ const CustomerDetails = () => {
     }
   }
 
+  // Show loading spinner while auth is loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary-600" />
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -182,37 +195,62 @@ const CustomerDetails = () => {
             <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
               <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className="py-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
+                  <div className="flex flex-col space-y-4 sm:space-y-0">
+                    {/* Top Row - Back Button and Actions */}
+                    <div className="flex items-center justify-between">
                       <button
                         onClick={() => navigate('/customers')}
-                        className="flex items-center text-sm text-gray-500 hover:text-gray-700"
+                        className="flex items-center text-sm text-gray-500 hover:text-gray-700 transition-colors"
                       >
                         <ChevronLeft className="w-4 h-4 mr-1" />
-                        Back to Customers
+                        <span className="hidden sm:inline">Back to Customers</span>
+                        <span className="sm:hidden">Back</span>
                       </button>
-                      <div>
-                        <h1 className="text-2xl font-bold text-gray-900">
-                          {customer.first_name} {customer.last_name}
-                        </h1>
-                        <p className="text-sm text-gray-500">Customer Details</p>
+                      {/* Desktop-only action buttons */}
+                      <div className="hidden sm:flex items-center space-x-3">
+                        <button
+                          onClick={handleEditCustomer}
+                          className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={handleDeleteCustomer}
+                          className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-3">
-                      <button
-                        onClick={handleEditCustomer}
-                        className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-                      >
-                        <Edit className="w-4 h-4 mr-2" />
-                        Edit 
-                      </button>
-                      <button
-                        onClick={handleDeleteCustomer}
-                        className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" />
-                        Delete
-                      </button>
+                    
+                    {/* Bottom Row - Customer Name and Details */}
+                    <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between space-y-2 sm:space-y-0">
+                      <div>
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">
+                          {customer.first_name} {customer.last_name}
+                        </h1>
+                        <p className="text-sm text-gray-500 mt-1">Customer Details</p>
+                      </div>
+                      
+                      {/* Mobile-only action buttons for better accessibility */}
+                      <div className="flex sm:hidden items-center justify-center space-x-2 pt-2 border-t border-gray-100">
+                        <button
+                          onClick={handleEditCustomer}
+                          className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                        >
+                          <Edit className="w-4 h-4 mr-2" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={handleDeleteCustomer}
+                          className="flex-1 inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -244,7 +282,10 @@ const CustomerDetails = () => {
                       {customer.address && (
                         <div className="flex items-start">
                           <MapPin className="w-4 h-4 text-gray-400 mr-3 mt-0.5" />
-                          <span className="text-sm text-gray-900">{customer.address}</span>
+                          <span className="text-sm text-gray-900">
+                            {customer.address}
+                            {customer.suite && `, ${customer.suite}`}
+                          </span>
                         </div>
                       )}
                       
