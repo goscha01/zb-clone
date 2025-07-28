@@ -591,6 +591,15 @@ export const teamAPI = {
     } catch (error) {
       throw error;
     }
+  },
+
+  resendInvite: async (memberId) => {
+    try {
+      const response = await api.post(`/team-members/${memberId}/resend-invite`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 
@@ -906,6 +915,40 @@ export const territoriesAPI = {
       if (endDate) params.append('endDate', endDate);
       
       const response = await api.get(`/territories/${id}/analytics?${params}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Territory detection based on customer location
+  detectTerritory: async (userId, customerAddress, customerZipCode) => {
+    try {
+      const response = await api.post('/territories/detect', {
+        userId,
+        customerAddress,
+        customerZipCode
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get available team members for a territory
+  getTerritoryTeamMembers: async (territoryId) => {
+    try {
+      const response = await api.get(`/territories/${territoryId}/team-members`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  // Get territory business hours
+  getTerritoryBusinessHours: async (territoryId) => {
+    try {
+      const response = await api.get(`/territories/${territoryId}/business-hours`);
       return response.data;
     } catch (error) {
       throw error;

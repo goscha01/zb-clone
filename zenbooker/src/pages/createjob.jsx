@@ -6,7 +6,7 @@ import Sidebar from '../components/sidebar';
 import MobileHeader from '../components/mobile-header';
 import CustomerModal from "../components/customer-modal";
 import { useNavigate } from 'react-router-dom';
-import { jobsAPI, customersAPI, servicesAPI, teamAPI } from '../services/api';
+import { jobsAPI, customersAPI, servicesAPI, teamAPI, territoriesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 export default function CreateJobPage() {
@@ -47,6 +47,7 @@ export default function CreateJobPage() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
   const [selectedTeamMember, setSelectedTeamMember] = useState(null);
+  const [detectedTerritory, setDetectedTerritory] = useState(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -131,11 +132,32 @@ export default function CreateJobPage() {
     }
   };
 
-  const handleCustomerSelect = (customer) => {
+  const handleCustomerSelect = async (customer) => {
     setSelectedCustomer(customer);
     setFormData(prev => ({ ...prev, customerId: customer.id }));
     setCustomerSearch(`${customer.first_name} ${customer.last_name}`);
     setShowCustomerDropdown(false);
+    
+    // Detect territory based on customer location
+    if (customer.zip_code || customer.address) {
+      try {
+        const territoryResponse = await territoriesAPI.detectTerritory(
+          user.id,
+          customer.address,
+          customer.zip_code
+        );
+        
+        if (territoryResponse.available && territoryResponse.territory) {
+          setDetectedTerritory(territoryResponse.territory);
+          console.log('Detected territory:', territoryResponse.territory);
+        } else {
+          setDetectedTerritory(null);
+        }
+      } catch (error) {
+        console.error('Error detecting territory:', error);
+        setDetectedTerritory(null);
+      }
+    }
   };
 
   const handleServiceSelect = (service) => {
@@ -287,6 +309,23 @@ export default function CreateJobPage() {
                   </div>
                 )}
               </div>
+
+              {/* Territory Detection */}
+              {detectedTerritory && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-2">
+                    <MapPin className="w-5 h-5 text-blue-600" />
+                    <div>
+                      <p className="text-sm font-medium text-blue-900">
+                        Detected Territory: {detectedTerritory.name}
+                      </p>
+                      <p className="text-xs text-blue-700">
+                        {detectedTerritory.location} • {detectedTerritory.radius_miles} mile radius
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Service Selection */}
               <div>

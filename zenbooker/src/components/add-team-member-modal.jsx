@@ -1,8 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { X, UserPlus, Edit, Calendar, DollarSign, Tag } from "lucide-react"
-import { teamAPI } from "../services/api"
+import { X, UserPlus, Edit, Calendar, DollarSign, Tag, MapPin, Search, CheckCircle } from "lucide-react"
+import { teamAPI, territoriesAPI } from "../services/api"
+
+// API base URL for Google Places API proxy
+const API_BASE_URL = 'https://zenbookapi.now2code.online/api'
 
 const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null, isEditing = false }) => {
   const [formData, setFormData] = useState({
@@ -10,34 +13,27 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
     lastName: "",
     email: "",
     phone: "",
-    username: "",
-    password: "",
-    role: "",
-    skills: [],
-    hourlyRate: "",
-    availability: {
-      monday: { start: "09:00", end: "17:00", available: true },
-      tuesday: { start: "09:00", end: "17:00", available: true },
-      wednesday: { start: "09:00", end: "17:00", available: true },
-      thursday: { start: "09:00", end: "17:00", available: true },
-      friday: { start: "09:00", end: "17:00", available: true },
-      saturday: { start: "09:00", end: "17:00", available: false },
-      sunday: { start: "09:00", end: "17:00", available: false }
+    location: "",
+    city: "",
+    state: "",
+    zipCode: "",
+    role: "worker",
+    isServiceProvider: true,
+    territories: [],
+    permissions: {
+      viewCustomerNotes: true,
+      modifyJobStatus: true,
+      editJobDetails: true,
+      rescheduleJobs: true,
+      editAvailability: true
     }
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [newSkill, setNewSkill] = useState("")
-
-  const daysOfWeek = [
-    { key: "monday", label: "Monday" },
-    { key: "tuesday", label: "Tuesday" },
-    { key: "wednesday", label: "Wednesday" },
-    { key: "thursday", label: "Thursday" },
-    { key: "friday", label: "Friday" },
-    { key: "saturday", label: "Saturday" },
-    { key: "sunday", label: "Sunday" }
-  ]
+  const [addressSuggestions, setAddressSuggestions] = useState([])
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false)
+  const [territories, setTerritories] = useState([])
+  const [loadingTerritories, setLoadingTerritories] = useState(false)
 
   useEffect(() => {
     if (isOpen && member && isEditing) {
@@ -46,19 +42,19 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
         lastName: member.last_name || "",
         email: member.email || "",
         phone: member.phone || "",
-        username: member.username || "", // Add username
-        password: "", // Leave password empty for editing
-        role: member.role || "",
-        skills: member.skills ? JSON.parse(member.skills) : [],
-        hourlyRate: member.hourly_rate || "",
-        availability: member.availability ? JSON.parse(member.availability) : {
-          monday: { start: "09:00", end: "17:00", available: true },
-          tuesday: { start: "09:00", end: "17:00", available: true },
-          wednesday: { start: "09:00", end: "17:00", available: true },
-          thursday: { start: "09:00", end: "17:00", available: true },
-          friday: { start: "09:00", end: "17:00", available: true },
-          saturday: { start: "09:00", end: "17:00", available: false },
-          sunday: { start: "09:00", end: "17:00", available: false }
+        location: member.location || "",
+        city: member.city || "",
+        state: member.state || "",
+        zipCode: member.zip_code || "",
+        role: member.role || "worker",
+        isServiceProvider: member.is_service_provider !== false,
+        territories: member.territories ? JSON.parse(member.territories) : [],
+        permissions: member.permissions ? JSON.parse(member.permissions) : {
+          viewCustomerNotes: true,
+          modifyJobStatus: true,
+          editJobDetails: true,
+          rescheduleJobs: true,
+          editAvailability: true
         }
       })
     } else if (isOpen && !isEditing) {
@@ -68,44 +64,59 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
         lastName: "",
         email: "",
         phone: "",
-        username: "",
-        password: "",
-        role: "",
-        skills: [],
-        hourlyRate: "",
-        availability: {
-          monday: { start: "09:00", end: "17:00", available: true },
-          tuesday: { start: "09:00", end: "17:00", available: true },
-          wednesday: { start: "09:00", end: "17:00", available: true },
-          thursday: { start: "09:00", end: "17:00", available: true },
-          friday: { start: "09:00", end: "17:00", available: true },
-          saturday: { start: "09:00", end: "17:00", available: false },
-          sunday: { start: "09:00", end: "17:00", available: false }
+        location: "",
+        city: "",
+        state: "",
+        zipCode: "",
+        role: "worker",
+        isServiceProvider: true,
+        territories: [],
+        permissions: {
+          viewCustomerNotes: true,
+          modifyJobStatus: true,
+          editJobDetails: true,
+          rescheduleJobs: true,
+          editAvailability: true
         }
       })
     }
   }, [isOpen, member, isEditing])
 
-  const handleBackdropClick = (e) => {
-    // Prevent closing when clicking outside - modal should only close via buttons
-    // if (e.target === e.currentTarget) {
-    //   onClose()
-    // }
+  // Fetch territories when modal opens
+  useEffect(() => {
+    if (isOpen && userId) {
+      fetchTerritories()
+    }
+  }, [isOpen, userId])
+
+  const fetchTerritories = async () => {
+    try {
+      setLoadingTerritories(true)
+      console.log('Fetching territories for userId:', userId)
+      const response = await territoriesAPI.getAll(userId, { status: 'active' })
+      console.log('Territories response:', response)
+      setTerritories(response.territories || [])
+    } catch (error) {
+      console.error('Error fetching territories:', error)
+      setTerritories([])
+    } finally {
+      setLoadingTerritories(false)
+    }
   }
 
   const validateEmail = (email) => {
-    if (!email) return true // Email is optional
+    if (!email) return false // Email is required
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     return emailRegex.test(email)
   }
 
   const validatePhone = (phone) => {
     if (!phone) return true // Phone is optional
-    // Remove all non-digit characters except + for international numbers
-    const cleaned = phone.replace(/[^\d+]/g, '')
-    // Basic validation - should have at least 10 digits
-    const digits = cleaned.replace(/[^\d]/g, '')
-    return digits.length >= 10
+    // Remove all formatting characters (spaces, dashes, parentheses)
+    const cleaned = phone.replace(/[\s\-\(\)]/g, '')
+    // Server validation: must start with + or digit 1-9, then 0-15 more digits
+    const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/
+    return phoneRegex.test(cleaned)
   }
 
   const formatPhone = (phone) => {
@@ -131,6 +142,75 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
     handleInputChange('phone', formatted)
   }
 
+  const handleLocationChange = async (e) => {
+    const value = e.target.value
+    setFormData({ ...formData, location: value })
+    
+    if (value.length > 3) {
+      try {
+        const response = await fetch(
+          `${API_BASE_URL}/places/autocomplete?input=${encodeURIComponent(value)}`
+        )
+        const data = await response.json()
+        
+        if (data.predictions) {
+          setAddressSuggestions(data.predictions)
+          setShowAddressSuggestions(true)
+        }
+      } catch (error) {
+        console.error('Error fetching address suggestions:', error)
+      }
+    } else {
+      setAddressSuggestions([])
+      setShowAddressSuggestions(false)
+    }
+  }
+
+  const handleLocationSelect = async (suggestion) => {
+    try {
+      // Get detailed place information
+      const response = await fetch(
+        `${API_BASE_URL}/places/details?place_id=${suggestion.place_id}`
+      )
+      const data = await response.json()
+      
+      if (data.result) {
+        const place = data.result
+        let city = ""
+        let state = ""
+        let zipCode = ""
+        
+        // Extract address components
+        place.address_components.forEach(component => {
+          if (component.types.includes('locality')) {
+            city = component.long_name
+          } else if (component.types.includes('administrative_area_level_1')) {
+            state = component.short_name
+          } else if (component.types.includes('postal_code')) {
+            zipCode = component.long_name
+          }
+        })
+        
+        setFormData({
+          ...formData,
+          location: suggestion.description,
+          city: city,
+          state: state,
+          zipCode: zipCode
+        })
+      } else {
+        // Fallback if detailed info not available
+        setFormData({ ...formData, location: suggestion.description })
+      }
+    } catch (error) {
+      console.error('Error fetching place details:', error)
+      // Fallback to just the description
+      setFormData({ ...formData, location: suggestion.description })
+    }
+    
+    setShowAddressSuggestions(false)
+  }
+
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
@@ -138,58 +218,35 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
     }))
   }
 
-  const handleAvailabilityChange = (day, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      availability: {
-        ...prev.availability,
-        [day]: {
-          ...prev.availability[day],
-          [field]: value
+  const handleTerritoryToggle = (territoryId) => {
+    setFormData(prev => {
+      const currentTerritories = prev.territories || []
+      const isSelected = currentTerritories.includes(territoryId)
+      
+      if (isSelected) {
+        return {
+          ...prev,
+          territories: currentTerritories.filter(id => id !== territoryId)
+        }
+      } else {
+        return {
+          ...prev,
+          territories: [...currentTerritories, territoryId]
         }
       }
-    }))
-  }
-
-  const addSkill = () => {
-    if (newSkill.trim() && !formData.skills.includes(newSkill.trim())) {
-      setFormData(prev => ({
-        ...prev,
-        skills: [...prev.skills, newSkill.trim()]
-      }))
-      setNewSkill("")
-    }
-  }
-
-  const removeSkill = (skillToRemove) => {
-    setFormData(prev => ({
-      ...prev,
-      skills: prev.skills.filter(skill => skill !== skillToRemove)
-    }))
+    })
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     
     if (!formData.firstName || !formData.lastName) {
-      setError("First name and last name are required")
+      setError("Full name is required")
       return
     }
     
-    if (!formData.username) {
-      setError("Username is required")
-      return
-    }
-    
-    // Only require password for new members, not when editing
-    if (!isEditing && !formData.password) {
-      setError("Password is required")
-      return
-    }
-    
-    // Only validate password length if password is provided (for new members or password changes)
-    if (formData.password && formData.password.length < 6) {
-      setError("Password must be at least 6 characters long")
+    if (!formData.email) {
+      setError("Email is required")
       return
     }
     
@@ -215,16 +272,14 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
         lastName: formData.lastName,
         email: formData.email,
         phone: formData.phone,
-        username: formData.username,
+        location: formData.location,
+        city: formData.city,
+        state: formData.state,
+        zipCode: formData.zipCode,
         role: formData.role,
-        skills: formData.skills,
-        hourlyRate: formData.hourlyRate ? parseFloat(formData.hourlyRate) : null,
-        availability: formData.availability
-      }
-
-      // Only include password if it's provided (for new members or password changes)
-      if (formData.password) {
-        memberData.password = formData.password
+        isServiceProvider: formData.isServiceProvider,
+        territories: formData.territories,
+        permissions: formData.permissions
       }
 
       if (isEditing && member) {
@@ -246,31 +301,30 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
   if (!isOpen) return null
 
   return (
-    <div 
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto"
-    >
-      <div className="bg-white rounded-xl w-full max-w-2xl relative my-6 max-h-[90vh] overflow-y-auto">
-        <div className="p-6">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center">
-              {isEditing ? (
-                <Edit className="h-6 w-6 text-blue-600 mr-2" />
-              ) : (
-                <UserPlus className="h-6 w-6 text-blue-600 mr-2" />
-              )}
-              <h3 className="text-lg font-medium text-gray-900">
-                {isEditing ? "Edit Team Member" : "Add Team Member"}
-              </h3>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
-            >
-              <X className="h-6 w-6" />
-            </button>
+    <div className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center z-50 p-4 overflow-y-auto">
+      <div className="bg-white rounded-xl w-full max-w-lg sm:max-w-md relative my-4 sm:my-6 max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] overflow-hidden flex flex-col">
+        {/* Header - Fixed */}
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b border-gray-200">
+          <div className="flex items-center">
+            {isEditing ? (
+              <Edit className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 mr-2" />
+            ) : (
+              <UserPlus className="h-5 w-5 sm:h-6 sm:w-6 text-blue-600 mr-2" />
+            )}
+            <h3 className="text-base sm:text-lg font-medium text-gray-900">
+              {isEditing ? "Edit Team Member" : "Add Team Member"}
+            </h3>
           </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 p-1"
+          >
+            <X className="h-5 w-5 sm:h-6 sm:w-6" />
+          </button>
+        </div>
 
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {/* Error Message */}
           {error && (
             <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3">
@@ -278,250 +332,299 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form id="team-member-form" onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
             {/* Basic Information */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  First Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.firstName}
-                  onChange={(e) => handleInputChange('firstName', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Last Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.lastName}
-                  onChange={(e) => handleInputChange('lastName', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Email
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => handleInputChange('email', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={handlePhoneChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Username *
-                </label>
-                <input
-                  type="text"
-                  value={formData.username}
-                  onChange={(e) => handleInputChange('username', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="Choose a username for login"
-                  required
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Password {!isEditing ? '*' : '(leave blank to keep current)'}
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => handleInputChange('password', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="Set a password for login"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Role
-                </label>
-                <input
-                  type="text"
-                  value={formData.role}
-                  onChange={(e) => handleInputChange('role', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  placeholder="e.g., Cleaner, Technician"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.phone}
-                  onChange={handlePhoneChange}
-                  placeholder="(555) 123-4567"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Role
-                </label>
-                <input
-                  type="text"
-                  value={formData.role}
-                  onChange={(e) => handleInputChange('role', e.target.value)}
-                  placeholder="e.g., Cleaner, Manager, Technician"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Hourly Rate ($)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.hourlyRate}
-                  onChange={(e) => handleInputChange('hourlyRate', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                />
-              </div>
-            </div>
-
-            {/* Skills */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Skills
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Full Name *
               </label>
-              <div className="flex space-x-2 mb-3">
+              <input
+                type="text"
+                value={`${formData.firstName} ${formData.lastName}`.trim()}
+                onChange={(e) => {
+                  const names = e.target.value.split(' ')
+                  handleInputChange('firstName', names[0] || '')
+                  handleInputChange('lastName', names.slice(1).join(' ') || '')
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Full Name"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Email *
+              </label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleInputChange('email', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Email Address"
+                required
+              />
+              <p className="mt-1 text-sm text-gray-500">
+                An email will be sent with instructions to log into their Zenbooker account.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Mobile Phone Number
+              </label>
+              <input
+                type="tel"
+                value={formData.phone}
+                onChange={handlePhoneChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                placeholder="Optional"
+              />
+            </div>
+
+            {/* Location Section */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Location
+              </label>
+              <div className="relative">
                 <input
                   type="text"
-                  value={newSkill}
-                  onChange={(e) => setNewSkill(e.target.value)}
-                  placeholder="Add a skill"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                  onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addSkill())}
+                  value={formData.location}
+                  onChange={handleLocationChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="Enter address"
                 />
-                <button
-                  type="button"
-                  onClick={addSkill}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  Add
-                </button>
-              </div>
-              {formData.skills.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {formData.skills.map((skill, index) => (
-                    <span
-                      key={index}
-                      className="inline-flex items-center px-3 py-1 rounded-full text-sm bg-blue-100 text-blue-800"
-                    >
-                      {skill}
+                {showAddressSuggestions && addressSuggestions.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {addressSuggestions.map((suggestion, index) => (
                       <button
+                        key={index}
                         type="button"
-                        onClick={() => removeSkill(skill)}
-                        className="ml-2 text-blue-600 hover:text-blue-800"
+                        onClick={() => handleLocationSelect(suggestion)}
+                        className="w-full px-4 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
                       >
-                        ×
+                        <div className="text-sm text-gray-900">{suggestion.description}</div>
                       </button>
-                    </span>
-                  ))}
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="mt-1 text-sm text-gray-500">
+                The location this team member starts work from.
+              </p>
+            </div>
+
+            {/* Service Provider Section */}
+            <div className="border-t border-gray-200 pt-4 sm:pt-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900">Service Provider</h3>
+                  <p className="text-sm text-gray-500">Can this team member be assigned to jobs?</p>
+                </div>
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange('isServiceProvider', !formData.isServiceProvider)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                      formData.isServiceProvider ? 'bg-green-600' : 'bg-gray-200'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        formData.isServiceProvider ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className="ml-2 text-sm font-medium text-gray-900">
+                    {formData.isServiceProvider ? 'YES' : 'NO'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Territories Section */}
+            <div className="border-t border-gray-200 pt-4 sm:pt-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">TERRITORIES</h3>
+              {loadingTerritories ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span className="ml-2 text-sm text-gray-500">Loading territories...</span>
+                </div>
+              ) : territories.length === 0 ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-gray-500">No territories available</p>
+                  <p className="text-xs text-gray-400 mt-1">Create territories in the Territories section first</p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {territories.map((territory) => {
+                    const isSelected = formData.territories.includes(territory.id)
+                    return (
+                      <button
+                        key={territory.id}
+                        type="button"
+                        onClick={() => handleTerritoryToggle(territory.id)}
+                        className={`inline-flex items-center px-3 py-1.5 border rounded-full text-sm font-medium transition-colors ${
+                          isSelected
+                            ? 'border-blue-500 bg-blue-100 text-blue-800 hover:bg-blue-200'
+                            : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50 hover:border-gray-400'
+                        }`}
+                      >
+                        <MapPin className="w-4 h-4 mr-1" />
+                        {territory.name}
+                      </button>
+                    )
+                  })}
                 </div>
               )}
             </div>
 
-            {/* Availability */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Availability
-              </label>
+            {/* User Role and Permissions */}
+            <div className="border-t border-gray-200 pt-4 sm:pt-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">User Role and Permissions</h3>
               <div className="space-y-3">
-                {daysOfWeek.map((day) => (
-                  <div key={day.key} className="flex items-center space-x-4 p-3 border border-gray-200 rounded-lg">
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="checkbox"
-                        checked={formData.availability[day.key].available}
-                        onChange={(e) => handleAvailabilityChange(day.key, 'available', e.target.checked)}
-                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span className="text-sm font-medium text-gray-900 w-20">{day.label}</span>
-                    </div>
-                    
-                    {formData.availability[day.key].available && (
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="time"
-                          value={formData.availability[day.key].start}
-                          onChange={(e) => handleAvailabilityChange(day.key, 'start', e.target.value)}
-                          className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                        <span className="text-sm text-gray-500">to</span>
-                        <input
-                          type="time"
-                          value={formData.availability[day.key].end}
-                          onChange={(e) => handleAvailabilityChange(day.key, 'end', e.target.value)}
-                          className="px-3 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                        />
-                      </div>
-                    )}
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="worker"
+                    checked={formData.role === 'worker'}
+                    onChange={(e) => handleInputChange('role', e.target.value)}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                  />
+                  <div className="ml-3">
+                    <span className="text-sm font-medium text-gray-900">Worker</span>
+                    <p className="text-sm text-gray-500">Can view and update job status</p>
                   </div>
-                ))}
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="supervisor"
+                    checked={formData.role === 'supervisor'}
+                    onChange={(e) => handleInputChange('role', e.target.value)}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                  />
+                  <div className="ml-3">
+                    <span className="text-sm font-medium text-gray-900">Supervisor</span>
+                    <p className="text-sm text-gray-500">Can manage jobs and team members</p>
+                  </div>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="role"
+                    value="manager"
+                    checked={formData.role === 'manager'}
+                    onChange={(e) => handleInputChange('role', e.target.value)}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300"
+                  />
+                  <div className="ml-3">
+                    <span className="text-sm font-medium text-gray-900">Manager</span>
+                    <p className="text-sm text-gray-500">Full access to all features</p>
+                  </div>
+                </label>
               </div>
             </div>
 
-            {/* Form Actions */}
-            <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? "Saving..." : (isEditing ? "Update Member" : "Add Member")}
-              </button>
+            {/* Permissions Section */}
+            <div className="border-t border-gray-200 pt-4 sm:pt-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">PERMISSIONS</h3>
+              <div className="space-y-3">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.permissions.viewCustomerNotes}
+                    onChange={(e) => handleInputChange('permissions', {
+                      ...formData.permissions,
+                      viewCustomerNotes: e.target.checked
+                    })}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  <span className="ml-3 text-sm text-gray-900">View Customer Notes</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.permissions.modifyJobStatus}
+                    onChange={(e) => handleInputChange('permissions', {
+                      ...formData.permissions,
+                      modifyJobStatus: e.target.checked
+                    })}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  <span className="ml-3 text-sm text-gray-900">Modify Job Status</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.permissions.editJobDetails}
+                    onChange={(e) => handleInputChange('permissions', {
+                      ...formData.permissions,
+                      editJobDetails: e.target.checked
+                    })}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  <span className="ml-3 text-sm text-gray-900">Edit Job Details</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.permissions.rescheduleJobs}
+                    onChange={(e) => handleInputChange('permissions', {
+                      ...formData.permissions,
+                      rescheduleJobs: e.target.checked
+                    })}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  <span className="ml-3 text-sm text-gray-900">Reschedule Jobs</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={formData.permissions.editAvailability}
+                    onChange={(e) => handleInputChange('permissions', {
+                      ...formData.permissions,
+                      editAvailability: e.target.checked
+                    })}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  <span className="ml-3 text-sm text-gray-900">Edit Availability</span>
+                </label>
+              </div>
             </div>
           </form>
+        </div>
+
+        {/* Footer - Fixed */}
+        <div className="flex items-center justify-end space-x-3 p-4 sm:p-6 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="team-member-form"
+            disabled={loading}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Saving...
+              </>
+            ) : (
+              <>
+                {isEditing ? <Edit className="w-4 h-4 mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                {isEditing ? "Update" : "Add"} Team Member
+              </>
+            )}
+          </button>
         </div>
       </div>
     </div>

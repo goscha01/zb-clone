@@ -3,24 +3,36 @@
 import { useState, useEffect } from "react"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
-import { MapPin, Clock, Users, Wrench, ChevronDown, Plus, Search, Filter, Edit, Trash2, BarChart3, DollarSign, Calendar, AlertCircle, CheckCircle } from "lucide-react"
-import CreateTerritoryModal from "../components/create-territory-modal"
+import { 
+  Plus, 
+  Search, 
+  Filter, 
+  MapPin, 
+  Clock, 
+  Users, 
+  DollarSign, 
+  Edit, 
+  Trash2, 
+  Eye, 
+  Settings,
+  Calendar,
+  Globe,
+  Target,
+  Loader2
+} from "lucide-react"
 import { useAuth } from "../context/AuthContext"
 import { territoriesAPI } from "../services/api"
-import LoadingButton from "../components/loading-button"
+import CreateTerritoryModal from "../components/create-territory-modal"
 
 const ZenbookerTerritories = () => {
-  const { user } = useAuth()
+  const { user, authLoading } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState("active")
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
-  const [selectedTerritory, setSelectedTerritory] = useState(null)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
-  
-  // API State
   const [territories, setTerritories] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [selectedTerritory, setSelectedTerritory] = useState(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [filters, setFilters] = useState({
     status: "",
     search: "",
@@ -30,17 +42,23 @@ const ZenbookerTerritories = () => {
 
   // Initial data fetch
   useEffect(() => {
-    fetchTerritories()
-  }, [])
+    if (!authLoading && user?.id) {
+      fetchTerritories()
+    } else if (!authLoading && !user?.id) {
+      window.location.href = '/signin'
+    }
+  }, [authLoading, user?.id])
 
   // Debounced search
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      fetchTerritories()
+      if (user?.id) {
+        fetchTerritories()
+      }
     }, 300)
 
     return () => clearTimeout(timeoutId)
-  }, [filters.status, filters.search, filters.sortBy, filters.sortOrder])
+  }, [filters.status, filters.search, filters.sortBy, filters.sortOrder, user?.id])
 
   const fetchTerritories = async () => {
     if (!user?.id) return
@@ -67,38 +85,26 @@ const ZenbookerTerritories = () => {
     }
   }
 
-  const handleCreateTerritory = () => {
-    setIsCreateModalOpen(true)
-  }
-
-  const handleEditTerritory = (territory) => {
-    setSelectedTerritory(territory)
-    setIsEditModalOpen(true)
-  }
-
-  const handleDeleteTerritory = async (territoryId) => {
-    if (!window.confirm('Are you sure you want to delete this territory?')) {
-      return
-    }
-    
-    try {
-      await territoriesAPI.delete(territoryId)
-      fetchTerritories()
-    } catch (error) {
-      console.error('Error deleting territory:', error)
-      alert('Failed to delete territory. Please try again.')
-    }
-  }
-
-  const handleTerritoryUpdate = () => {
-    fetchTerritories()
-    setIsCreateModalOpen(false)
-    setIsEditModalOpen(false)
-    setSelectedTerritory(null)
-  }
-
   const handleFilterChange = (newFilters) => {
     setFilters(prev => ({ ...prev, ...newFilters }))
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'active': return 'bg-green-100 text-green-800'
+      case 'inactive': return 'bg-gray-100 text-gray-800'
+      case 'archived': return 'bg-red-100 text-red-800'
+      default: return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const getStatusLabel = (status) => {
+    switch (status) {
+      case 'active': return 'ACTIVE'
+      case 'inactive': return 'INACTIVE'
+      case 'archived': return 'ARCHIVED'
+      default: return 'UNKNOWN'
+    }
   }
 
   const formatCurrency = (amount) => {
@@ -108,268 +114,236 @@ const ZenbookerTerritories = () => {
     }).format(amount || 0)
   }
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'active':
-        return 'bg-green-100 text-green-800'
-      case 'inactive':
-        return 'bg-gray-100 text-gray-800'
-      case 'archived':
-        return 'bg-red-100 text-red-800'
-      default:
-        return 'bg-gray-100 text-gray-800'
-    }
+  const handleCreateTerritory = () => {
+    setIsCreateModalOpen(true)
   }
 
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'active':
-        return 'Active'
-      case 'inactive':
-        return 'Inactive'
-      case 'archived':
-        return 'Archived'
-      default:
-        return status
-    }
+  const handleEditTerritory = (territory) => {
+    setSelectedTerritory(territory)
+    setIsEditModalOpen(true)
   }
 
-  const filteredTerritories = territories.filter(territory => {
-    if (activeTab === "active" && territory.status !== "active") return false
-    if (activeTab === "inactive" && territory.status !== "inactive") return false
-    return true
-  })
+  const handleTerritoryUpdate = () => {
+    fetchTerritories()
+    setIsCreateModalOpen(false)
+    setIsEditModalOpen(false)
+    setSelectedTerritory(null)
+  }
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      {/* Main Sidebar */}
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activePage="territories" />
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Mobile Header */}
-        <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
-
-        {/* Content Area */}
-        <div className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto px-6 py-8">
+    <div className="flex h-screen bg-gray-50">
+      <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
+      
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <MobileHeader setSidebarOpen={setSidebarOpen} />
+        
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             {/* Header */}
             <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h1 className="text-2xl font-bold text-gray-900">Service Territories</h1>
-                <button 
-                  onClick={handleCreateTerritory}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>New Territory</span>
-                </button>
-              </div>
-              <p className="text-gray-600">
-                Manage the geographic areas where you provide services and do work. You can create multiple service territories with unique hours, services, and service providers.{" "}
-                <button className="text-blue-600 hover:text-blue-700">Learn more</button>
-              </p>
-              <p className="text-gray-600 mt-2">
-                You are currently using {territories.filter(t => t.status === 'active').length} of 2 service territories available on your plan.
-              </p>
-            </div>
-
-            {/* Filters and Tabs */}
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex space-x-1 bg-gray-100 rounded-lg p-1">
-                <button
-                  onClick={() => setActiveTab("active")}
-                  className={`px-4 py-2 text-sm font-medium rounded-md ${
-                    activeTab === "active"
-                      ? "bg-white text-gray-900 shadow"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Active{" "}
-                  <span className="ml-1 text-gray-400">
-                    {territories.filter(t => t.status === "active").length}
-                  </span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("inactive")}
-                  className={`px-4 py-2 text-sm font-medium rounded-md ${
-                    activeTab === "inactive"
-                      ? "bg-white text-gray-900 shadow"
-                      : "text-gray-500 hover:text-gray-700"
-                  }`}
-                >
-                  Inactive{" "}
-                  <span className="ml-1 text-gray-400">
-                    {territories.filter(t => t.status === "inactive").length}
-                  </span>
-                </button>
-              </div>
-              
-              {/* Search and Filters */}
-              <div className="flex items-center space-x-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                  <input
-                    type="text"
-                    placeholder="Search territories..."
-                    value={filters.search}
-                    onChange={(e) => handleFilterChange({ search: e.target.value })}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                  />
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">Service Territories</h1>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Manage your service areas, pricing, and team assignments
+                  </p>
                 </div>
-                <select
-                  value={filters.sortBy}
-                  onChange={(e) => handleFilterChange({ sortBy: e.target.value })}
-                  className="border border-gray-300 rounded-lg px-3 py-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="name">Sort by Name</option>
-                  <option value="location">Sort by Location</option>
-                  <option value="total_jobs">Sort by Jobs</option>
-                  <option value="total_revenue">Sort by Revenue</option>
-                </select>
+                <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                  <button 
+                    onClick={handleCreateTerritory}
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Territory
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Territory Cards */}
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                <span className="ml-3 text-gray-600">Loading territories...</span>
-              </div>
-            ) : error ? (
-              <div className="text-center py-12">
-                <AlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Error loading territories</h3>
-                <p className="text-gray-600 mb-4">{error}</p>
-                <button 
-                  onClick={fetchTerritories}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                >
-                  Try Again
-                </button>
-              </div>
-            ) : (
-            <div className="space-y-4">
-                {filteredTerritories.map((territory) => (
-                  <div key={territory.id} className="bg-white rounded-lg shadow p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center space-x-4">
-                      <h3 className="text-lg font-semibold text-gray-900">{territory.name}</h3>
-                        <span className={`px-3 py-1 text-sm font-medium rounded-full ${getStatusColor(territory.status)}`}>
-                          {getStatusLabel(territory.status)}
-                        </span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleEditTerritory(territory)}
-                          className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTerritory(territory.id)}
-                          className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <p className="text-gray-600 mb-6">{territory.location}</p>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2 text-sm text-gray-500">
-                          <MapPin className="w-4 h-4" />
-                          <span>SERVICE AREA</span>
-                        </div>
-                        <p className="text-sm text-gray-900">
-                          {territory.radius_miles} mile radius
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2 text-sm text-gray-500">
-                          <Clock className="w-4 h-4" />
-                          <span>TIMEZONE</span>
-                        </div>
-                        <p className="text-sm text-gray-900">{territory.timezone}</p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2 text-sm text-gray-500">
-                          <Users className="w-4 h-4" />
-                          <span>TEAM MEMBERS</span>
-                        </div>
-                        <p className="text-sm text-gray-900">
-                          {territory.team_members?.length || 0} assigned
-                        </p>
-                      </div>
-
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2 text-sm text-gray-500">
-                          <Wrench className="w-4 h-4" />
-                          <span>SERVICES</span>
-                        </div>
-                        <p className="text-sm text-gray-900">
-                          {territory.services?.length || 0} services
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Performance Stats */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-200">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-gray-900">{territory.total_jobs || 0}</div>
-                        <div className="text-sm text-gray-600">Total Jobs</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-green-600">{territory.completed_jobs || 0}</div>
-                        <div className="text-sm text-gray-600">Completed</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">{formatCurrency(territory.total_revenue || 0)}</div>
-                        <div className="text-sm text-gray-600">Revenue</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-purple-600">{formatCurrency(territory.avg_job_value || 0)}</div>
-                        <div className="text-sm text-gray-600">Avg Job Value</div>
-                      </div>
+            {/* Filters */}
+            <div className="bg-white shadow rounded-lg mb-6">
+              <div className="px-4 py-5 sm:p-6">
+                <div className="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <input
+                        type="text"
+                        placeholder="Search territories..."
+                        value={filters.search}
+                        onChange={(e) => handleFilterChange({ search: e.target.value })}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
                     </div>
                   </div>
-                ))}
-
-                {filteredTerritories.length === 0 && (
-                <div className="text-center py-12">
-                    <MapPin className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">
-                      {activeTab === "active" ? "No active territories" : "No inactive territories"}
-                    </h3>
-                    <p className="text-gray-600 mb-4">
-                      {activeTab === "active" 
-                        ? "Create your first territory to start managing service areas."
-                        : "Inactive territories will appear here."
-                      }
-                    </p>
-                    {activeTab === "active" && (
-                      <button
-                        onClick={handleCreateTerritory}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                      >
-                        Create Territory
-                      </button>
-                    )}
+                  <div className="flex space-x-2">
+                    <select
+                      value={filters.status}
+                      onChange={(e) => handleFilterChange({ status: e.target.value })}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">All Status</option>
+                      <option value="active">Active</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="archived">Archived</option>
+                    </select>
+                    <select
+                      value={filters.sortBy}
+                      onChange={(e) => handleFilterChange({ sortBy: e.target.value })}
+                      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="name">Name</option>
+                      <option value="created_at">Created Date</option>
+                      <option value="total_jobs">Total Jobs</option>
+                      <option value="total_revenue">Revenue</option>
+                    </select>
+                  </div>
                 </div>
-              )}
+              </div>
             </div>
+
+            {/* Error Message */}
+            {error && (
+              <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                <p className="text-sm text-red-800">{error}</p>
+              </div>
+            )}
+
+            {/* Territories List */}
+            {loading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              </div>
+            ) : territories.length === 0 ? (
+              <div className="bg-white border border-gray-200 rounded-lg p-8 text-center">
+                <MapPin className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-2 text-sm font-medium text-gray-900">No territories found</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Get started by creating your first service territory.
+                </p>
+                <div className="mt-6">
+                  <button 
+                    onClick={handleCreateTerritory}
+                    className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Territory
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white shadow overflow-hidden sm:rounded-md">
+                <ul className="divide-y divide-gray-200">
+                  {territories.map((territory) => (
+                    <li key={territory.id}>
+                      <div className="px-4 py-4 sm:px-6">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center space-x-3">
+                              <div className="flex-shrink-0">
+                                <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center">
+                                  <MapPin className="w-5 h-5 text-blue-600" />
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center space-x-2">
+                                  <p className="text-sm font-medium text-gray-900 truncate">
+                                    {territory.name}
+                                  </p>
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(territory.status)}`}>
+                                    {getStatusLabel(territory.status)}
+                                  </span>
+                                </div>
+                                <div className="mt-1 flex items-center space-x-4 text-sm text-gray-500">
+                                  <div className="flex items-center space-x-1">
+                                    <Globe className="w-4 h-4" />
+                                    <span>{territory.location}</span>
+                                  </div>
+                                  <div className="flex items-center space-x-1">
+                                    <Target className="w-4 h-4" />
+                                    <span>{territory.radius_miles} miles</span>
+                                  </div>
+                                  <div className="flex items-center space-x-1">
+                                    <Users className="w-4 h-4" />
+                                    <span>{territory.team_members?.length || 0} team members</span>
+                                  </div>
+                                  <div className="flex items-center space-x-1">
+                                    <DollarSign className="w-4 h-4" />
+                                    <span>{territory.pricing_multiplier}x pricing</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                                                     <div className="flex items-center space-x-2">
+                             <button className="p-2 text-gray-400 hover:text-gray-600">
+                               <Eye className="w-4 h-4" />
+                             </button>
+                             <button 
+                               onClick={() => handleEditTerritory(territory)}
+                               className="p-2 text-gray-400 hover:text-blue-600"
+                             >
+                               <Edit className="w-4 h-4" />
+                             </button>
+                             <button className="p-2 text-gray-400 hover:text-red-600">
+                               <Trash2 className="w-4 h-4" />
+                             </button>
+                           </div>
+                        </div>
+                        
+                        {/* Territory Stats */}
+                        <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-gray-900">{territory.total_jobs || 0}</p>
+                            <p className="text-xs text-gray-500">Total Jobs</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-gray-900">{territory.completed_jobs || 0}</p>
+                            <p className="text-xs text-gray-500">Completed</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-gray-900">{formatCurrency(territory.total_revenue)}</p>
+                            <p className="text-xs text-gray-500">Revenue</p>
+                          </div>
+                          <div className="text-center">
+                            <p className="text-2xl font-bold text-gray-900">{formatCurrency(territory.avg_job_value)}</p>
+                            <p className="text-xs text-gray-500">Avg Job Value</p>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
           </div>
-        </div>
+        </main>
       </div>
-      <CreateTerritoryModal 
+
+      {/* Territory Creation Modal */}
+      <CreateTerritoryModal
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
-        onTerritoryCreated={handleTerritoryUpdate}
+        onSuccess={handleTerritoryUpdate}
+        userId={user?.id}
+      />
+
+      {/* Territory Edit Modal */}
+      <CreateTerritoryModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onSuccess={handleTerritoryUpdate}
+        territory={selectedTerritory}
+        isEditing={true}
+        userId={user?.id}
       />
     </div>
   )

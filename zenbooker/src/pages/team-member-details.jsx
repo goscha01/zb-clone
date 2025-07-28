@@ -26,6 +26,7 @@ import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
 import AddTeamMemberModal from "../components/add-team-member-modal"
 import { useAuth } from "../context/AuthContext"
+import { territoriesAPI } from "../services/api"
 
 const TeamMemberDetails = () => {
   const { memberId } = useParams()
@@ -52,6 +53,7 @@ const TeamMemberDetails = () => {
   const [customAvailability, setCustomAvailability] = useState([])
   const [territories, setTerritories] = useState([])
   const [availableTerritories, setAvailableTerritories] = useState([])
+  const [territoryLoading, setTerritoryLoading] = useState(false)
 
   const [settings, setSettings] = useState({
     isServiceProvider: true,
@@ -69,6 +71,30 @@ const TeamMemberDetails = () => {
       fetchTerritories()
     }
   }, [memberId])
+
+  // Map territory IDs to full territory objects when available territories load
+  useEffect(() => {
+    if (availableTerritories.length > 0 && territories.length > 0) {
+      const mappedTerritories = territories.map(territory => {
+        if (typeof territory === 'object' && territory.id && !territory.name) {
+          // This is a territory ID object, find the full territory
+          const fullTerritory = availableTerritories.find(t => t.id === territory.id)
+          return fullTerritory || territory
+        }
+        return territory
+      })
+      
+      // Only update if the mapping actually changed something
+      const hasChanges = mappedTerritories.some((t, i) => 
+        t.name && territories[i] && !territories[i].name
+      )
+      
+      if (hasChanges) {
+        console.log('Mapping territories:', mappedTerritories)
+        setTerritories(mappedTerritories)
+      }
+    }
+  }, [availableTerritories, territories])
 
   const fetchTeamMemberDetails = async () => {
     try {
@@ -113,7 +139,15 @@ const TeamMemberDetails = () => {
       if (teamMemberData.territories) {
         try {
           const territoriesData = JSON.parse(teamMemberData.territories)
-          setTerritories(territoriesData)
+          console.log('Parsed territories data:', territoriesData)
+          
+          // If territoriesData is an array of IDs, we need to map them to full territory objects
+          if (Array.isArray(territoriesData)) {
+            // For now, set the IDs - we'll map to full objects after availableTerritories loads
+            setTerritories(territoriesData.map(id => ({ id })))
+          } else {
+            setTerritories(territoriesData)
+          }
         } catch (e) {
           console.log('Could not parse territories:', e)
         }
@@ -128,16 +162,16 @@ const TeamMemberDetails = () => {
 
   const fetchTerritories = async () => {
     try {
-      // This would fetch available territories from your API
-      // For now, using mock data
-      setAvailableTerritories([
-        { id: 1, name: "Downtown Area", city: "New York" },
-        { id: 2, name: "Uptown District", city: "New York" },
-        { id: 3, name: "Brooklyn Heights", city: "Brooklyn" },
-        { id: 4, name: "Queens Central", city: "Queens" }
-      ])
+      setTerritoryLoading(true)
+      console.log('Fetching available territories for user:', user?.id)
+      const response = await territoriesAPI.getAll(user?.id, { status: 'active' })
+      console.log('Territories response:', response)
+      setAvailableTerritories(response.territories || [])
     } catch (error) {
       console.error('Error fetching territories:', error)
+      setAvailableTerritories([])
+    } finally {
+      setTerritoryLoading(false)
     }
   }
 
@@ -198,15 +232,43 @@ const TeamMemberDetails = () => {
     setCustomAvailability(customAvailability.filter(item => item.id !== id))
   }
 
-  const handleAddTerritory = (territoryId) => {
-    const territory = availableTerritories.find(t => t.id === territoryId)
-    if (territory && !territories.find(t => t.id === territoryId)) {
-      setTerritories([...territories, territory])
+  const handleAddTerritory = async (territoryId) => {
+    try {
+      setTerritoryLoading(true)
+      const territory = availableTerritories.find(t => t.id === territoryId)
+      if (territory && !territories.find(t => t.id === territoryId)) {
+        const updatedTerritories = [...territories, territory]
+        setTerritories(updatedTerritories)
+        
+        // Save to backend
+        await teamAPI.update(memberId, {
+          territories: JSON.stringify(updatedTerritories.map(t => t.id))
+        })
+      }
+    } catch (error) {
+      console.error('Error adding territory:', error)
+      setError("Failed to add territory. Please try again.")
+    } finally {
+      setTerritoryLoading(false)
     }
   }
 
-  const handleRemoveTerritory = (territoryId) => {
-    setTerritories(territories.filter(t => t.id !== territoryId))
+  const handleRemoveTerritory = async (territoryId) => {
+    try {
+      setTerritoryLoading(true)
+      const updatedTerritories = territories.filter(t => t.id !== territoryId)
+      setTerritories(updatedTerritories)
+      
+      // Save to backend
+      await teamAPI.update(memberId, {
+        territories: JSON.stringify(updatedTerritories.map(t => t.id))
+      })
+    } catch (error) {
+      console.error('Error removing territory:', error)
+      setError("Failed to remove territory. Please try again.")
+    } finally {
+      setTerritoryLoading(false)
+    }
   }
 
   if (loading) {
@@ -299,7 +361,7 @@ const TeamMemberDetails = () => {
             <div className="space-y-6">
               {/* Basic Info Card */}
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-6">
                     <div className="flex items-center space-x-3">
                       <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -308,7 +370,7 @@ const TeamMemberDetails = () => {
                         </span>
                       </div>
                       <div>
-                        <h2 className="text-xl font-semibold text-gray-900">
+                        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
                           {teamMember.first_name} {teamMember.last_name}
                         </h2>
                         <p className="text-sm text-gray-500">{teamMember.role || 'Team Member'}</p>
@@ -323,7 +385,7 @@ const TeamMemberDetails = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-500">Email</label>
-                      <p className="mt-1 text-sm text-gray-900">{teamMember.email}</p>
+                      <p className="mt-1 text-sm text-gray-900 break-all">{teamMember.email}</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-500">Username</label>
@@ -335,15 +397,18 @@ const TeamMemberDetails = () => {
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           teamMember.status === 'active' 
                             ? 'bg-green-100 text-green-800' 
+                            : teamMember.status === 'invited'
+                            ? 'bg-yellow-100 text-yellow-800'
                             : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {teamMember.status === 'active' ? 'Active' : 'Inactive'}
+                          {teamMember.status === 'active' ? 'Active' : 
+                           teamMember.status === 'invited' ? 'Invited' : 'Inactive'}
                         </span>
                       </p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-500">Role</label>
-                      <p className="mt-1 text-sm text-gray-900">{teamMember.role || 'Team Member'}</p>
+                      <p className="mt-1 text-sm text-gray-900 capitalize">{teamMember.role || 'Team Member'}</p>
                     </div>
                     {teamMember.hourly_rate && (
                       <div>
@@ -352,33 +417,30 @@ const TeamMemberDetails = () => {
                       </div>
                     )}
                   </div>
-
-                  {teamMember.skills && (
-                    <div className="mt-4">
-                      <label className="block text-sm font-medium text-gray-500">Skills</label>
-                      <div className="mt-1 flex flex-wrap gap-2">
-                        {JSON.parse(teamMember.skills || '[]').map((skill, index) => (
-                          <span key={index} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
 
               {/* Territories Card */}
               <div className="bg-white rounded-lg border border-gray-200">
-                <div className="p-6">
+                <div className="p-4 sm:p-6">
                   <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
                     <div className="flex items-center space-x-2">
                       <MapPinIcon className="w-5 h-5 text-gray-400" />
                       <h3 className="text-lg font-semibold text-gray-900">Territories</h3>
+                      {territoryLoading && (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                      )}
                     </div>
                     <select 
-                      onChange={(e) => handleAddTerritory(parseInt(e.target.value))}
-                      className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                      onChange={(e) => {
+                        const territoryId = parseInt(e.target.value)
+                        if (territoryId) {
+                          handleAddTerritory(territoryId)
+                          e.target.value = "" // Reset dropdown
+                        }
+                      }}
+                      disabled={territoryLoading}
+                      className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
                       defaultValue=""
                     >
                       <option value="" disabled>Add Territory</option>
@@ -386,31 +448,59 @@ const TeamMemberDetails = () => {
                         .filter(t => !territories.find(ct => ct.id === t.id))
                         .map(territory => (
                           <option key={territory.id} value={territory.id}>
-                            {territory.name} - {territory.city}
+                            {territory.name} {territory.location ? `- ${territory.location}` : ''}
                           </option>
                         ))}
                     </select>
                   </div>
                   
-                  {territories.length === 0 ? (
-                    <p className="text-sm text-gray-500">No territories assigned</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {territories.map(territory => (
-                        <div key={territory.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <p className="font-medium text-gray-900">{territory.name}</p>
-                            <p className="text-sm text-gray-500">{territory.city}</p>
-                          </div>
-                          <button
-                            onClick={() => handleRemoveTerritory(territory.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+                  {territoryLoading ? (
+                    <div className="text-center py-6">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                      <p className="text-sm text-gray-500">Loading available territories...</p>
                     </div>
+                  ) : (
+                    territories.length === 0 ? (
+                      <div className="text-center py-6">
+                        <MapPinIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                        <p className="text-sm text-gray-500">No territories assigned</p>
+                        <p className="text-xs text-gray-400 mt-1">Add territories to assign this team member to specific service areas</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {console.log('Rendering territories:', territories)}
+                        {territories.map(territory => {
+                          console.log('Territory object:', territory)
+                          return (
+                            <div key={territory.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                              <div className="flex items-center space-x-2">
+                                <MapPinIcon className="w-4 h-4 text-blue-600" />
+                                <div>
+                                  <p className="font-medium text-gray-900">
+                                    {territory.name || `Territory ${territory.id}`}
+                                  </p>
+                                  {territory.location && (
+                                    <p className="text-sm text-gray-500">{territory.location}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => handleRemoveTerritory(territory.id)}
+                                disabled={territoryLoading}
+                                className="text-red-600 hover:text-red-700 p-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Remove territory"
+                              >
+                                {territoryLoading ? (
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
+                                ) : (
+                                  <X className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
                   )}
                 </div>
               </div>
