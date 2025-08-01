@@ -1,46 +1,49 @@
-"use client"
-
-import { useState, useEffect } from "react"
-import { useParams, useNavigate } from "react-router-dom"
+import React, { useState, useEffect, useRef } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
+import Sidebar from '../components/sidebar'
+import MobileHeader from '../components/mobile-header'
 import { 
   ChevronLeft, 
-  HelpCircle, 
-  Clock, 
-  AlertCircle, 
+  Edit, 
+  Save, 
+  Trash2, 
+  Phone, 
   Mail, 
-  MessageSquare,
-  Calendar,
-  Tag as TagIcon,
-  Phone,
   MapPin,
-  User,
-  Edit,
-  Trash2,
-  X,
-  Save,
+  Calendar,
+  Settings,
+  Users,
+  Star,
+  Clock,
+  CheckCircle,
+  XCircle,
+  HelpCircle,
   Plus,
-  MapPin as MapPinIcon
-} from "lucide-react"
-import { teamAPI } from "../services/api"
-import Sidebar from "../components/sidebar"
-import MobileHeader from "../components/mobile-header"
-import AddTeamMemberModal from "../components/add-team-member-modal"
-import { useAuth } from "../context/AuthContext"
-import { territoriesAPI } from "../services/api"
+  X,
+  Bell,
+  MessageSquare,
+  DollarSign,
+  User,
+  AlertCircle
+} from 'lucide-react'
+import { teamAPI } from '../services/api'
 
 const TeamMemberDetails = () => {
   const { memberId } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  
+  // State
   const [teamMember, setTeamMember] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [showDeleteModal, setShowDeleteModal] = useState(false)
-  const [deleteLoading, setDeleteLoading] = useState(false)
-  const [editingHours, setEditingHours] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [editingAvailability, setEditingAvailability] = useState(false)
+  const [error, setError] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [editFormData, setEditFormData] = useState({})
+  const [territories, setTerritories] = useState([])
+  const [displayedTerritories, setDisplayedTerritories] = useState([])
+  const [skills, setSkills] = useState([])
   const [workingHours, setWorkingHours] = useState({
     sunday: { available: false, hours: "" },
     monday: { available: true, hours: "9:00 AM - 6:00 PM" },
@@ -51,10 +54,8 @@ const TeamMemberDetails = () => {
     saturday: { available: false, hours: "" }
   })
   const [customAvailability, setCustomAvailability] = useState([])
-  const [territories, setTerritories] = useState([])
-  const [availableTerritories, setAvailableTerritories] = useState([])
-  const [territoryLoading, setTerritoryLoading] = useState(false)
-
+  const [editingHours, setEditingHours] = useState(false)
+  const [editingAvailability, setEditingAvailability] = useState(false)
   const [settings, setSettings] = useState({
     isServiceProvider: true,
     canEditAvailability: true,
@@ -64,109 +65,333 @@ const TeamMemberDetails = () => {
     emailNotifications: true,
     smsNotifications: false
   })
+  const [performanceData, setPerformanceData] = useState({
+    jobsCompleted: 0,
+    averageRating: 0,
+    hoursWorked: 0,
+    revenueGenerated: 0
+  })
+  const [recentJobs, setRecentJobs] = useState([])
+  
+  // Google Places Autocomplete
+  const [addressSuggestions, setAddressSuggestions] = useState([])
+  const [showAddressSuggestions, setShowAddressSuggestions] = useState(false)
+  const [addressLoading, setAddressLoading] = useState(false)
+  const locationInputRef = useRef(null)
+  
+  // Skills modal
+  const [showAddSkillModal, setShowAddSkillModal] = useState(false)
+  const [newSkill, setNewSkill] = useState({ name: '', level: 'Intermediate' })
+  
+  // Territories modal
+  const [showAddTerritoryModal, setShowAddTerritoryModal] = useState(false)
+  const [availableTerritories, setAvailableTerritories] = useState([])
+  const [territoryLoading, setTerritoryLoading] = useState(false)
 
+  // Load team member data
   useEffect(() => {
     if (memberId) {
       fetchTeamMemberDetails()
-      fetchTerritories()
+      fetchAvailableTerritories()
     }
   }, [memberId])
-
-  // Map territory IDs to full territory objects when available territories load
-  useEffect(() => {
-    if (availableTerritories.length > 0 && territories.length > 0) {
-      const mappedTerritories = territories.map(territory => {
-        if (typeof territory === 'object' && territory.id && !territory.name) {
-          // This is a territory ID object, find the full territory
-          const fullTerritory = availableTerritories.find(t => t.id === territory.id)
-          return fullTerritory || territory
-        }
-        return territory
-      })
-      
-      // Only update if the mapping actually changed something
-      const hasChanges = mappedTerritories.some((t, i) => 
-        t.name && territories[i] && !territories[i].name
-      )
-      
-      if (hasChanges) {
-        console.log('Mapping territories:', mappedTerritories)
-        setTerritories(mappedTerritories)
-      }
-    }
-  }, [availableTerritories, territories])
 
   const fetchTeamMemberDetails = async () => {
     try {
       setLoading(true)
-      setError("")
+      setError('')
       
-      console.log('Fetching team member details for ID:', memberId)
-      
-      if (!memberId) {
-        throw new Error('No team member ID provided')
-      }
-      
+      console.log('Fetching team member with ID:', memberId)
       const response = await teamAPI.getById(memberId)
       console.log('Team member response:', response)
+      console.log('Team member data:', JSON.stringify(response, null, 2))
+      console.log('Team member territories from API:', response.teamMember?.territories)
       
-      if (!response) {
-        throw new Error('No response from API')
-      }
-      
-      // The API returns { teamMember, jobs } structure
-      const teamMemberData = response.teamMember || response
-      
-      if (!teamMemberData) {
-        throw new Error('No team member data in response')
-      }
-      
-      console.log('Setting team member data:', teamMemberData)
-      setTeamMember(teamMemberData)
-      
-      // Parse availability if it exists
-      if (teamMemberData.availability) {
-        try {
-          const availability = JSON.parse(teamMemberData.availability)
-          setWorkingHours(availability.workingHours || workingHours)
-          setCustomAvailability(availability.customAvailability || [])
-        } catch (e) {
-          console.log('Could not parse availability:', e)
-        }
-      }
-      
-      // Parse territories if they exist
-      if (teamMemberData.territories) {
-        try {
-          const territoriesData = JSON.parse(teamMemberData.territories)
-          console.log('Parsed territories data:', territoriesData)
-          
-          // If territoriesData is an array of IDs, we need to map them to full territory objects
-          if (Array.isArray(territoriesData)) {
-            // For now, set the IDs - we'll map to full objects after availableTerritories loads
-            setTerritories(territoriesData.map(id => ({ id })))
-          } else {
-            setTerritories(territoriesData)
+      if (response && response.teamMember) {
+        const teamMemberData = response.teamMember
+        setTeamMember(teamMemberData)
+        
+        // Parse skills
+        if (teamMemberData.skills) {
+          try {
+            console.log('Raw skills from team member:', teamMemberData.skills)
+            let parsedSkills
+            if (typeof teamMemberData.skills === 'string') {
+              // Handle double-escaped JSON
+              try {
+                parsedSkills = JSON.parse(teamMemberData.skills)
+                console.log('First parse successful:', parsedSkills)
+              } catch (e) {
+                console.log('First parse failed, trying double parse')
+                // If first parse fails, try parsing again (double-escaped)
+                parsedSkills = JSON.parse(JSON.parse(teamMemberData.skills))
+                console.log('Double parse successful:', parsedSkills)
+              }
+            } else {
+              parsedSkills = teamMemberData.skills
+            }
+            console.log('Parsed skills:', parsedSkills)
+            console.log('Is parsedSkills an array?', Array.isArray(parsedSkills))
+            console.log('parsedSkills type:', typeof parsedSkills)
+            console.log('parsedSkills value:', parsedSkills)
+            
+            // Force it to be an array if it's a string that looks like an array
+            let skillsArray
+            if (typeof parsedSkills === 'string' && parsedSkills.startsWith('[')) {
+              try {
+                skillsArray = JSON.parse(parsedSkills)
+                console.log('Re-parsed skills from string:', skillsArray)
+              } catch (e) {
+                skillsArray = []
+              }
+            } else if (Array.isArray(parsedSkills)) {
+              skillsArray = parsedSkills
+            } else {
+              skillsArray = []
+            }
+            
+            console.log('Final skillsArray:', skillsArray)
+            setSkills(skillsArray)
+          } catch (e) {
+            console.error('Error parsing skills:', e)
+            setSkills([])
           }
-        } catch (e) {
-          console.log('Could not parse territories:', e)
+        } else {
+          console.log('No skills found in team member data')
+          setSkills([])
+        }
+
+        // Parse territories
+        if (teamMemberData.territories) {
+          try {
+            console.log('Raw territories from team member:', teamMemberData.territories)
+            let parsedTerritories
+            if (typeof teamMemberData.territories === 'string') {
+              console.log('Territories is string, parsing as JSON...')
+              try {
+                parsedTerritories = JSON.parse(teamMemberData.territories)
+                console.log('First parse successful:', parsedTerritories)
+              } catch (e) {
+                console.log('First parse failed, trying double parse')
+                try {
+                  parsedTerritories = JSON.parse(JSON.parse(teamMemberData.territories))
+                  console.log('Double parse successful:', parsedTerritories)
+                } catch (e2) {
+                  console.log('Double parse also failed, extracting numbers from string...')
+                  // If JSON parsing fails, try to extract numbers from the string
+                  const matches = teamMemberData.territories.match(/\d+/g)
+                  parsedTerritories = matches ? matches.map(Number) : []
+                  console.log('Extracted numbers from string:', parsedTerritories)
+                }
+              }
+            } else {
+              parsedTerritories = teamMemberData.territories
+            }
+            console.log('Final parsed territories:', parsedTerritories)
+            console.log('Type of parsedTerritories:', typeof parsedTerritories)
+            console.log('Is Array?', Array.isArray(parsedTerritories))
+            console.log('Length:', parsedTerritories ? parsedTerritories.length : 'undefined')
+            
+            // Robust parsing to ensure we always have an array of territory IDs
+            let finalTerritories = []
+            
+            // If parsedTerritories is a string, try to parse it again
+            if (typeof parsedTerritories === 'string') {
+              console.log('parsedTerritories is string, attempting to re-parse...')
+              try {
+                const reParsed = JSON.parse(parsedTerritories)
+                console.log('Re-parsed result:', reParsed)
+                if (Array.isArray(reParsed)) {
+                  finalTerritories = reParsed
+                }
+              } catch (e) {
+                console.log('Re-parsing failed:', e)
+              }
+            } else if (Array.isArray(parsedTerritories)) {
+              console.log('parsedTerritories is already an array')
+              finalTerritories = parsedTerritories
+            } else if (parsedTerritories && typeof parsedTerritories === 'object' && parsedTerritories.length > 0) {
+              console.log('parsedTerritories is array-like object')
+              finalTerritories = parsedTerritories
+            }
+            
+            // Filter to ensure we only have numeric IDs
+            finalTerritories = finalTerritories.filter(id => typeof id === 'number' || (typeof id === 'string' && !isNaN(parseInt(id))))
+            console.log('Final filtered territories:', finalTerritories)
+            
+            setTerritories(finalTerritories)
+          } catch (e) {
+            console.error('Error parsing territories:', e)
+            setTerritories([])
+          }
+        } else {
+          console.log('No territories found in team member data')
+          setTerritories([])
+        }
+
+        // Parse availability
+        if (teamMemberData.availability) {
+          try {
+            const parsedAvailability = typeof teamMemberData.availability === 'string' 
+              ? JSON.parse(teamMemberData.availability) 
+              : teamMemberData.availability
+            
+            if (parsedAvailability.workingHours) {
+              setWorkingHours(parsedAvailability.workingHours)
+            }
+            if (parsedAvailability.customAvailability) {
+              setCustomAvailability(parsedAvailability.customAvailability)
+            }
+          } catch (e) {
+            console.error('Error parsing availability:', e)
+            setWorkingHours({
+              sunday: { available: false, hours: "" },
+              monday: { available: true, hours: "9:00 AM - 6:00 PM" },
+              tuesday: { available: true, hours: "9:00 AM - 6:00 PM" },
+              wednesday: { available: true, hours: "9:00 AM - 6:00 PM" },
+              thursday: { available: true, hours: "9:00 AM - 6:00 PM" },
+              friday: { available: true, hours: "9:00 AM - 6:00 PM" },
+              saturday: { available: false, hours: "" }
+            })
+          }
+        }
+
+        // Parse permissions/settings
+        if (teamMemberData.permissions) {
+          try {
+            const parsedPermissions = typeof teamMemberData.permissions === 'string' 
+              ? JSON.parse(teamMemberData.permissions) 
+              : teamMemberData.permissions
+            setSettings(parsedPermissions)
+          } catch (e) {
+            console.error('Error parsing permissions:', e)
+          }
+        }
+
+        // Set recent jobs if available
+        if (response.jobs) {
+          setRecentJobs(response.jobs)
         }
       }
     } catch (error) {
-      console.error('Error fetching team member details:', error)
-      setError(`Failed to load team member details: ${error.message}`)
+      console.error('Error fetching team member:', error)
+      setError('Failed to load team member details')
     } finally {
       setLoading(false)
     }
   }
 
-  const fetchTerritories = async () => {
+  const handleEditMember = () => {
+    setEditFormData({
+      first_name: teamMember.first_name || '',
+      last_name: teamMember.last_name || '',
+      email: teamMember.email || '',
+      phone: teamMember.phone || '',
+      role: teamMember.role || '',
+      location: teamMember.location || '',
+      city: teamMember.city || '',
+      state: teamMember.state || '',
+      zip_code: teamMember.zip_code || '',
+      is_service_provider: teamMember.is_service_provider || false
+    })
+    setEditing(true)
+  }
+
+  const handleSaveMember = async () => {
+    try {
+      setSaving(true)
+      
+      const updateData = {
+        ...editFormData,
+        skills: JSON.stringify(skills),
+        territories: JSON.stringify(territories.map(t => typeof t === 'object' ? t.id : t)),
+        availability: JSON.stringify({
+          workingHours,
+          customAvailability
+        }),
+        permissions: JSON.stringify(settings)
+      }
+      
+      console.log('Saving team member with data:', updateData)
+      await teamAPI.update(memberId, updateData)
+      
+      // Refresh data
+      await fetchTeamMemberDetails()
+      setEditing(false)
+    } catch (error) {
+      console.error('Error saving team member:', error)
+      setError('Failed to save team member')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setEditing(false)
+    setEditFormData({})
+  }
+
+  const handleDeleteMember = async () => {
+    if (window.confirm('Are you sure you want to delete this team member?')) {
+      try {
+        await teamAPI.delete(memberId)
+        navigate('/team')
+      } catch (error) {
+        console.error('Error deleting team member:', error)
+        setError('Failed to delete team member')
+      }
+    }
+  }
+
+  const handleAddSkill = () => {
+    setShowAddSkillModal(true)
+  }
+
+  const handleSaveSkill = async () => {
+    try {
+      if (!newSkill.name.trim()) {
+        alert('Please enter a skill name')
+        return
+      }
+
+      // Add new skill to current skills
+      const updatedSkills = [...skills, newSkill]
+
+      // Update team member
+      await teamAPI.update(memberId, {
+        skills: JSON.stringify(updatedSkills)
+      })
+
+      // Update local state
+      setSkills(updatedSkills)
+
+      // Refresh team member data
+      await fetchTeamMemberDetails()
+
+      // Reset form
+      setNewSkill({ name: '', level: 'Intermediate' })
+      setShowAddSkillModal(false)
+    } catch (error) {
+      console.error('Error adding skill:', error)
+      alert('Failed to add skill. Please try again.')
+    }
+  }
+
+  const handleRemoveSkill = (index) => {
+    setSkills(skills.filter((_, i) => i !== index))
+  }
+
+  const fetchAvailableTerritories = async () => {
     try {
       setTerritoryLoading(true)
       console.log('Fetching available territories for user:', user?.id)
-      const response = await territoriesAPI.getAll(user?.id, { status: 'active' })
-      console.log('Territories response:', response)
-      setAvailableTerritories(response.territories || [])
+      const response = await fetch(`https://zenbookapi.now2code.online/api/territories?userId=${user?.id}&status=active`)
+      const data = await response.json()
+      console.log('Available territories response:', data)
+      console.log('Available territories array:', data.territories)
+      console.log('Available territories count:', data.territories?.length || 0)
+      console.log('Full API response structure:', Object.keys(data))
+      setAvailableTerritories(data.territories || [])
     } catch (error) {
       console.error('Error fetching territories:', error)
       setAvailableTerritories([])
@@ -175,44 +400,104 @@ const TeamMemberDetails = () => {
     }
   }
 
-  const handleEditMember = () => {
-    setShowEditModal(true)
+  const handleAddTerritory = () => {
+    setShowAddTerritoryModal(true)
   }
 
-  const handleDeleteMember = () => {
-    setShowDeleteModal(true)
-  }
-
-  const confirmDeleteMember = async () => {
+  const handleSaveTerritory = async (territoryId) => {
     try {
-      setDeleteLoading(true)
-      await teamAPI.delete(memberId)
-      navigate('/team')
+      console.log('handleSaveTerritory called with territoryId:', territoryId)
+      const foundTerritory = availableTerritories.find(t => t.id === territoryId)
+      console.log('Found territory:', foundTerritory)
+      
+      if (foundTerritory) {
+        const updatedTerritories = [...territories, territoryId]
+        console.log('Updated territories array:', updatedTerritories)
+        
+        // Save to database - ensure we save as array of IDs
+        const updateData = {
+          territories: JSON.stringify(updatedTerritories)
+        }
+        console.log('Saving territories to database with data:', updateData)
+        
+        const response = await teamAPI.update(memberId, updateData)
+        console.log('Team API update response:', response)
+        
+        // Update local state
+        setTerritories(updatedTerritories)
+        
+        // Refresh team member data
+        await fetchTeamMemberDetails()
+        
+        setShowAddTerritoryModal(false)
+        console.log('Territory added successfully')
+      } else {
+        console.error('Territory not found for ID:', territoryId)
+        alert('Territory not found. Please try again.')
+      }
     } catch (error) {
-      console.error('Error deleting team member:', error)
-      setError("Failed to delete team member.")
-      setShowDeleteModal(false)
-    } finally {
-      setDeleteLoading(false)
+      console.error('Error adding territory:', error)
+      console.error('Error details:', error.response?.data || error.message)
+      alert('Failed to add territory. Please try again.')
+    }
+  }
+
+  const handleRemoveTerritory = async (territoryToRemove) => {
+    try {
+      console.log('Removing territory:', territoryToRemove)
+      
+      // Remove the territory by its ID from the territories array
+      const updatedTerritories = territories.filter(territoryId => {
+        const numericId = typeof territoryId === 'string' ? parseInt(territoryId) : territoryId
+        const removeId = typeof territoryToRemove === 'object' ? territoryToRemove.id : territoryToRemove
+        const numericRemoveId = typeof removeId === 'string' ? parseInt(removeId) : removeId
+        
+        console.log('Comparing territory ID:', numericId, 'with remove ID:', numericRemoveId)
+        return numericId !== numericRemoveId
+      })
+      
+      console.log('Updated territories after removal:', updatedTerritories)
+      
+      // Save to database
+      const updateData = {
+        territories: JSON.stringify(updatedTerritories)
+      }
+      console.log('Saving territories to database after removal:', updateData)
+      
+      await teamAPI.update(memberId, updateData)
+      
+      // Update local state
+      setTerritories(updatedTerritories)
+      
+      // Refresh team member data
+      await fetchTeamMemberDetails()
+      
+      console.log('Territory removed successfully')
+    } catch (error) {
+      console.error('Error removing territory:', error)
+      alert('Failed to remove territory. Please try again.')
     }
   }
 
   const handleSaveHours = async () => {
     try {
-      const availabilityData = {
-        workingHours,
-        customAvailability
+      setEditingHours(false)
+      
+      const updateData = {
+        availability: JSON.stringify({
+          workingHours,
+          customAvailability
+        })
       }
       
-      await teamAPI.update(memberId, {
-        availability: JSON.stringify(availabilityData)
-      })
+      console.log('Saving availability:', updateData)
+      await teamAPI.update(memberId, updateData)
       
-      setEditingHours(false)
-      // Show success message
+      // Refresh team member data
+      await fetchTeamMemberDetails()
     } catch (error) {
-      console.error('Error saving hours:', error)
-      setError("Failed to save availability.")
+      console.error('Error saving availability:', error)
+      alert('Failed to save availability. Please try again.')
     }
   }
 
@@ -229,54 +514,361 @@ const TeamMemberDetails = () => {
   }
 
   const handleRemoveCustomAvailability = (id) => {
-    setCustomAvailability(customAvailability.filter(item => item.id !== id))
+    setCustomAvailability(prev => prev.filter(item => item.id !== id))
   }
 
-  const handleAddTerritory = async (territoryId) => {
+  const handleAddTimeSlot = (day) => {
+    setWorkingHours(prev => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        timeSlots: [
+          ...(prev[day]?.timeSlots || []),
+          {
+            id: Date.now(),
+            start: '09:00',
+            end: '17:00',
+            enabled: true
+          }
+        ]
+      }
+    }))
+  }
+
+  const handleRemoveTimeSlot = (day, slotId) => {
+    setWorkingHours(prev => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        timeSlots: (prev[day]?.timeSlots || []).filter(slot => slot.id !== slotId)
+      }
+    }))
+  }
+
+  const handleTimeSlotChange = (day, slotId, field, value) => {
+    setWorkingHours(prev => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        timeSlots: (prev[day]?.timeSlots || []).map(slot => 
+          slot.id === slotId ? { ...slot, [field]: value } : slot
+        )
+      }
+    }))
+  }
+
+  const generateTimeOptions = () => {
+    const options = []
+    for (let hour = 0; hour < 24; hour++) {
+      for (let minute = 0; minute < 60; minute += 30) {
+        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`
+        options.push(time)
+      }
+    }
+    return options
+  }
+
+  const timeOptions = generateTimeOptions()
+
+  const getDayColor = (day) => {
+    const colors = {
+      sunday: 'bg-red-50 border-red-200',
+      monday: 'bg-blue-50 border-blue-200',
+      tuesday: 'bg-green-50 border-green-200',
+      wednesday: 'bg-yellow-50 border-yellow-200',
+      thursday: 'bg-purple-50 border-purple-200',
+      friday: 'bg-pink-50 border-pink-200',
+      saturday: 'bg-indigo-50 border-indigo-200'
+    }
+    return colors[day.toLowerCase()] || 'bg-gray-50 border-gray-200'
+  }
+
+  const handleSaveSettings = async (newSettings) => {
     try {
-      setTerritoryLoading(true)
-      const territory = availableTerritories.find(t => t.id === territoryId)
-      if (territory && !territories.find(t => t.id === territoryId)) {
-        const updatedTerritories = [...territories, territory]
-        setTerritories(updatedTerritories)
+      const updateData = {
+        permissions: JSON.stringify(newSettings)
+      }
+      
+      console.log('Saving settings:', updateData)
+      await teamAPI.update(memberId, updateData)
+      
+      setSettings(newSettings)
+      // Refresh team member data
+      await fetchTeamMemberDetails()
+    } catch (error) {
+      console.error('Error saving settings:', error)
+      alert('Failed to save settings. Please try again.')
+    }
+  }
+
+  // Handle address input change with backend proxy
+  const handleLocationChange = async (e) => {
+    const value = e.target.value
+    // Use direct object update for consistency
+    setEditFormData({ ...editFormData, location: value })
+    
+    if (value.length > 3) {
+      setAddressLoading(true)
+      try {
+        const response = await fetch(`https://zenbookapi.now2code.online/api/places/autocomplete?input=${encodeURIComponent(value)}`)
+        const data = await response.json()
+        console.log('Address suggestions response:', data)
         
-        // Save to backend
-        await teamAPI.update(memberId, {
-          territories: JSON.stringify(updatedTerritories.map(t => t.id))
+        if (data.predictions) {
+          setAddressSuggestions(data.predictions)
+          setShowAddressSuggestions(true)
+        } else {
+          setAddressSuggestions([])
+          setShowAddressSuggestions(false)
+        }
+      } catch (error) {
+        console.error('Error fetching address suggestions:', error)
+        setAddressSuggestions([])
+        setShowAddressSuggestions(false)
+      } finally {
+        setAddressLoading(false)
+      }
+    } else {
+      setAddressSuggestions([])
+      setShowAddressSuggestions(false)
+    }
+  }
+
+  // Handle address selection
+  const handleAddressSelect = async (suggestion) => {
+    setAddressLoading(true)
+    try {
+      console.log('Starting address selection for:', suggestion.description)
+      
+      // Get detailed place information
+      const response = await fetch(
+        `https://zenbookapi.now2code.online/api/places/details?place_id=${suggestion.place_id}`
+      )
+      const data = await response.json()
+      
+      console.log('Place details response:', data)
+        
+      if (data.result) {
+        const place = data.result
+        let city = ''
+        let state = ''
+        let zipCode = ''
+        
+        console.log('Address components:', place.address_components)
+        
+        // Extract address components
+        place.address_components.forEach(component => {
+          console.log('Processing component:', component)
+          if (component.types.includes('locality')) {
+            city = component.long_name
+            console.log('Found city:', city)
+          } else if (component.types.includes('administrative_area_level_1')) {
+            state = component.short_name
+            console.log('Found state:', state)
+          } else if (component.types.includes('postal_code')) {
+            zipCode = component.long_name
+            console.log('Found zipCode:', zipCode)
+          }
         })
+        
+        // Log all components for debugging
+        console.log('All address components:', place.address_components.map(c => ({ types: c.types, long_name: c.long_name, short_name: c.short_name })))
+        
+        console.log('Address components extracted:', {
+          address: suggestion.description,
+          city,
+          state,
+          zipCode,
+          fullAddress: place.formatted_address
+        })
+        
+        const newFormData = {
+          location: suggestion.description,
+          city: city,
+          state: state,
+          zip_code: zipCode
+        }
+        
+        console.log('Setting new form data:', newFormData)
+        
+        // Update form data with the selected address immediately
+        const updatedFormData = {
+          ...editFormData,
+          ...newFormData
+        }
+        console.log('Updated form data:', updatedFormData)
+        setEditFormData(updatedFormData)
+        
+        // Directly update the input field value
+        if (locationInputRef.current) {
+          locationInputRef.current.value = suggestion.description
+        }
+        
+        // Force a re-render to ensure the input field updates
+        setTimeout(() => {
+          console.log('Forcing re-render after address selection')
+          setEditFormData(current => {
+            console.log('Current form data in force update:', current)
+            return current
+          })
+        }, 100)
+        
+        // Close suggestions immediately
+        setShowAddressSuggestions(false)
+        setAddressSuggestions([])
+      } else {
+        // Fallback if detailed info not available
+        console.log('No detailed place info, using suggestion description:', suggestion.description)
+        const fallbackFormData = {
+          ...editFormData,
+          location: suggestion.description
+        }
+        setEditFormData(fallbackFormData)
+        
+        // Directly update the input field value
+        if (locationInputRef.current) {
+          locationInputRef.current.value = suggestion.description
+        }
+        
+        // Force a re-render for fallback case too
+        setTimeout(() => {
+          console.log('Forcing re-render after fallback address selection')
+          setEditFormData(current => {
+            console.log('Current form data in force update (fallback):', current)
+            return current
+          })
+        }, 100)
+        
+        setShowAddressSuggestions(false)
+        setAddressSuggestions([])
       }
     } catch (error) {
-      console.error('Error adding territory:', error)
-      setError("Failed to add territory. Please try again.")
+      console.error('Error fetching place details:', error)
+      // Fallback to just the description
+      const errorFormData = {
+        ...editFormData,
+        location: suggestion.description
+      }
+      setEditFormData(errorFormData)
+      
+      // Directly update the input field value
+      if (locationInputRef.current) {
+        locationInputRef.current.value = suggestion.description
+      }
+      
+      // Force a re-render for error case too
+      setTimeout(() => {
+        console.log('Forcing re-render after error address selection')
+        setEditFormData(current => {
+          console.log('Current form data in force update (error):', current)
+          return current
+        })
+      }, 100)
+      
+      setShowAddressSuggestions(false)
+      setAddressSuggestions([])
     } finally {
-      setTerritoryLoading(false)
+      setAddressLoading(false)
     }
   }
 
-  const handleRemoveTerritory = async (territoryId) => {
-    try {
-      setTerritoryLoading(true)
-      const updatedTerritories = territories.filter(t => t.id !== territoryId)
-      setTerritories(updatedTerritories)
-      
-      // Save to backend
-      await teamAPI.update(memberId, {
-        territories: JSON.stringify(updatedTerritories.map(t => t.id))
-      })
-    } catch (error) {
-      console.error('Error removing territory:', error)
-      setError("Failed to remove territory. Please try again.")
-    } finally {
-      setTerritoryLoading(false)
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const locationInput = document.getElementById('location-input')
+      if (locationInput && !locationInput.contains(event.target)) {
+        setShowAddressSuggestions(false)
+      }
     }
-  }
+
+    if (showAddressSuggestions) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showAddressSuggestions])
+
+  // Debug form data changes
+  useEffect(() => {
+    console.log('Form data changed:', editFormData)
+    console.log('Location field value:', editFormData.location)
+  }, [editFormData])
+
+  // Debug skills state changes
+  useEffect(() => {
+    console.log('Skills state changed:', skills)
+  }, [skills])
+
+  // Debug territories state changes
+  useEffect(() => {
+    console.log('Territories state changed:', territories)
+    console.log('Territories state type:', typeof territories)
+    console.log('Territories is array:', Array.isArray(territories))
+    if (Array.isArray(territories)) {
+      console.log('Territories length:', territories.length)
+      territories.forEach((t, i) => {
+        console.log(`Territory ${i}:`, t, 'type:', typeof t)
+      })
+    }
+  }, [territories])
+
+  // Map territory IDs to full territory objects when available territories load
+  useEffect(() => {
+    console.log('Territory mapping effect triggered:')
+    console.log('Available territories:', availableTerritories)
+    console.log('Current territories:', territories)
+    console.log('Available territories length:', availableTerritories.length)
+    console.log('Current territories length:', territories.length)
+    
+    if (availableTerritories.length > 0 && territories.length > 0) {
+      console.log('Mapping territories to full objects...')
+      
+      const mappedTerritories = territories.map(territoryId => {
+        console.log('Processing territory ID:', territoryId, 'type:', typeof territoryId)
+        
+        // Ensure territoryId is a number for comparison
+        const numericId = typeof territoryId === 'string' ? parseInt(territoryId) : territoryId
+        
+        // Find the full territory object by ID
+        const fullTerritory = availableTerritories.find(t => {
+          console.log('Comparing territory', t.id, 'with', numericId, 'types:', typeof t.id, typeof numericId)
+          return t.id === numericId
+        })
+        console.log('Found full territory for ID', numericId, ':', fullTerritory)
+        
+        if (fullTerritory) {
+          console.log('Returning full territory object:', fullTerritory)
+          return fullTerritory
+        } else {
+          console.log('Territory not found, creating placeholder for ID:', numericId)
+          return { id: numericId, name: `Territory ${numericId}` }
+        }
+      })
+      
+      console.log('Mapped territories:', mappedTerritories)
+      
+      // Update displayed territories with mapped data
+      console.log('Updating displayed territories with mapped data:', mappedTerritories)
+      setDisplayedTerritories(mappedTerritories)
+      console.log('Displayed territories state updated with mapped data')
+    } else {
+      console.log('Skipping territory mapping - conditions not met:')
+      console.log('  - availableTerritories.length > 0:', availableTerritories.length > 0)
+      console.log('  - territories.length > 0:', territories.length > 0)
+    }
+  }, [availableTerritories, territories])
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading team member details...</p>
+      <div className="flex h-screen bg-gray-50">
+        <Sidebar isOpen={false} onClose={() => {}} />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading team member details...</p>
+          </div>
         </div>
       </div>
     )
@@ -284,16 +876,19 @@ const TeamMemberDetails = () => {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-red-600">{error}</p>
-          <button 
-            onClick={() => navigate('/team')}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Back to Team
-          </button>
+      <div className="flex h-screen bg-gray-50">
+        <Sidebar isOpen={false} onClose={() => {}} />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <XCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <p className="text-red-600 mb-4">{error}</p>
+            <button
+              onClick={() => navigate('/team')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Back to Team
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -301,16 +896,19 @@ const TeamMemberDetails = () => {
 
   if (!teamMember) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">Team member not found</p>
-          <button 
-            onClick={() => navigate('/team')}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Back to Team
-          </button>
+      <div className="flex h-screen bg-gray-50">
+        <Sidebar isOpen={false} onClose={() => {}} />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <XCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-600 mb-4">Team member not found</p>
+            <button
+              onClick={() => navigate('/team')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Back to Team
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -318,10 +916,10 @@ const TeamMemberDetails = () => {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Sidebar isOpen={false} onClose={() => {}} />
       
       <div className="flex-1 flex flex-col min-w-0">
-        <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+        <MobileHeader onMenuClick={() => {}} />
         
         <div className="flex-1 overflow-auto">
           <div className="px-4 sm:px-6 lg:px-8 py-8">
@@ -340,13 +938,42 @@ const TeamMemberDetails = () => {
                   <h1 className="text-2xl font-bold text-gray-900">Team Member Details</h1>
                 </div>
                 <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
-                  <button 
-                    onClick={handleEditMember}
-                    className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit
-                  </button>
+                  {!editing && (
+                    <button 
+                      onClick={handleEditMember}
+                      className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                      <Edit className="w-4 h-4 mr-2" />
+                      Edit
+                    </button>
+                  )}
+                  {editing && (
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={handleCancelEdit}
+                        className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSaveMember}
+                        disabled={saving}
+                        className="flex items-center px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {saving ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4 mr-2" />
+                            Save Changes
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
                   <button 
                     onClick={handleDeleteMember}
                     className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
@@ -362,152 +989,575 @@ const TeamMemberDetails = () => {
               {/* Basic Info Card */}
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="p-4 sm:p-6">
-                  <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-6">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                        <span className="text-blue-600 font-medium text-lg">
-                          {teamMember.first_name?.charAt(0)}{teamMember.last_name?.charAt(0)}
-                        </span>
-                      </div>
-                      <div>
-                        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
-                          {teamMember.first_name} {teamMember.last_name}
-                        </h2>
-                        <p className="text-sm text-gray-500">{teamMember.role || 'Team Member'}</p>
-                      </div>
+                  <div className="flex items-center space-x-3 mb-6">
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                      <span className="text-blue-600 font-medium text-lg">
+                        {teamMember.first_name?.charAt(0) || 'T'}{teamMember.last_name?.charAt(0) || 'M'}
+                      </span>
+                    </div>
+                    <div>
+                      <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+                        {teamMember.first_name || 'First'} {teamMember.last_name || 'Last'}
+                      </h2>
+                      <p className="text-sm text-gray-500">{teamMember.role || 'Team Member'}</p>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Mobile phone</label>
-                      <p className="mt-1 text-sm text-gray-900">{teamMember.phone || 'No phone number'}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Contact Information */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium text-gray-900">Contact Information</h3>
+                      
+                      {editing ? (
+                        <div className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                            <input
+                              type="text"
+                              value={editFormData.first_name || ''}
+                              onChange={(e) => setEditFormData({...editFormData, first_name: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                            <input
+                              type="text"
+                              value={editFormData.last_name || ''}
+                              onChange={(e) => setEditFormData({...editFormData, last_name: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                            <input
+                              type="email"
+                              value={editFormData.email || ''}
+                              onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                            <input
+                              type="tel"
+                              value={editFormData.phone || ''}
+                              onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                            <input
+                              type="text"
+                              value={editFormData.role || ''}
+                              onChange={(e) => setEditFormData({...editFormData, role: e.target.value})}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center space-x-3">
+                            <Mail className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-900">{teamMember.email || 'No email provided'}</span>
+                          </div>
+                          <div className="flex items-center space-x-3">
+                            <Phone className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-900">{teamMember.phone || 'No phone provided'}</span>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Email</label>
-                      <p className="mt-1 text-sm text-gray-900 break-all">{teamMember.email}</p>
+
+                    {/* Location Information */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium text-gray-900">Location</h3>
+                      
+                      {editing ? (
+                        <div className="space-y-4">
+                          <div className="relative">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                            <input
+                              id="location-input"
+                              ref={locationInputRef}
+                              key={`location-${editFormData.location || 'empty'}`}
+                              type="text"
+                              value={editFormData.location || ''}
+                              onChange={handleLocationChange}
+                              placeholder="Start typing an address..."
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
+                              autoComplete="off"
+                            />
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                              <MapPin className="h-4 w-4 text-gray-400" />
+                            </div>
+                            
+                            {/* Address Suggestions Dropdown */}
+                            {showAddressSuggestions && addressSuggestions.length > 0 && (
+                              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                                {addressLoading && (
+                                  <div className="px-4 py-2 text-sm text-gray-500 flex items-center">
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                                    Loading address details...
+                                  </div>
+                                )}
+                                {!addressLoading && addressSuggestions.map((suggestion, index) => (
+                                  <div
+                                    key={index}
+                                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                                    onClick={() => handleAddressSelect(suggestion)}
+                                  >
+                                    {suggestion.description}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            
+                            <p className="mt-1 text-xs text-gray-500 flex items-center">
+                              <MapPin className="h-3 w-3 mr-1" />
+                              Type to search for an address - city, state, and ZIP will auto-fill
+                            </p>
+                            <p className="mt-1 text-xs text-gray-400">
+                              Debug: Location={editFormData.location || 'empty'}, City={editFormData.city || 'empty'}, State={editFormData.state || 'empty'}, ZIP={editFormData.zip_code || 'empty'}
+                            </p>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                              <input
+                                key={`city-${editFormData.city || 'empty'}`}
+                                type="text"
+                                value={editFormData.city || ''}
+                                onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                              <input
+                                key={`state-${editFormData.state || 'empty'}`}
+                                type="text"
+                                value={editFormData.state || ''}
+                                onChange={(e) => setEditFormData({...editFormData, state: e.target.value})}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
+                              <input
+                                key={`zip-${editFormData.zip_code || 'empty'}`}
+                                type="text"
+                                value={editFormData.zip_code || ''}
+                                onChange={(e) => setEditFormData({...editFormData, zip_code: e.target.value})}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center space-x-3">
+                            <MapPin className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-900">
+                              {teamMember.location || 'No address provided'}
+                            </span>
+                          </div>
+                          {teamMember.city && teamMember.state && (
+                            <div className="text-sm text-gray-600 ml-7">
+                              {teamMember.city}, {teamMember.state} {teamMember.zip_code}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Username</label>
-                      <p className="mt-1 text-sm text-gray-900">{teamMember.username || 'Not set'}</p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Status</label>
-                      <p className="mt-1 text-sm">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          teamMember.status === 'active' 
-                            ? 'bg-green-100 text-green-800' 
-                            : teamMember.status === 'invited'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {teamMember.status === 'active' ? 'Active' : 
-                           teamMember.status === 'invited' ? 'Invited' : 'Inactive'}
-                        </span>
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-500">Role</label>
-                      <p className="mt-1 text-sm text-gray-900 capitalize">{teamMember.role || 'Team Member'}</p>
-                    </div>
-                    {teamMember.hourly_rate && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-500">Hourly Rate</label>
-                        <p className="mt-1 text-sm text-gray-900">${teamMember.hourly_rate}/hour</p>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Territories Card */}
-              <div className="bg-white rounded-lg border border-gray-200">
+              {/* Skills Card */}
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="p-4 sm:p-6">
-                  <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
-                    <div className="flex items-center space-x-2">
-                      <MapPinIcon className="w-5 h-5 text-gray-400" />
-                      <h3 className="text-lg font-semibold text-gray-900">Territories</h3>
-                      {territoryLoading && (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                      )}
-                    </div>
-                    <select 
-                      onChange={(e) => {
-                        const territoryId = parseInt(e.target.value)
-                        if (territoryId) {
-                          handleAddTerritory(territoryId)
-                          e.target.value = "" // Reset dropdown
-                        }
-                      }}
-                      disabled={territoryLoading}
-                      className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Add Territory</option>
-                      {availableTerritories
-                        .filter(t => !territories.find(ct => ct.id === t.id))
-                        .map(territory => (
-                          <option key={territory.id} value={territory.id}>
-                            {territory.name} {territory.location ? `- ${territory.location}` : ''}
-                          </option>
-                        ))}
-                    </select>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-medium text-gray-900">Skills</h3>
+                    {!editing && (
+                      <button
+                        onClick={handleEditMember}
+                        className="text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        Edit
+                      </button>
+                    )}
                   </div>
                   
-                  {territoryLoading ? (
-                    <div className="text-center py-6">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                      <p className="text-sm text-gray-500">Loading available territories...</p>
+                  {editing ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-2">
+                        {skills.map((skill, index) => (
+                          <div key={index} className="flex items-center space-x-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                            <span className="text-sm">{skill.name || skill}</span>
+                            <button
+                              onClick={() => handleRemoveSkill(index)}
+                              className="text-blue-600 hover:text-blue-800"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={handleAddSkill}
+                        className="text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        + Add Skill
+                      </button>
                     </div>
                   ) : (
-                    territories.length === 0 ? (
-                      <div className="text-center py-6">
-                        <MapPinIcon className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">No territories assigned</p>
-                        <p className="text-xs text-gray-400 mt-1">Add territories to assign this team member to specific service areas</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {console.log('Rendering territories:', territories)}
-                        {territories.map(territory => {
-                          console.log('Territory object:', territory)
-                          return (
-                            <div key={territory.id} className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                              <div className="flex items-center space-x-2">
-                                <MapPinIcon className="w-4 h-4 text-blue-600" />
-                                <div>
-                                  <p className="font-medium text-gray-900">
-                                    {territory.name || `Territory ${territory.id}`}
-                                  </p>
-                                  {territory.location && (
-                                    <p className="text-sm text-gray-500">{territory.location}</p>
-                                  )}
-                                </div>
-                              </div>
-                              <button
-                                onClick={() => handleRemoveTerritory(territory.id)}
-                                disabled={territoryLoading}
-                                className="text-red-600 hover:text-red-700 p-1 disabled:opacity-50 disabled:cursor-not-allowed"
-                                title="Remove territory"
-                              >
-                                {territoryLoading ? (
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-red-600"></div>
-                                ) : (
-                                  <X className="w-4 h-4" />
-                                )}
-                              </button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )
+                    <div>
+                      {console.log('Rendering skills:', skills)}
+                      {skills.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {skills.map((skill, index) => (
+                            <span key={index} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                              {skill.name || skill}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 text-sm">No skills added yet</p>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
 
+              {/* Territories Card */}
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="p-4 sm:p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-medium text-gray-900">Territories</h3>
+                    {!editing && (
+                      <button
+                        onClick={handleEditMember}
+                        className="text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  
+                  {editing ? (
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap gap-2">
+                        {displayedTerritories.map((territory, index) => (
+                          <div key={index} className="flex items-center space-x-2 bg-green-100 text-green-800 px-3 py-1 rounded-full">
+                            <span className="text-sm">{territory.name || (typeof territory === 'number' ? `Territory ${territory}` : territory)}</span>
+                            <button
+                              onClick={() => handleRemoveTerritory(territory)}
+                              className="text-green-600 hover:text-green-800"
+                            >
+                              <XCircle className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        onClick={handleAddTerritory}
+                        className="text-sm text-blue-600 hover:text-blue-700"
+                      >
+                        + Add Territory
+                      </button>
+                    </div>
+                  ) : (
+                    <div>
+                      {console.log('Rendering displayed territories:', displayedTerritories)}
+                      {console.log('Displayed territories type:', typeof displayedTerritories)}
+                      {console.log('Displayed territories is array:', Array.isArray(displayedTerritories))}
+                      {displayedTerritories.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {displayedTerritories.map((territory, index) => {
+                            console.log('Rendering territory:', territory, 'type:', typeof territory)
+                            return (
+                              <span key={index} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                                {territory.name || (typeof territory === 'number' ? `Territory ${territory}` : territory)}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-gray-500 text-sm">No territories assigned</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Service Provider Card */}
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">Service Provider</h3>
+                      <p className="text-sm text-gray-500">This team member can be assigned to jobs</p>
+                    </div>
+                    <button
+                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                        settings.isServiceProvider ? 'bg-green-500' : 'bg-gray-200'
+                      }`}
+                      onClick={async () => {
+                        const newSettings = { ...settings, isServiceProvider: !settings.isServiceProvider }
+                        setSettings(newSettings)
+                        await handleSaveSettings(newSettings)
+                      }}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          settings.isServiceProvider ? 'translate-x-5' : 'translate-x-0'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Availability Section */}
+                  <div className="border-t border-gray-200 pt-6">
+                    <div className="mb-6">
+                      <h4 className="text-base font-semibold text-gray-900">Availability</h4>
+                      <p className="text-sm text-gray-500">
+                        Manage this team member's availability by editing their regular work hours, or by adding custom availability for specific dates.
+                        <a href="#" className="text-blue-600 hover:text-blue-700 ml-1">Learn more...</a>
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center space-x-2">
+                        <Clock className="w-4 h-4 text-gray-400" />
+                        <span className="text-sm font-medium text-gray-900">Allow this team member to edit their availability</span>
+                      </div>
+                      <button
+                        className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                          settings.canEditAvailability ? 'bg-green-500' : 'bg-gray-200'
+                        }`}
+                        onClick={async () => {
+                          const newSettings = { ...settings, canEditAvailability: !settings.canEditAvailability }
+                          setSettings(newSettings)
+                          await handleSaveSettings(newSettings)
+                        }}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            settings.canEditAvailability ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                      {/* Recurring Hours */}
+                      <div>
+                        <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
+                          <div className="flex items-center space-x-2">
+                            <Clock className="w-4 h-4 text-gray-400" />
+                            <h5 className="text-sm font-medium text-gray-900">RECURRING HOURS</h5>
+                            <HelpCircle className="w-4 h-4 text-gray-400" />
+                          </div>
+                          {!editingHours ? (
+                            <button
+                              onClick={() => setEditingHours(true)}
+                              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                            >
+                              Edit Hours
+                            </button>
+                          ) : (
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={handleSaveHours}
+                                className="text-sm text-green-600 hover:text-green-700 font-medium"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingHours(false)}
+                                className="text-sm text-gray-600 hover:text-gray-700 font-medium"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-4">
+                          {Object.entries(workingHours).map(([day, { available, hours, timeSlots = [] }]) => (
+                            <div key={day} className={`p-4 rounded-lg border ${getDayColor(day)}`}>
+                              <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center space-x-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={available}
+                                    onChange={(e) => setWorkingHours(prev => ({
+                                      ...prev,
+                                      [day]: { ...prev[day], available: e.target.checked }
+                                    }))}
+                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm font-medium text-gray-900 capitalize">{day}</span>
+                                </div>
+                                {editingHours && available && (
+                                  <button
+                                    onClick={() => handleAddTimeSlot(day)}
+                                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                                  >
+                                    + Add Hours
+                                  </button>
+                                )}
+                              </div>
+                              
+                              {editingHours ? (
+                                <div className="space-y-2">
+                                  {available && timeSlots.length === 0 && (
+                                    <div className="text-sm text-gray-500 italic">
+                                      No time slots set. Click "Add Hours" to add a time slot.
+                                    </div>
+                                  )}
+                                  {timeSlots.map((slot, index) => (
+                                    <div key={slot.id} className="flex items-center space-x-2 p-2 bg-white rounded border">
+                                      <select
+                                        value={slot.start}
+                                        onChange={(e) => handleTimeSlotChange(day, slot.id, 'start', e.target.value)}
+                                        className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                      >
+                                        {timeOptions.map(time => (
+                                          <option key={time} value={time}>{time}</option>
+                                        ))}
+                                      </select>
+                                      <span className="text-sm text-gray-500">to</span>
+                                      <select
+                                        value={slot.end}
+                                        onChange={(e) => handleTimeSlotChange(day, slot.id, 'end', e.target.value)}
+                                        className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                      >
+                                        {timeOptions.map(time => (
+                                          <option key={time} value={time}>{time}</option>
+                                        ))}
+                                      </select>
+                                      <button
+                                        onClick={() => handleRemoveTimeSlot(day, slot.id)}
+                                        className="text-red-600 hover:text-red-700 p-1"
+                                      >
+                                        <X className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="space-y-1">
+                                  {available ? (
+                                    timeSlots.length > 0 ? (
+                                      timeSlots.map((slot, index) => (
+                                        <div key={slot.id} className="text-sm text-gray-600">
+                                          {slot.start} - {slot.end}
+                                        </div>
+                                      ))
+                                    ) : (
+                                      <span className="text-sm text-gray-500">{hours || 'No hours set'}</span>
+                                    )
+                                  ) : (
+                                    <span className="text-sm text-gray-500">Unavailable</span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Custom Availability */}
+                      <div>
+                        <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
+                          <div className="flex items-center space-x-2">
+                            <Calendar className="w-4 h-4 text-gray-400" />
+                            <h5 className="text-sm font-medium text-gray-900">CUSTOM AVAILABILITY</h5>
+                            <HelpCircle className="w-4 h-4 text-gray-400" />
+                          </div>
+                          {!editingAvailability ? (
+                            <button
+                              onClick={() => setEditingAvailability(true)}
+                              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                            >
+                              Add Date Override
+                            </button>
+                          ) : (
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={() => setEditingAvailability(false)}
+                                className="text-sm text-green-600 hover:text-green-700 font-medium"
+                              >
+                                Done
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {editingAvailability && (
+                          <div className="mb-4">
+                            <button
+                              onClick={handleAddCustomAvailability}
+                              className="flex items-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+                            >
+                              <Plus className="w-4 h-4 mr-1" />
+                              Add Custom Date
+                            </button>
+                          </div>
+                        )}
+                        
+                        {customAvailability.length === 0 ? (
+                          <div className="text-center p-6 bg-gray-50 rounded-lg">
+                            <Calendar className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500 mb-4">Add a date override</p>
+                            <p className="text-xs text-gray-500 mb-4">Customize this provider's availability for specific dates.</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {customAvailability.map((item) => (
+                              <div key={item.id} className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 p-3 bg-gray-50 rounded-lg">
+                                <div className="flex-1 flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
+                                  <input
+                                    type="date"
+                                    value={item.date}
+                                    onChange={(e) => setCustomAvailability(prev => 
+                                      prev.map(i => i.id === item.id ? { ...i, date: e.target.value } : i)
+                                    )}
+                                    className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                  />
+                                  <input
+                                    type="text"
+                                    value={item.hours}
+                                    onChange={(e) => setCustomAvailability(prev => 
+                                      prev.map(i => i.id === item.id ? { ...i, hours: e.target.value } : i)
+                                    )}
+                                    placeholder="9:00 AM - 6:00 PM"
+                                    className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                  />
+                                </div>
+                                {editingAvailability && (
+                                  <button
+                                    onClick={() => handleRemoveCustomAvailability(item.id)}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Recent Jobs Card */}
-              {teamMember.recentJobs && teamMember.recentJobs.length > 0 && (
-                <div className="bg-white rounded-lg border border-gray-200">
+              {recentJobs.length > 0 && (
+                <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                   <div className="p-6">
                     <div className="flex items-center justify-between mb-6">
                       <div className="flex items-center space-x-2">
@@ -516,7 +1566,7 @@ const TeamMemberDetails = () => {
                       </div>
                     </div>
                     <div className="space-y-4">
-                      {teamMember.recentJobs.slice(0, 5).map((job) => (
+                      {recentJobs.slice(0, 5).map((job) => (
                         <div key={job.id} className="border border-gray-200 rounded-lg p-4">
                           <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                             <div>
@@ -542,244 +1592,132 @@ const TeamMemberDetails = () => {
                   </div>
                 </div>
               )}
-
-              {/* Service Provider Card */}
-              <div className="bg-white rounded-lg border border-gray-200">
-                <div className="p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900">Service Provider</h3>
-                      <p className="text-sm text-gray-500">This team member can be assigned to jobs</p>
-                    </div>
-                    <button
-                      className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                        settings.isServiceProvider ? 'bg-green-500' : 'bg-gray-200'
-                      }`}
-                      onClick={() => setSettings(s => ({ ...s, isServiceProvider: !s.isServiceProvider }))}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                          settings.isServiceProvider ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Availability Section */}
-                <div className="border-t border-gray-200 p-6">
-                  <div className="mb-6">
-                    <h4 className="text-base font-semibold text-gray-900">Availability</h4>
-                    <p className="text-sm text-gray-500">
-                      Manage this team member's availability by editing their regular work hours, or by adding custom availability
-                      for specific dates.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                    {/* Recurring Hours */}
-                    <div>
-                      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
-                        <div className="flex items-center space-x-2">
-                          <Clock className="w-4 h-4 text-gray-400" />
-                          <h5 className="text-sm font-medium text-gray-900">RECURRING HOURS</h5>
-                          <HelpCircle className="w-4 h-4 text-gray-400" />
-                        </div>
-                        {!editingHours ? (
-                          <button
-                            onClick={() => setEditingHours(true)}
-                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                          >
-                            Edit Hours
-                          </button>
-                        ) : (
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={handleSaveHours}
-                              className="text-sm text-green-600 hover:text-green-700 font-medium"
-                            >
-                              Save
-                            </button>
-                            <button
-                              onClick={() => setEditingHours(false)}
-                              className="text-sm text-gray-600 hover:text-gray-700 font-medium"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-4">
-                        {Object.entries(workingHours).map(([day, { available, hours }]) => (
-                          <div key={day} className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-                            <span className="text-sm text-gray-900 capitalize">{day}</span>
-                            {editingHours ? (
-                              <div className="flex items-center space-x-2">
-                                <input
-                                  type="checkbox"
-                                  checked={available}
-                                  onChange={(e) => setWorkingHours(prev => ({
-                                    ...prev,
-                                    [day]: { ...prev[day], available: e.target.checked }
-                                  }))}
-                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                />
-                                <input
-                                  type="text"
-                                  value={hours}
-                                  onChange={(e) => setWorkingHours(prev => ({
-                                    ...prev,
-                                    [day]: { ...prev[day], hours: e.target.value }
-                                  }))}
-                                  placeholder="9:00 AM - 6:00 PM"
-                                  className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                />
-                              </div>
-                            ) : (
-                              <span className="text-sm text-gray-500">{available ? hours : "Unavailable"}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Custom Availability */}
-                    <div>
-                      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
-                        <div className="flex items-center space-x-2">
-                          <Calendar className="w-4 h-4 text-gray-400" />
-                          <h5 className="text-sm font-medium text-gray-900">CUSTOM AVAILABILITY</h5>
-                          <HelpCircle className="w-4 h-4 text-gray-400" />
-                        </div>
-                        {!editingAvailability ? (
-                          <button
-                            onClick={() => setEditingAvailability(true)}
-                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                          >
-                            Add Date Override
-                          </button>
-                        ) : (
-                          <div className="flex space-x-2">
-                            <button
-                              onClick={() => setEditingAvailability(false)}
-                              className="text-sm text-green-600 hover:text-green-700 font-medium"
-                            >
-                              Done
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                      
-                      {editingAvailability && (
-                        <div className="mb-4">
-                          <button
-                            onClick={handleAddCustomAvailability}
-                            className="flex items-center text-sm text-blue-600 hover:text-blue-700 font-medium"
-                          >
-                            <Plus className="w-4 h-4 mr-1" />
-                            Add Custom Date
-                          </button>
-                        </div>
-                      )}
-                      
-                      {customAvailability.length === 0 ? (
-                        <div className="text-center p-6 bg-gray-50 rounded-lg">
-                          <p className="text-sm text-gray-500 mb-4">No custom availability set</p>
-                          <p className="text-xs text-gray-500 mb-4">Customize this provider's availability for specific dates.</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {customAvailability.map((item) => (
-                            <div key={item.id} className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 p-3 bg-gray-50 rounded-lg">
-                              <div className="flex-1 flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
-                                <input
-                                  type="date"
-                                  value={item.date}
-                                  onChange={(e) => setCustomAvailability(prev => 
-                                    prev.map(i => i.id === item.id ? { ...i, date: e.target.value } : i)
-                                  )}
-                                  className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                />
-                                <input
-                                  type="text"
-                                  value={item.hours}
-                                  onChange={(e) => setCustomAvailability(prev => 
-                                    prev.map(i => i.id === item.id ? { ...i, hours: e.target.value } : i)
-                                  )}
-                                  placeholder="9:00 AM - 6:00 PM"
-                                  className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                />
-                              </div>
-                              {editingAvailability && (
-                                <button
-                                  onClick={() => handleRemoveCustomAvailability(item.id)}
-                                  className="text-red-600 hover:text-red-700"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteModal && (
+      {/* Add Territory Modal */}
+      {showAddTerritoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Delete Team Member</h3>
+              <h3 className="text-lg font-semibold text-gray-900">Add Territory</h3>
               <button
-                onClick={() => setShowDeleteModal(false)}
+                onClick={() => setShowAddTerritoryModal(false)}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <p className="text-gray-600 mb-6">
-              Are you sure you want to delete {teamMember.first_name} {teamMember.last_name}? This action cannot be undone.
-            </p>
-            <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-3">
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Territory</label>
+                {territoryLoading ? (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="text-sm text-gray-500 mt-2">Loading territories...</p>
+                  </div>
+                ) : (
+                  <select
+                    onChange={(e) => {
+                      const territoryId = parseInt(e.target.value)
+                      if (territoryId) {
+                        handleSaveTerritory(territoryId)
+                        e.target.value = "" // Reset dropdown
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>Select a territory</option>
+                    {console.log('Available territories in modal:', availableTerritories)}
+                    {console.log('Current territories:', territories)}
+                    {availableTerritories
+                      .filter(t => !territories.find(ct => (typeof ct === 'object' ? ct.id : ct) === t.id))
+                      .map(territory => (
+                        <option key={territory.id} value={territory.id}>
+                          {territory.name} {territory.location ? `- ${territory.location}` : ''}
+                        </option>
+                      ))}
+                  </select>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex space-x-3 mt-6">
               <button
-                onClick={() => setShowDeleteModal(false)}
+                onClick={() => setShowAddTerritoryModal(false)}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 Cancel
-              </button>
-              <button
-                onClick={confirmDeleteMember}
-                disabled={deleteLoading}
-                className="flex-1 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
-              >
-                {deleteLoading ? 'Deleting...' : 'Delete'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Edit Team Member Modal */}
-      <AddTeamMemberModal
-        isOpen={showEditModal}
-        onClose={() => setShowEditModal(false)}
-        onSuccess={() => {
-          setShowEditModal(false)
-          fetchTeamMemberDetails() // Refresh the data
-        }}
-        userId={user?.id}
-        member={teamMember}
-        isEditing={true}
-      />
+      {/* Add Skill Modal */}
+      {showAddSkillModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Add Skill</h3>
+              <button
+                onClick={() => setShowAddSkillModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Skill Name</label>
+                <input
+                  type="text"
+                  value={newSkill.name}
+                  onChange={(e) => setNewSkill(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g., Deep Cleaning, Window Cleaning"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                />
+              </div>
+             
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Proficiency Level</label>
+                <select
+                  value={newSkill.level}
+                  onChange={(e) => setNewSkill(prev => ({ ...prev, level: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                >
+                  <option value="Beginner">Beginner</option>
+                  <option value="Intermediate">Intermediate</option>
+                  <option value="Advanced">Advanced</option>
+                  <option value="Expert">Expert</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowAddSkillModal(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveSkill}
+                className="flex-1 px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              >
+                Add Skill
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
-export default TeamMemberDetails 
+export default TeamMemberDetails

@@ -94,8 +94,7 @@ const TeamPage = () => {
   }
 
   const handleViewMember = (member) => {
-    setSelectedMember(member)
-    // You can implement a detailed view modal here
+    navigate(`/team-member/${member.id}`)
   }
 
   const handleDeleteMember = async (memberId) => {
@@ -334,6 +333,46 @@ const TeamPage = () => {
                                     </>
                                   )}
                                 </div>
+                                {/* Skills Display */}
+                                {(() => {
+                                  let skills = [];
+                                  try {
+                                    if (member.skills) {
+                                      skills = typeof member.skills === 'string' 
+                                        ? JSON.parse(member.skills) 
+                                        : member.skills;
+                                    }
+                                  } catch (error) {
+                                    skills = [];
+                                  }
+                                  
+                                  if (!Array.isArray(skills)) {
+                                    skills = [];
+                                  }
+                                  
+                                  return skills.length > 0 ? (
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {skills.slice(0, 3).map((skill, index) => (
+                                        <span 
+                                          key={index}
+                                          className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                                            skill.level === 'Expert' ? 'bg-green-100 text-green-800' :
+                                            skill.level === 'Advanced' ? 'bg-blue-100 text-blue-800' :
+                                            skill.level === 'Intermediate' ? 'bg-yellow-100 text-yellow-800' :
+                                            'bg-purple-100 text-purple-800'
+                                          }`}
+                                        >
+                                          {skill.name}
+                                        </span>
+                                      ))}
+                                      {skills.length > 3 && (
+                                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                                          +{skills.length - 3} more
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : null;
+                                })()}
                               </div>
                             </div>
                             

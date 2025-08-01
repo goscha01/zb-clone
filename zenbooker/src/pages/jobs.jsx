@@ -5,18 +5,18 @@ import JobsTabs from "../components/jobs-tabs"
 import JobsFilters from "../components/jobs-filters"
 import JobsEmptyState from "../components/jobs-empty-state"
 import JobsPagination from "../components/jobs-pagination"
-import JobDetailsModal from "../components/job-details-modal"
-import { Plus, AlertCircle, Loader2, Eye, Calendar, Clock, MapPin, Users } from "lucide-react"
+
+import { Plus, AlertCircle, Loader2, Eye, Calendar, Clock, MapPin, Users, DollarSign, Phone, Mail, FileText, CheckCircle, XCircle, PlayCircle, PauseCircle, MoreVertical } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
-import { jobsAPI } from "../services/api"
+import { jobsAPI, invoicesAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
 
 const ZenbookerJobs = () => {
   const { user, loading: authLoading } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("upcoming")
-  const [selectedJob, setSelectedJob] = useState(null)
-  const [isJobModalOpen, setIsJobModalOpen] = useState(false)
+
+  const [viewMode, setViewMode] = useState("table") // "table" or "cards"
   const navigate = useNavigate()
   
   // API State
@@ -87,42 +87,11 @@ const ZenbookerJobs = () => {
           break
       }
       
-      // Build query parameters for the API call
-      const queryParams = new URLSearchParams({
-        userId: user.id
-      })
-      
-      if (statusFilter) {
-        queryParams.append('status', statusFilter)
-      }
-      
-      if (filters.search) {
-        queryParams.append('search', filters.search)
-      }
-      
-      if (dateFilter) {
-        queryParams.append('dateFilter', dateFilter)
-      }
-      
-      if (filters.dateRange) {
-        queryParams.append('dateRange', filters.dateRange)
-      }
-      
-      if (filters.sortBy) {
-        queryParams.append('sortBy', filters.sortBy)
-      }
-      
-      if (filters.sortOrder) {
-        queryParams.append('sortOrder', filters.sortOrder)
-      }
-      
-      queryParams.append('page', '1')
-      queryParams.append('limit', '50')
-      
+      // Call jobsAPI with individual parameters
       const response = await jobsAPI.getAll(
-        user.id, 
-        statusFilter, 
-        filters.search, 
+        user.id,
+        statusFilter,
+        filters.search,
         1, // page
         50, // limit
         dateFilter,
@@ -132,7 +101,8 @@ const ZenbookerJobs = () => {
         filters.teamMember,
         filters.invoiceStatus
       )
-      setJobs(response.jobs || response) // Handle both new and old response format
+      
+      setJobs(response.jobs || [])
     } catch (error) {
       console.error('Error fetching jobs:', error)
       setError("Failed to load jobs. Please try again.")
@@ -142,21 +112,79 @@ const ZenbookerJobs = () => {
   }
 
   const handleCreateJob = () => {
-    navigate("/createjob")
+    navigate('/create-job')
   }
 
   const handleJobUpdate = async () => {
-    // Refresh jobs list
-    fetchJobs()
+    await fetchJobs()
   }
 
   const handleViewJob = (job) => {
-    setSelectedJob(job)
-    setIsJobModalOpen(true)
+    navigate(`/job/${job.id}`)
   }
 
   const handleViewCustomer = (customerId) => {
     navigate(`/customer/${customerId}`)
+  }
+
+  const handleSendInvoice = async (job) => {
+    try {
+      // Create invoice for the job using the proper API
+      const invoiceData = {
+        userId: user.id,
+        customerId: job.customer_id,
+        jobId: job.id,
+        totalAmount: job.total_amount || job.service_price,
+        status: 'sent'
+      }
+      
+      await invoicesAPI.create(invoiceData)
+      
+      // Update job invoice status
+      await jobsAPI.update(job.id, { invoice_status: 'invoiced' })
+      await fetchJobs() // Refresh jobs list
+      alert('Invoice created and sent successfully!')
+    } catch (error) {
+      console.error('Error sending invoice:', error)
+      alert('Error sending invoice')
+    }
+  }
+
+  const handleAssignJob = (job) => {
+    // Open team member assignment modal or navigate to assignment page
+    handleViewJob(job) // For now, open job details where assignment can be done
+  }
+
+  const handlePrintJob = (job) => {
+    // Open print dialog or generate PDF
+    const printWindow = window.open('', '_blank')
+    printWindow.document.write(`
+      <html>
+        <head><title>Job #${job.id}</title></head>
+        <body>
+          <h1>Job Details</h1>
+          <p><strong>Job ID:</strong> ${job.id}</p>
+          <p><strong>Service:</strong> ${job.service_name}</p>
+          <p><strong>Customer:</strong> ${job.customer_first_name} ${job.customer_last_name}</p>
+          <p><strong>Date:</strong> ${formatDate(job.scheduled_date)}</p>
+          <p><strong>Time:</strong> ${formatTime(job.scheduled_date)}</p>
+          <p><strong>Amount:</strong> ${formatCurrency(job.total_amount)}</p>
+        </body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.print()
+  }
+
+  const handleStatusChange = async (job, newStatus) => {
+    try {
+      await jobsAPI.updateStatus(job.id, newStatus)
+      await fetchJobs() // Refresh the jobs list
+      alert(`Job status updated to ${newStatus}`)
+    } catch (error) {
+      console.error('Error updating job status:', error)
+      alert('Failed to update job status')
+    }
   }
 
   const handleFilterChange = (newFilters) => {
@@ -164,30 +192,21 @@ const ZenbookerJobs = () => {
   }
 
   const handleRetry = () => {
+    setError("")
     fetchJobs()
   }
 
   const getJobCount = (status) => {
     return jobs.filter(job => {
-      const jobDate = new Date(job.scheduled_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      
       switch (status) {
         case "upcoming":
-          return ["pending", "confirmed", "in_progress"].includes(job.status) && jobDate >= today
-        case "past":
-          return ["completed", "cancelled"].includes(job.status) && jobDate < today
-        case "complete":
-          return job.status === "completed"
-        case "incomplete":
           return ["pending", "confirmed", "in_progress"].includes(job.status)
-        case "canceled":
+        case "in-progress":
+          return job.status === "in_progress"
+        case "completed":
+          return job.status === "completed"
+        case "cancelled":
           return job.status === "cancelled"
-        case "daterange":
-          // For date range, we'll show all jobs and let the date filter handle it
-          return true
-        case "all":
         default:
           return true
       }
@@ -197,6 +216,7 @@ const ZenbookerJobs = () => {
   const formatDate = (dateString) => {
     const date = new Date(dateString)
     return date.toLocaleDateString('en-US', { 
+      weekday: 'short',
       month: 'short', 
       day: 'numeric',
       year: 'numeric'
@@ -218,12 +238,31 @@ const ZenbookerJobs = () => {
       case 'in_progress': return 'bg-blue-100 text-blue-800'
       case 'confirmed': return 'bg-yellow-100 text-yellow-800'
       case 'cancelled': return 'bg-red-100 text-red-800'
+      case 'pending': return 'bg-gray-100 text-gray-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
 
   const getStatusLabel = (status) => {
     return status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())
+  }
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'completed': return <CheckCircle className="w-4 h-4" />
+      case 'in_progress': return <PlayCircle className="w-4 h-4" />
+      case 'confirmed': return <Clock className="w-4 h-4" />
+      case 'cancelled': return <XCircle className="w-4 h-4" />
+      case 'pending': return <PauseCircle className="w-4 h-4" />
+      default: return <Clock className="w-4 h-4" />
+    }
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount || 0)
   }
 
   // Show loading spinner while auth is loading
@@ -249,12 +288,36 @@ const ZenbookerJobs = () => {
         <div className="hidden lg:flex bg-white border-b border-gray-200 px-6 py-5 items-center justify-between shadow-sm">
           <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
             <h1 className="text-2xl font-display font-semibold text-gray-900">Jobs</h1>
-            <button 
-              onClick={handleCreateJob}
-              className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 transition-all duration-200 transform hover:scale-[1.02] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode("table")}
+                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                    viewMode === "table" 
+                      ? "bg-white text-gray-900 shadow-sm" 
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Table
+                </button>
+                <button
+                  onClick={() => setViewMode("cards")}
+                  className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
+                    viewMode === "cards" 
+                      ? "bg-white text-gray-900 shadow-sm" 
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Cards
+                </button>
+              </div>
+              <button 
+                onClick={handleCreateJob}
+                className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 transition-all duration-200 transform hover:scale-[1.02] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -262,12 +325,36 @@ const ZenbookerJobs = () => {
         <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-display font-semibold text-gray-900">Jobs</h1>
-            <button 
-              onClick={handleCreateJob}
-              className="w-9 h-9 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 transition-all duration-200"
-            >
-              <Plus className="w-5 h-5" />
-            </button>
+            <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
+                <button
+                  onClick={() => setViewMode("table")}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    viewMode === "table" 
+                      ? "bg-white text-gray-900 shadow-sm" 
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Table
+                </button>
+                <button
+                  onClick={() => setViewMode("cards")}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    viewMode === "cards" 
+                      ? "bg-white text-gray-900 shadow-sm" 
+                      : "text-gray-600 hover:text-gray-900"
+                  }`}
+                >
+                  Cards
+                </button>
+              </div>
+              <button 
+                onClick={handleCreateJob}
+                className="w-9 h-9 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 transition-all duration-200"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -318,76 +405,227 @@ const ZenbookerJobs = () => {
               </div>
             ) : jobs.length === 0 ? (
               <JobsEmptyState onCreateJob={handleCreateJob} />
+            ) : viewMode === "table" ? (
+              // Table View
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Date
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Job
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Customer
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Assignee(s)
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Job Status
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Total
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {jobs.map((job) => (
+                        <tr key={job.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{formatDate(job.scheduled_date)}</span>
+                              <span className="text-gray-500">{formatTime(job.scheduled_date)}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="flex-shrink-0 h-8 w-8">
+                                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
+                                  <span className="text-sm font-medium text-blue-600">
+                                    {job.service_name?.[0] || 'J'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-medium text-gray-900">
+                                  {job.service_name || 'Service'}
+                                </div>
+                                <div className="text-sm text-gray-500">
+                                  Job #{job.id}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">
+                              {job.customer_first_name} {job.customer_last_name}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              {job.customer_city}, {job.customer_state}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {job.team_member_first_name ? (
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-6 w-6">
+                                  <div className="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center">
+                                    <span className="text-xs font-medium text-green-600">
+                                      {job.team_member_first_name[0]}{job.team_member_last_name[0]}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="ml-2 text-sm text-gray-900">
+                                  {job.team_member_first_name} {job.team_member_last_name}
+                                </div>
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-500">Unassigned</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
+                              {getStatusIcon(job.status)}
+                              <span className="ml-1">{getStatusLabel(job.status)}</span>
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <div className="flex flex-col">
+                              <span className="font-medium">{formatCurrency(job.total_amount || job.service_price || 0)}</span>
+                              <span className={`text-xs px-2 py-1 rounded-full inline-block ${
+                                job.invoice_status === 'paid' ? 'bg-green-100 text-green-800' :
+                                job.invoice_status === 'unpaid' ? 'bg-red-100 text-red-800' :
+                                job.invoice_status === 'invoiced' ? 'bg-blue-100 text-blue-800' :
+                                'bg-gray-100 text-gray-800'
+                              }`}>
+                                {job.invoice_status || 'No invoice'}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button
+                              onClick={() => handleViewJob(job)}
+                              className="text-blue-600 hover:text-blue-900"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             ) : (
-              <div className="space-y-4">
+              // Simplified Cards View - No Expandable Details
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 {jobs.map((job) => (
                   <div
                     key={job.id}
-                    className="bg-white rounded-lg border border-gray-200 p-6 hover:shadow-md transition-shadow"
+                    className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow"
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-3">
+                    {/* Job Header */}
+                    <div className="p-6">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center space-x-3">
                           <div className={`w-3 h-3 rounded-full ${
                             job.status === 'completed' ? 'bg-green-500' :
                             job.status === 'in_progress' ? 'bg-blue-500' :
                             job.status === 'cancelled' ? 'bg-red-500' :
                             'bg-yellow-500'
                           }`} />
-                          <h3 className="font-medium text-gray-900 text-lg">
-                            {job.service_name || 'Service'}
-                          </h3>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
-                            {getStatusLabel(job.status)}
-                          </span>
+                          <div>
+                            <h3 className="text-lg font-semibold text-gray-900">
+                              {job.service_name || 'Service'}
+                            </h3>
+                            <p className="text-sm text-gray-500">Job #{job.id}</p>
+                          </div>
                         </div>
-                        
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                          <div className="flex items-center space-x-2 text-sm text-gray-600">
-                            <Users className="w-4 h-4" />
-                            <button
-                              onClick={() => handleViewCustomer(job.customer_id)}
-                              className="hover:text-primary-600 hover:underline cursor-pointer transition-colors duration-200"
-                            >
-                              {job.customer_first_name} {job.customer_last_name}
-                            </button>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2 text-sm text-gray-600">
-                            <Calendar className="w-4 h-4" />
-                            <span>{formatDate(job.scheduled_date)}</span>
-                          </div>
-                          
-                          <div className="flex items-center space-x-2 text-sm text-gray-600">
-                            <Clock className="w-4 h-4" />
-                            <span>{formatTime(job.scheduled_date)}</span>
-                          </div>
-                          
-                          {job.team_member_first_name && (
-                            <div className="flex items-center space-x-2 text-sm text-gray-600">
-                              <Users className="w-4 h-4" />
-                              <span>
-                                {job.team_member_first_name} {job.team_member_last_name}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {job.notes && (
-                          <p className="text-sm text-gray-600 mb-4">
-                            {job.notes}
-                          </p>
-                        )}
+                        <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(job.status)}`}>
+                          {getStatusIcon(job.status)}
+                          <span className="ml-1">{getStatusLabel(job.status)}</span>
+                        </span>
                       </div>
                       
-                      <div className="flex items-center space-x-2 ml-4">
+                      {/* Basic Job Info */}
+                      <div className="space-y-3 mb-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600">Due {formatDate(job.scheduled_date)}</p>
+                            <p className="text-sm text-gray-600">{formatTime(job.scheduled_date)}</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-gray-600">Amount</p>
+                            <p className="text-lg font-semibold text-gray-900">{formatCurrency(job.total_amount || job.service_price || 0)}</p>
+                          </div>
+                        </div>
+                        
+                        {/* Customer Info */}
+                        <div className="flex items-center space-x-2 text-sm text-gray-600">
+                          <Users className="w-4 h-4" />
+                          <span>{job.customer_first_name} {job.customer_last_name}</span>
+                        </div>
+                        
+                        {/* Team Member */}
+                        {job.team_member_first_name && (
+                          <div className="flex items-center space-x-2 text-sm text-gray-600">
+                            <Users className="w-4 h-4" />
+                            <span>Assigned to {job.team_member_first_name} {job.team_member_last_name}</span>
+                          </div>
+                        )}
+                        
+                        {/* Invoice Status */}
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-gray-600">Invoice Status</span>
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            job.invoice_status === 'paid' ? 'bg-green-100 text-green-800' :
+                            job.invoice_status === 'unpaid' ? 'bg-red-100 text-red-800' :
+                            job.invoice_status === 'invoiced' ? 'bg-blue-100 text-blue-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {job.invoice_status || 'No invoice'}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div className="flex items-center justify-between">
                         <button
                           onClick={() => handleViewJob(job)}
-                          className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                          title="View details"
+                          className="flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                         >
-                          <Eye className="w-4 h-4" />
+                          <Eye className="w-4 h-4 mr-2" />
+                          View Job Details
                         </button>
+                        <div className="flex items-center space-x-2">
+                          <button 
+                            onClick={() => handleAssignJob(job)}
+                            className="p-2 text-gray-400 hover:text-gray-600"
+                            title="Assign Job"
+                          >
+                            <Users className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleSendInvoice(job)}
+                            className="p-2 text-gray-400 hover:text-gray-600"
+                            title="Send Invoice"
+                          >
+                            <DollarSign className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => handleStatusChange(job, 'completed')}
+                            className="p-2 text-gray-400 hover:text-gray-600"
+                            title="Mark as Complete"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -401,18 +639,7 @@ const ZenbookerJobs = () => {
         </div>
       </div>
 
-      {/* Job Details Modal */}
-      {isJobModalOpen && selectedJob && (
-        <JobDetailsModal
-          isOpen={isJobModalOpen}
-          onClose={() => {
-            setIsJobModalOpen(false)
-            setSelectedJob(null)
-          }}
-          job={selectedJob}
-          onJobUpdate={handleJobUpdate}
-        />
-      )}
+
     </div>
   )
 }

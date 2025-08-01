@@ -7,7 +7,7 @@ import { customersAPI, jobsAPI, estimatesAPI, invoicesAPI } from "../services/ap
 import { useAuth } from "../context/AuthContext"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
-import JobDetailsModal from "../components/job-details-modal"
+
 import CustomerModal from "../components/customer-modal"
 import { formatPhoneNumber } from "../utils/phoneFormatter"
 
@@ -23,8 +23,7 @@ const CustomerDetails = () => {
   const [error, setError] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [selectedJob, setSelectedJob] = useState(null)
-  const [isJobModalOpen, setIsJobModalOpen] = useState(false)
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
@@ -93,19 +92,10 @@ const CustomerDetails = () => {
   }
 
   const handleViewJob = (job) => {
-    setSelectedJob(job)
-    setIsJobModalOpen(true)
+    navigate(`/job/${job.id}`)
   }
 
-  const handleJobModalClose = () => {
-    setIsJobModalOpen(false)
-    setSelectedJob(null)
-  }
 
-  const handleJobUpdate = () => {
-    // Refresh customer data when job is updated
-    fetchCustomerData()
-  }
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString()
@@ -509,13 +499,7 @@ const CustomerDetails = () => {
         </div>
       </div>
 
-      {/* Job Details Modal */}
-      <JobDetailsModal
-        isOpen={isJobModalOpen}
-        onClose={handleJobModalClose}
-        job={selectedJob}
-        onJobUpdate={handleJobUpdate}
-      />
+
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && customer && (

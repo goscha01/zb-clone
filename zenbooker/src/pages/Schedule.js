@@ -3,7 +3,7 @@ import { Plus, ChevronLeft, ChevronRight, Calendar, Grid3X3, MapPin, Clock, Doll
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
 import { useNavigate } from "react-router-dom"
-import JobDetailsModal from "../components/job-details-modal"
+
 import EditJobModal from "../components/edit-job-modal"
 import { useAuth } from "../context/AuthContext"
 import { jobsAPI } from "../services/api"
@@ -15,8 +15,7 @@ const ZenbookerSchedule = () => {
   const [currentView, setCurrentView] = useState("day") // day, week, month
   const [currentDate, setCurrentDate] = useState(new Date()) // Current date
   const [jobs, setJobs] = useState([])
-  const [selectedJob, setSelectedJob] = useState(null)
-  const [showJobDetails, setShowJobDetails] = useState(false)
+
   const [showEditJob, setShowEditJob] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
@@ -132,8 +131,7 @@ const ZenbookerSchedule = () => {
   }
 
   const handleViewJob = (job) => {
-    setSelectedJob(job)
-    setShowJobDetails(true)
+    navigate(`/job/${job.id}`)
   }
 
   const handleViewCustomer = (customerId) => {
@@ -152,9 +150,7 @@ const ZenbookerSchedule = () => {
   }
 
   const handleCloseModals = () => {
-    setShowJobDetails(false)
     setShowEditJob(false)
-    setSelectedJob(null)
   }
 
   // Day View Component
@@ -513,11 +509,6 @@ const ZenbookerSchedule = () => {
       </div>
 
       {/* Modals */}
-      <JobDetailsModal 
-        isOpen={showJobDetails}
-        onClose={handleCloseModals}
-        job={selectedJob}
-      />
       
       <EditJobModal 
         isOpen={showEditJob}

@@ -20,6 +20,7 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
     role: "worker",
     isServiceProvider: true,
     territories: [],
+    skills: [],
     permissions: {
       viewCustomerNotes: true,
       modifyJobStatus: true,
@@ -37,6 +38,20 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
 
   useEffect(() => {
     if (isOpen && member && isEditing) {
+      console.log('Setting form data for editing member:', member)
+      console.log('Member territories:', member.territories)
+      
+      let parsedTerritories = []
+      if (member.territories) {
+        try {
+          parsedTerritories = JSON.parse(member.territories)
+          console.log('Parsed territories:', parsedTerritories)
+        } catch (error) {
+          console.error('Error parsing territories:', error)
+          parsedTerritories = []
+        }
+      }
+      
       setFormData({
         firstName: member.first_name || "",
         lastName: member.last_name || "",
@@ -48,7 +63,8 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
         zipCode: member.zip_code || "",
         role: member.role || "worker",
         isServiceProvider: member.is_service_provider !== false,
-        territories: member.territories ? JSON.parse(member.territories) : [],
+        territories: parsedTerritories,
+        skills: member.skills ? JSON.parse(member.skills) : [],
         permissions: member.permissions ? JSON.parse(member.permissions) : {
           viewCustomerNotes: true,
           modifyJobStatus: true,
@@ -71,6 +87,7 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
         role: "worker",
         isServiceProvider: true,
         territories: [],
+        skills: [],
         permissions: {
           viewCustomerNotes: true,
           modifyJobStatus: true,
@@ -95,6 +112,7 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
       console.log('Fetching territories for userId:', userId)
       const response = await territoriesAPI.getAll(userId, { status: 'active' })
       console.log('Territories response:', response)
+      console.log('Available territories:', response.territories || [])
       setTerritories(response.territories || [])
     } catch (error) {
       console.error('Error fetching territories:', error)
@@ -219,19 +237,27 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
   }
 
   const handleTerritoryToggle = (territoryId) => {
+    console.log('Toggling territory:', territoryId)
     setFormData(prev => {
       const currentTerritories = prev.territories || []
       const isSelected = currentTerritories.includes(territoryId)
       
+      console.log('Current territories:', currentTerritories)
+      console.log('Is selected:', isSelected)
+      
       if (isSelected) {
+        const newTerritories = currentTerritories.filter(id => id !== territoryId)
+        console.log('Removing territory, new list:', newTerritories)
         return {
           ...prev,
-          territories: currentTerritories.filter(id => id !== territoryId)
+          territories: newTerritories
         }
       } else {
+        const newTerritories = [...currentTerritories, territoryId]
+        console.log('Adding territory, new list:', newTerritories)
         return {
           ...prev,
-          territories: [...currentTerritories, territoryId]
+          territories: newTerritories
         }
       }
     })
@@ -279,8 +305,11 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
         role: formData.role,
         isServiceProvider: formData.isServiceProvider,
         territories: formData.territories,
+        skills: formData.skills,
         permissions: formData.permissions
       }
+      
+      console.log('Sending member data:', memberData)
 
       if (isEditing && member) {
         await teamAPI.update(member.id, memberData)

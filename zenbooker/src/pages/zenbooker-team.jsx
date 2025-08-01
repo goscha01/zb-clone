@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
-import { Plus, Search, Filter, Users, TrendingUp, Calendar, DollarSign, Clock, Eye, Edit, Trash2, UserPlus, BarChart3, AlertCircle, MapPin, Loader2 } from "lucide-react"
+import { Plus, Search, Filter, Users, TrendingUp, Calendar, DollarSign, Clock, Eye, Edit, Trash2, UserPlus, BarChart3, AlertCircle, MapPin, Loader2, Power, PowerOff } from "lucide-react"
 import { useAuth } from "../context/AuthContext"
 import { teamAPI } from "../services/api"
 import AddTeamMemberModal from "../components/add-team-member-modal"
@@ -176,6 +176,17 @@ const ZenbookerTeam = () => {
     }
   }
 
+  const handleToggleActivation = async (member) => {
+    try {
+      const newStatus = member.status === 'active' ? 'inactive' : 'active';
+      await teamAPI.update(member.id, { status: newStatus });
+      fetchTeamMembers(); // Refresh the list
+    } catch (error) {
+      console.error('Error toggling team member activation:', error);
+      setError("Failed to update team member status.");
+    }
+  }
+
   const handleFilterChange = (newFilters) => {
     setFilters(prev => ({ ...prev, ...newFilters }))
   }
@@ -184,12 +195,14 @@ const ZenbookerTeam = () => {
     switch (status) {
       case 'active':
         return 'bg-green-100 text-green-800'
-      case 'invited':
+      case 'pending':
         return 'bg-yellow-100 text-yellow-800'
+      case 'invited':
+        return 'bg-blue-100 text-blue-800'
       case 'inactive':
         return 'bg-red-100 text-red-800'
       case 'on_leave':
-        return 'bg-orange-100 text-orange-800'
+        return 'bg-gray-100 text-gray-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -198,7 +211,9 @@ const ZenbookerTeam = () => {
   const getStatusLabel = (status) => {
     switch (status) {
       case 'active':
-        return 'ACTIVATED'
+        return 'ACTIVE'
+      case 'pending':
+        return 'PENDING'
       case 'invited':
         return 'INVITED'
       case 'inactive':
@@ -278,6 +293,17 @@ const ZenbookerTeam = () => {
                         Active ({teamMembers.filter(m => m.status === 'active').length})
                       </button>
                       <button
+                        onClick={() => setActiveTab("pending")}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                          activeTab === "pending"
+                            ? "border-blue-500 text-blue-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        <AlertCircle className="w-4 h-4 inline mr-2" />
+                        Pending ({teamMembers.filter(m => m.status === 'pending').length})
+                      </button>
+                      <button
                         onClick={() => setActiveTab("invited")}
                         className={`py-2 px-1 border-b-2 font-medium text-sm ${
                           activeTab === "invited"
@@ -303,7 +329,7 @@ const ZenbookerTeam = () => {
                   </div>
 
                   {/* Team Members Tab */}
-                  {(activeTab === "active" || activeTab === "invited" || activeTab === "deactivated") && (
+                  {(activeTab === "active" || activeTab === "pending" || activeTab === "invited" || activeTab === "deactivated") && (
                     <div>
                       {/* Filters */}
                       <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
@@ -327,6 +353,7 @@ const ZenbookerTeam = () => {
                             >
                               <option value="">All Status</option>
                               <option value="active">Active</option>
+                              <option value="pending">Pending</option>
                               <option value="inactive">Inactive</option>
                               <option value="on_leave">On Leave</option>
                             </select>
@@ -398,6 +425,7 @@ const ZenbookerTeam = () => {
                               {teamMembers
                                 .filter(member => {
                                   if (activeTab === "active") return member.status === 'active';
+                                  if (activeTab === "pending") return member.status === 'pending';
                                   if (activeTab === "invited") return member.status === 'invited';
                                   if (activeTab === "deactivated") return member.status === 'inactive' || member.status === 'on_leave';
                                   return true;
@@ -425,13 +453,21 @@ const ZenbookerTeam = () => {
                                                     {member.status === 'active' && (
                                                       <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                                                     )}
-                                                    {member.status === 'invited' && (
+                                                    {member.status === 'pending' && (
                                                       <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                                                    )}
+                                                    {member.status === 'invited' && (
+                                                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                                                     )}
                                                     {(member.status === 'inactive' || member.status === 'on_leave') && (
                                                       <div className="w-2 h-2 bg-red-500 rounded-full"></div>
                                                     )}
                                                   </div>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(member.status)}`}>
+                                                    {getStatusLabel(member.status)}
+                                                  </span>
                                                 </div>
                                               </div>
                                               <div className="mt-2 flex flex-col space-y-1 text-sm text-gray-500">
@@ -439,9 +475,21 @@ const ZenbookerTeam = () => {
                                                   <span className="truncate">{member.phone}</span>
                                                 )}
                                                 {member.territories && (() => {
-                                                  const territories = typeof member.territories === 'string' 
-                                                    ? JSON.parse(member.territories || '[]') 
-                                                    : member.territories || [];
+                                                  let territories = [];
+                                                  try {
+                                                    territories = typeof member.territories === 'string' 
+                                                      ? JSON.parse(member.territories || '[]') 
+                                                      : member.territories || [];
+                                                  } catch (error) {
+                                                    console.error('Error parsing territories:', error);
+                                                    territories = [];
+                                                  }
+                                                  
+                                                  // Ensure territories is an array
+                                                  if (!Array.isArray(territories)) {
+                                                    territories = [];
+                                                  }
+                                                  
                                                   return territories.length > 0 && (
                                                     <div className="flex flex-wrap gap-1 mt-1">
                                                       {territories.map((territory, index) => (
@@ -459,6 +507,30 @@ const ZenbookerTeam = () => {
                                               </div>
                                             </div>
                                             <div className="mt-3 sm:mt-0 flex items-center justify-end space-x-2">
+                                              {/* Activation/Deactivation Toggle */}
+                                              {(member.status === 'active' || member.status === 'inactive' || member.status === 'pending') && (
+                                                <button
+                                                  onClick={() => handleToggleActivation(member)}
+                                                  className={`inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                                                    member.status === 'active' 
+                                                      ? 'text-red-700 bg-red-100 hover:bg-red-200 focus:ring-red-500' 
+                                                      : 'text-green-700 bg-green-100 hover:bg-green-200 focus:ring-green-500'
+                                                  }`}
+                                                >
+                                                  {member.status === 'active' ? (
+                                                    <>
+                                                      <PowerOff className="w-3 h-3 mr-1" />
+                                                      Deactivate
+                                                    </>
+                                                  ) : (
+                                                    <>
+                                                      <Power className="w-3 h-3 mr-1" />
+                                                      Activate
+                                                    </>
+                                                  )}
+                                                </button>
+                                              )}
+                                              
                                               {member.status === 'invited' && (
                                                 <button
                                                   onClick={() => handleResendInvite(member)}

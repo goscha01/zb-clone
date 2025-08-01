@@ -600,6 +600,33 @@ export const teamAPI = {
     } catch (error) {
       throw error;
     }
+  },
+
+  getPerformance: async (memberId) => {
+    try {
+      const response = await api.get(`/team-members/${memberId}/performance`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  getSettings: async (memberId) => {
+    try {
+      const response = await api.get(`/team-members/${memberId}/settings`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  updateSettings: async (memberId, settings) => {
+    try {
+      const response = await api.put(`/team-members/${memberId}/settings`, { settings });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 
@@ -1093,6 +1120,33 @@ export const notificationAPI = {
         html,
         text
       });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  getPreferences: async (customerId) => {
+    try {
+      const response = await api.get(`/customers/${customerId}/notifications`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  updatePreferences: async (customerId, preferences) => {
+    try {
+      const response = await api.put(`/customers/${customerId}/notifications`, preferences);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  getHistory: async (customerId) => {
+    try {
+      const response = await api.get(`/customers/${customerId}/notifications/history`);
       return response.data;
     } catch (error) {
       throw error;
