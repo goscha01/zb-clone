@@ -17,6 +17,7 @@ const ZenbookerSchedule = () => {
   const [jobs, setJobs] = useState([])
 
   const [showEditJob, setShowEditJob] = useState(false)
+  const [selectedJob, setSelectedJob] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const navigate = useNavigate()
