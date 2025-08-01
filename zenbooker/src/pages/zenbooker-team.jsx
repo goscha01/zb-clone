@@ -492,15 +492,27 @@ const ZenbookerTeam = () => {
                                                   
                                                   return territories.length > 0 && (
                                                     <div className="flex flex-wrap gap-1 mt-1">
-                                                      {territories.map((territory, index) => (
-                                                        <span
-                                                          key={index}
-                                                          className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                                                        >
-                                                          <MapPin className="w-3 h-3 mr-1" />
-                                                          {territory}
-                                                        </span>
-                                                      ))}
+                                                      {territories.map((territory, index) => {
+                                                        // Handle different territory formats
+                                                        let territoryDisplay = '';
+                                                        if (typeof territory === 'object' && territory.name) {
+                                                          territoryDisplay = territory.name;
+                                                        } else if (typeof territory === 'number' || typeof territory === 'string') {
+                                                          territoryDisplay = `Territory ${territory}`;
+                                                        } else {
+                                                          territoryDisplay = String(territory);
+                                                        }
+                                                        
+                                                        return (
+                                                          <span
+                                                            key={index}
+                                                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                                                          >
+                                                            <MapPin className="w-3 h-3 mr-1" />
+                                                            {territoryDisplay}
+                                                          </span>
+                                                        );
+                                                      })}
                                                     </div>
                                                   );
                                                 })()}
