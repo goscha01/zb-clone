@@ -5,8 +5,8 @@ import Sidebar from '../components/sidebar'
 import MobileHeader from '../components/mobile-header'
 import { 
   ChevronLeft, 
-  Edit, 
-  Save, 
+  Edit,
+  Save,
   Trash2, 
   Phone, 
   Mail, 
@@ -74,15 +74,15 @@ const TeamMemberDetails = () => {
   const [recentJobs, setRecentJobs] = useState([])
   
   // Google Places Autocomplete
+  const addressRef = useRef(null)
   const [addressSuggestions, setAddressSuggestions] = useState([])
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false)
   const [addressLoading, setAddressLoading] = useState(false)
-  const locationInputRef = useRef(null)
   
   // Skills modal
   const [showAddSkillModal, setShowAddSkillModal] = useState(false)
   const [newSkill, setNewSkill] = useState({ name: '', level: 'Intermediate' })
-  
+
   // Territories modal
   const [showAddTerritoryModal, setShowAddTerritoryModal] = useState(false)
   const [availableTerritories, setAvailableTerritories] = useState([])
@@ -95,6 +95,8 @@ const TeamMemberDetails = () => {
       fetchAvailableTerritories()
     }
   }, [memberId])
+
+
 
   const fetchTeamMemberDetails = async () => {
     try {
@@ -126,8 +128,8 @@ const TeamMemberDetails = () => {
                 // If first parse fails, try parsing again (double-escaped)
                 parsedSkills = JSON.parse(JSON.parse(teamMemberData.skills))
                 console.log('Double parse successful:', parsedSkills)
-              }
-            } else {
+          }
+        } else {
               parsedSkills = teamMemberData.skills
             }
             console.log('Parsed skills:', parsedSkills)
@@ -292,7 +294,8 @@ const TeamMemberDetails = () => {
       city: teamMember.city || '',
       state: teamMember.state || '',
       zip_code: teamMember.zip_code || '',
-      is_service_provider: teamMember.is_service_provider || false
+      is_service_provider: teamMember.is_service_provider || false,
+      color: teamMember.color || '#2563EB'
     })
     setEditing(true)
   }
@@ -303,6 +306,7 @@ const TeamMemberDetails = () => {
       
       const updateData = {
         ...editFormData,
+        color: editFormData.color || '#2563EB',
         skills: JSON.stringify(skills),
         territories: JSON.stringify(territories.map(t => typeof t === 'object' ? t.id : t)),
         availability: JSON.stringify({
@@ -336,7 +340,7 @@ const TeamMemberDetails = () => {
       try {
         await teamAPI.delete(memberId)
         navigate('/team')
-      } catch (error) {
+    } catch (error) {
         console.error('Error deleting team member:', error)
         setError('Failed to delete team member')
       }
@@ -392,7 +396,7 @@ const TeamMemberDetails = () => {
       console.log('Available territories count:', data.territories?.length || 0)
       console.log('Full API response structure:', Object.keys(data))
       setAvailableTerritories(data.territories || [])
-    } catch (error) {
+      } catch (error) {
       console.error('Error fetching territories:', error)
       setAvailableTerritories([])
     } finally {
@@ -425,9 +429,9 @@ const TeamMemberDetails = () => {
         
         // Update local state
         setTerritories(updatedTerritories)
-        
-        // Refresh team member data
-        await fetchTeamMemberDetails()
+
+      // Refresh team member data
+      await fetchTeamMemberDetails()
         
         setShowAddTerritoryModal(false)
         console.log('Territory added successfully')
@@ -485,8 +489,8 @@ const TeamMemberDetails = () => {
       
       const updateData = {
         availability: JSON.stringify({
-          workingHours,
-          customAvailability
+        workingHours,
+        customAvailability
         })
       }
       
@@ -604,259 +608,107 @@ const TeamMemberDetails = () => {
   // Handle address input change with backend proxy
   const handleLocationChange = async (e) => {
     const value = e.target.value
-    // Use direct object update for consistency
-    setEditFormData({ ...editFormData, location: value })
+    setEditFormData(prev => ({ ...prev, location: value }))
     
-    if (value.length > 3) {
-      setAddressLoading(true)
-      try {
-        const response = await fetch(`https://zenbookapi.now2code.online/api/places/autocomplete?input=${encodeURIComponent(value)}`)
-        const data = await response.json()
-        console.log('Address suggestions response:', data)
-        
-        if (data.predictions) {
-          setAddressSuggestions(data.predictions)
-          setShowAddressSuggestions(true)
-        } else {
-          setAddressSuggestions([])
-          setShowAddressSuggestions(false)
-        }
-      } catch (error) {
-        console.error('Error fetching address suggestions:', error)
-        setAddressSuggestions([])
-        setShowAddressSuggestions(false)
-      } finally {
-        setAddressLoading(false)
-      }
-    } else {
+    if (value.length < 3) {
       setAddressSuggestions([])
       setShowAddressSuggestions(false)
+      return
+    }
+
+    try {
+      setAddressLoading(true)
+      const response = await fetch(`https://zenbookapi.now2code.online/api/places/autocomplete?input=${encodeURIComponent(value)}`)
+      const data = await response.json()
+      
+      if (data.predictions) {
+        setAddressSuggestions(data.predictions)
+        setShowAddressSuggestions(true)
+      }
+    } catch (error) {
+      console.error('Error fetching address suggestions:', error)
+    } finally {
+      setAddressLoading(false)
     }
   }
 
   // Handle address selection
   const handleAddressSelect = async (suggestion) => {
-    setAddressLoading(true)
     try {
-      console.log('Starting address selection for:', suggestion.description)
-      
-      // Get detailed place information
-      const response = await fetch(
-        `https://zenbookapi.now2code.online/api/places/details?place_id=${suggestion.place_id}`
-      )
+      const response = await fetch(`https://zenbookapi.now2code.online/api/places/details?place_id=${suggestion.place_id}`)
       const data = await response.json()
       
-      console.log('Place details response:', data)
-        
       if (data.result) {
         const place = data.result
         let city = ''
         let state = ''
         let zipCode = ''
         
-        console.log('Address components:', place.address_components)
-        
         // Extract address components
-        place.address_components.forEach(component => {
-          console.log('Processing component:', component)
-          if (component.types.includes('locality')) {
-            city = component.long_name
-            console.log('Found city:', city)
-          } else if (component.types.includes('administrative_area_level_1')) {
-            state = component.short_name
-            console.log('Found state:', state)
-          } else if (component.types.includes('postal_code')) {
-            zipCode = component.long_name
-            console.log('Found zipCode:', zipCode)
-          }
-        })
+        if (place.address_components) {
+          place.address_components.forEach(component => {
+            if (component.types.includes('locality')) {
+              city = component.long_name
+            }
+            if (component.types.includes('administrative_area_level_1')) {
+              state = component.short_name
+            }
+            if (component.types.includes('postal_code')) {
+              zipCode = component.long_name
+            }
+          })
+        }
         
-        // Log all components for debugging
-        console.log('All address components:', place.address_components.map(c => ({ types: c.types, long_name: c.long_name, short_name: c.short_name })))
-        
-        console.log('Address components extracted:', {
-          address: suggestion.description,
-          city,
-          state,
-          zipCode,
-          fullAddress: place.formatted_address
-        })
-        
-        const newFormData = {
+        setEditFormData(prev => ({
+          ...prev,
           location: suggestion.description,
           city: city,
           state: state,
           zip_code: zipCode
-        }
-        
-        console.log('Setting new form data:', newFormData)
-        
-        // Update form data with the selected address immediately
-        const updatedFormData = {
-          ...editFormData,
-          ...newFormData
-        }
-        console.log('Updated form data:', updatedFormData)
-        setEditFormData(updatedFormData)
-        
-        // Directly update the input field value
-        if (locationInputRef.current) {
-          locationInputRef.current.value = suggestion.description
-        }
-        
-        // Force a re-render to ensure the input field updates
-        setTimeout(() => {
-          console.log('Forcing re-render after address selection')
-          setEditFormData(current => {
-            console.log('Current form data in force update:', current)
-            return current
-          })
-        }, 100)
-        
-        // Close suggestions immediately
-        setShowAddressSuggestions(false)
-        setAddressSuggestions([])
-      } else {
-        // Fallback if detailed info not available
-        console.log('No detailed place info, using suggestion description:', suggestion.description)
-        const fallbackFormData = {
-          ...editFormData,
-          location: suggestion.description
-        }
-        setEditFormData(fallbackFormData)
-        
-        // Directly update the input field value
-        if (locationInputRef.current) {
-          locationInputRef.current.value = suggestion.description
-        }
-        
-        // Force a re-render for fallback case too
-        setTimeout(() => {
-          console.log('Forcing re-render after fallback address selection')
-          setEditFormData(current => {
-            console.log('Current form data in force update (fallback):', current)
-            return current
-          })
-        }, 100)
-        
-        setShowAddressSuggestions(false)
-        setAddressSuggestions([])
+        }))
       }
     } catch (error) {
       console.error('Error fetching place details:', error)
-      // Fallback to just the description
-      const errorFormData = {
-        ...editFormData,
-        location: suggestion.description
-      }
-      setEditFormData(errorFormData)
-      
-      // Directly update the input field value
-      if (locationInputRef.current) {
-        locationInputRef.current.value = suggestion.description
-      }
-      
-      // Force a re-render for error case too
-      setTimeout(() => {
-        console.log('Forcing re-render after error address selection')
-        setEditFormData(current => {
-          console.log('Current form data in force update (error):', current)
-          return current
-        })
-      }, 100)
-      
+    } finally {
       setShowAddressSuggestions(false)
       setAddressSuggestions([])
-    } finally {
-      setAddressLoading(false)
     }
   }
 
   // Close suggestions when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      const locationInput = document.getElementById('location-input')
-      if (locationInput && !locationInput.contains(event.target)) {
+      if (addressRef.current && !addressRef.current.contains(event.target)) {
         setShowAddressSuggestions(false)
       }
     }
 
-    if (showAddressSuggestions) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
+    document.addEventListener('mousedown', handleClickOutside)
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showAddressSuggestions])
+  }, [])
 
-  // Debug form data changes
-  useEffect(() => {
-    console.log('Form data changed:', editFormData)
-    console.log('Location field value:', editFormData.location)
-  }, [editFormData])
 
-  // Debug skills state changes
-  useEffect(() => {
-    console.log('Skills state changed:', skills)
-  }, [skills])
-
-  // Debug territories state changes
-  useEffect(() => {
-    console.log('Territories state changed:', territories)
-    console.log('Territories state type:', typeof territories)
-    console.log('Territories is array:', Array.isArray(territories))
-    if (Array.isArray(territories)) {
-      console.log('Territories length:', territories.length)
-      territories.forEach((t, i) => {
-        console.log(`Territory ${i}:`, t, 'type:', typeof t)
-      })
-    }
-  }, [territories])
 
   // Map territory IDs to full territory objects when available territories load
   useEffect(() => {
-    console.log('Territory mapping effect triggered:')
-    console.log('Available territories:', availableTerritories)
-    console.log('Current territories:', territories)
-    console.log('Available territories length:', availableTerritories.length)
-    console.log('Current territories length:', territories.length)
-    
     if (availableTerritories.length > 0 && territories.length > 0) {
-      console.log('Mapping territories to full objects...')
-      
       const mappedTerritories = territories.map(territoryId => {
-        console.log('Processing territory ID:', territoryId, 'type:', typeof territoryId)
-        
         // Ensure territoryId is a number for comparison
         const numericId = typeof territoryId === 'string' ? parseInt(territoryId) : territoryId
         
         // Find the full territory object by ID
-        const fullTerritory = availableTerritories.find(t => {
-          console.log('Comparing territory', t.id, 'with', numericId, 'types:', typeof t.id, typeof numericId)
-          return t.id === numericId
-        })
-        console.log('Found full territory for ID', numericId, ':', fullTerritory)
+        const fullTerritory = availableTerritories.find(t => t.id === numericId)
         
         if (fullTerritory) {
-          console.log('Returning full territory object:', fullTerritory)
           return fullTerritory
         } else {
-          console.log('Territory not found, creating placeholder for ID:', numericId)
           return { id: numericId, name: `Territory ${numericId}` }
         }
       })
       
-      console.log('Mapped territories:', mappedTerritories)
-      
-      // Update displayed territories with mapped data
-      console.log('Updating displayed territories with mapped data:', mappedTerritories)
       setDisplayedTerritories(mappedTerritories)
-      console.log('Displayed territories state updated with mapped data')
-    } else {
-      console.log('Skipping territory mapping - conditions not met:')
-      console.log('  - availableTerritories.length > 0:', availableTerritories.length > 0)
-      console.log('  - territories.length > 0:', territories.length > 0)
     }
   }, [availableTerritories, territories])
 
@@ -865,9 +717,9 @@ const TeamMemberDetails = () => {
       <div className="flex h-screen bg-gray-50">
         <Sidebar isOpen={false} onClose={() => {}} />
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading team member details...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading team member details...</p>
           </div>
         </div>
       </div>
@@ -879,15 +731,15 @@ const TeamMemberDetails = () => {
       <div className="flex h-screen bg-gray-50">
         <Sidebar isOpen={false} onClose={() => {}} />
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
+        <div className="text-center">
             <XCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
             <p className="text-red-600 mb-4">{error}</p>
-            <button
-              onClick={() => navigate('/team')}
+          <button 
+            onClick={() => navigate('/team')}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Back to Team
-            </button>
+          >
+            Back to Team
+          </button>
           </div>
         </div>
       </div>
@@ -899,15 +751,15 @@ const TeamMemberDetails = () => {
       <div className="flex h-screen bg-gray-50">
         <Sidebar isOpen={false} onClose={() => {}} />
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
+        <div className="text-center">
             <XCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600 mb-4">Team member not found</p>
-            <button
-              onClick={() => navigate('/team')}
+          <button 
+            onClick={() => navigate('/team')}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-            >
-              Back to Team
-            </button>
+          >
+            Back to Team
+          </button>
           </div>
         </div>
       </div>
@@ -939,13 +791,13 @@ const TeamMemberDetails = () => {
                 </div>
                 <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
                   {!editing && (
-                    <button 
-                      onClick={handleEditMember}
-                      className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                    >
-                      <Edit className="w-4 h-4 mr-2" />
-                      Edit
-                    </button>
+                  <button 
+                    onClick={handleEditMember}
+                    className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </button>
                   )}
                   {editing && (
                     <div className="flex items-center space-x-2">
@@ -990,16 +842,16 @@ const TeamMemberDetails = () => {
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="p-4 sm:p-6">
                   <div className="flex items-center space-x-3 mb-6">
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                      <span className="text-blue-600 font-medium text-lg">
+                      <div className="w-12 h-12 rounded-lg flex items-center justify-center" style={{ backgroundColor: teamMember.color || '#2563EB' }}>
+                        <span className="font-medium text-lg" style={{ color: '#fff' }}>
                         {teamMember.first_name?.charAt(0) || 'T'}{teamMember.last_name?.charAt(0) || 'M'}
-                      </span>
-                    </div>
-                    <div>
-                      <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
+                        </span>
+                      </div>
+                      <div>
+                        <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
                         {teamMember.first_name || 'First'} {teamMember.last_name || 'Last'}
-                      </h2>
-                      <p className="text-sm text-gray-500">{teamMember.role || 'Team Member'}</p>
+                        </h2>
+                        <p className="text-sm text-gray-500">{teamMember.role || 'Team Member'}</p>
                     </div>
                   </div>
 
@@ -1010,7 +862,7 @@ const TeamMemberDetails = () => {
                       
                       {editing ? (
                         <div className="space-y-4">
-                          <div>
+                    <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
                             <input
                               type="text"
@@ -1018,8 +870,8 @@ const TeamMemberDetails = () => {
                               onChange={(e) => setEditFormData({...editFormData, first_name: e.target.value})}
                               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
-                          </div>
-                          <div>
+                    </div>
+                    <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
                             <input
                               type="text"
@@ -1027,8 +879,8 @@ const TeamMemberDetails = () => {
                               onChange={(e) => setEditFormData({...editFormData, last_name: e.target.value})}
                               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
-                          </div>
-                          <div>
+                    </div>
+                    <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                             <input
                               type="email"
@@ -1036,8 +888,8 @@ const TeamMemberDetails = () => {
                               onChange={(e) => setEditFormData({...editFormData, email: e.target.value})}
                               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
-                          </div>
-                          <div>
+                    </div>
+                    <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                             <input
                               type="tel"
@@ -1045,8 +897,8 @@ const TeamMemberDetails = () => {
                               onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})}
                               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
-                          </div>
-                          <div>
+                    </div>
+                    <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                             <input
                               type="text"
@@ -1054,7 +906,16 @@ const TeamMemberDetails = () => {
                               onChange={(e) => setEditFormData({...editFormData, role: e.target.value})}
                               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
-                          </div>
+                    </div>
+                    <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Calendar Color</label>
+                            <input
+                              type="color"
+                              value={editFormData.color || '#2563EB'}
+                              onChange={(e) => setEditFormData({...editFormData, color: e.target.value})}
+                              className="w-16 h-10 border border-gray-300 rounded"
+                            />
+                    </div>
                         </div>
                       ) : (
                         <div className="space-y-3">
@@ -1076,80 +937,59 @@ const TeamMemberDetails = () => {
                       
                       {editing ? (
                         <div className="space-y-4">
-                          <div className="relative">
+                          <div className="relative" ref={addressRef}>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                             <input
-                              id="location-input"
-                              ref={locationInputRef}
-                              key={`location-${editFormData.location || 'empty'}`}
                               type="text"
-                              value={editFormData.location || ''}
+                              value={editFormData.location}
                               onChange={handleLocationChange}
                               placeholder="Start typing an address..."
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-                              autoComplete="off"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
-                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                              <MapPin className="h-4 w-4 text-gray-400" />
-                            </div>
-                            
-                            {/* Address Suggestions Dropdown */}
+                            {addressLoading && (
+                              <div className="absolute right-3 top-2">
+                                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
+                              </div>
+                            )}
                             {showAddressSuggestions && addressSuggestions.length > 0 && (
-                              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                                {addressLoading && (
-                                  <div className="px-4 py-2 text-sm text-gray-500 flex items-center">
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                                    Loading address details...
-                                  </div>
-                                )}
-                                {!addressLoading && addressSuggestions.map((suggestion, index) => (
+                              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
+                                {addressSuggestions.map((suggestion, index) => (
                                   <div
                                     key={index}
-                                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                                     onClick={() => handleAddressSelect(suggestion)}
+                                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
                                   >
                                     {suggestion.description}
                                   </div>
                                 ))}
                               </div>
                             )}
-                            
-                            <p className="mt-1 text-xs text-gray-500 flex items-center">
-                              <MapPin className="h-3 w-3 mr-1" />
-                              Type to search for an address - city, state, and ZIP will auto-fill
-                            </p>
-                            <p className="mt-1 text-xs text-gray-400">
-                              Debug: Location={editFormData.location || 'empty'}, City={editFormData.city || 'empty'}, State={editFormData.state || 'empty'}, ZIP={editFormData.zip_code || 'empty'}
-                            </p>
                           </div>
                           <div className="grid grid-cols-3 gap-3">
-                            <div>
+                      <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
                               <input
-                                key={`city-${editFormData.city || 'empty'}`}
                                 type="text"
-                                value={editFormData.city || ''}
-                                onChange={(e) => setEditFormData({...editFormData, city: e.target.value})}
+                                value={editFormData.city}
+                                onChange={(e) => setEditFormData(prev => ({ ...prev, city: e.target.value }))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
                               <input
-                                key={`state-${editFormData.state || 'empty'}`}
                                 type="text"
-                                value={editFormData.state || ''}
-                                onChange={(e) => setEditFormData({...editFormData, state: e.target.value})}
+                                value={editFormData.state}
+                                onChange={(e) => setEditFormData(prev => ({ ...prev, state: e.target.value }))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
                             </div>
                             <div>
                               <label className="block text-sm font-medium text-gray-700 mb-1">ZIP Code</label>
                               <input
-                                key={`zip-${editFormData.zip_code || 'empty'}`}
                                 type="text"
-                                value={editFormData.zip_code || ''}
-                                onChange={(e) => setEditFormData({...editFormData, zip_code: e.target.value})}
+                                value={editFormData.zip_code}
+                                onChange={(e) => setEditFormData(prev => ({ ...prev, zip_code: e.target.value }))}
                                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
                             </div>
@@ -1166,8 +1006,8 @@ const TeamMemberDetails = () => {
                           {teamMember.city && teamMember.state && (
                             <div className="text-sm text-gray-600 ml-7">
                               {teamMember.city}, {teamMember.state} {teamMember.zip_code}
-                            </div>
-                          )}
+                      </div>
+                    )}
                         </div>
                       )}
                     </div>
@@ -1187,8 +1027,8 @@ const TeamMemberDetails = () => {
                       >
                         Edit
                       </button>
-                    )}
-                  </div>
+                      )}
+                    </div>
                   
                   {editing ? (
                     <div className="space-y-4">
@@ -1204,7 +1044,7 @@ const TeamMemberDetails = () => {
                             </button>
                           </div>
                         ))}
-                      </div>
+                  </div>
                       <button
                         onClick={handleAddSkill}
                         className="text-sm text-blue-600 hover:text-blue-700"
@@ -1222,13 +1062,13 @@ const TeamMemberDetails = () => {
                               {skill.name || skill}
                             </span>
                           ))}
-                        </div>
-                      ) : (
+                      </div>
+                    ) : (
                         <p className="text-gray-500 text-sm">No skills added yet</p>
-                      )}
-                    </div>
+                                  )}
+                                </div>
                   )}
-                </div>
+                              </div>
               </div>
 
               {/* Territories Card */}
@@ -1237,15 +1077,15 @@ const TeamMemberDetails = () => {
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-medium text-gray-900">Territories</h3>
                     {!editing && (
-                      <button
+                              <button
                         onClick={handleEditMember}
                         className="text-sm text-blue-600 hover:text-blue-700"
                       >
                         Edit
-                      </button>
-                    )}
-                  </div>
-                  
+                              </button>
+                  )}
+              </div>
+
                   {editing ? (
                     <div className="space-y-4">
                       <div className="flex flex-wrap gap-2">
@@ -1258,16 +1098,16 @@ const TeamMemberDetails = () => {
                             >
                               <XCircle className="w-4 h-4" />
                             </button>
-                          </div>
-                        ))}
                       </div>
+                        ))}
+                    </div>
                       <button
                         onClick={handleAddTerritory}
                         className="text-sm text-blue-600 hover:text-blue-700"
                       >
                         + Add Territory
                       </button>
-                    </div>
+                            </div>
                   ) : (
                     <div>
                       {console.log('Rendering displayed territories:', displayedTerritories)}
@@ -1280,17 +1120,17 @@ const TeamMemberDetails = () => {
                             return (
                               <span key={index} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
                                 {territory.name || (typeof territory === 'number' ? `Territory ${territory}` : territory)}
-                              </span>
+                            </span>
                             )
                           })}
-                        </div>
+                          </div>
                       ) : (
                         <p className="text-gray-500 text-sm">No territories assigned</p>
                       )}
-                    </div>
+                        </div>
                   )}
-                </div>
-              </div>
+                    </div>
+                  </div>
 
               {/* Service Provider Card */}
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
@@ -1316,17 +1156,17 @@ const TeamMemberDetails = () => {
                         }`}
                       />
                     </button>
-                  </div>
+                </div>
 
-                  {/* Availability Section */}
+                {/* Availability Section */}
                   <div className="border-t border-gray-200 pt-6">
-                    <div className="mb-6">
-                      <h4 className="text-base font-semibold text-gray-900">Availability</h4>
-                      <p className="text-sm text-gray-500">
+                  <div className="mb-6">
+                    <h4 className="text-base font-semibold text-gray-900">Availability</h4>
+                    <p className="text-sm text-gray-500">
                         Manage this team member's availability by editing their regular work hours, or by adding custom availability for specific dates.
                         <a href="#" className="text-blue-600 hover:text-blue-700 ml-1">Learn more...</a>
-                      </p>
-                    </div>
+                    </p>
+                  </div>
 
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center space-x-2">
@@ -1351,209 +1191,209 @@ const TeamMemberDetails = () => {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                      {/* Recurring Hours */}
-                      <div>
-                        <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
-                          <div className="flex items-center space-x-2">
-                            <Clock className="w-4 h-4 text-gray-400" />
-                            <h5 className="text-sm font-medium text-gray-900">RECURRING HOURS</h5>
-                            <HelpCircle className="w-4 h-4 text-gray-400" />
-                          </div>
-                          {!editingHours ? (
-                            <button
-                              onClick={() => setEditingHours(true)}
-                              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                            >
-                              Edit Hours
-                            </button>
-                          ) : (
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={handleSaveHours}
-                                className="text-sm text-green-600 hover:text-green-700 font-medium"
-                              >
-                                Save
-                              </button>
-                              <button
-                                onClick={() => setEditingHours(false)}
-                                className="text-sm text-gray-600 hover:text-gray-700 font-medium"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          )}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Recurring Hours */}
+                    <div>
+                      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4 text-gray-400" />
+                          <h5 className="text-sm font-medium text-gray-900">RECURRING HOURS</h5>
+                          <HelpCircle className="w-4 h-4 text-gray-400" />
                         </div>
-                        <div className="space-y-4">
+                        {!editingHours ? (
+                          <button
+                            onClick={() => setEditingHours(true)}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            Edit Hours
+                          </button>
+                        ) : (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={handleSaveHours}
+                              className="text-sm text-green-600 hover:text-green-700 font-medium"
+                            >
+                              Save
+                            </button>
+                            <button
+                              onClick={() => setEditingHours(false)}
+                              className="text-sm text-gray-600 hover:text-gray-700 font-medium"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="space-y-4">
                           {Object.entries(workingHours).map(([day, { available, hours, timeSlots = [] }]) => (
-                            <div key={day} className={`p-4 rounded-lg border ${getDayColor(day)}`}>
-                              <div className="flex items-center justify-between mb-3">
-                                <div className="flex items-center space-x-3">
-                                  <input
-                                    type="checkbox"
-                                    checked={available}
-                                    onChange={(e) => setWorkingHours(prev => ({
-                                      ...prev,
-                                      [day]: { ...prev[day], available: e.target.checked }
-                                    }))}
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span className="text-sm font-medium text-gray-900 capitalize">{day}</span>
-                                </div>
-                                {editingHours && available && (
-                                  <button
-                                    onClick={() => handleAddTimeSlot(day)}
-                                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                                  >
-                                    + Add Hours
-                                  </button>
+                          <div key={day} className={`p-4 rounded-lg border ${getDayColor(day)}`}>
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-3">
+                                <input
+                                  type="checkbox"
+                                  checked={available}
+                                  onChange={(e) => setWorkingHours(prev => ({
+                                    ...prev,
+                                    [day]: { ...prev[day], available: e.target.checked }
+                                  }))}
+                                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm font-medium text-gray-900 capitalize">{day}</span>
+                              </div>
+                              {editingHours && available && (
+                                <button
+                                  onClick={() => handleAddTimeSlot(day)}
+                                  className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                                >
+                                  + Add Hours
+                                </button>
+                              )}
+                            </div>
+                            
+                            {editingHours ? (
+                              <div className="space-y-2">
+                                {available && timeSlots.length === 0 && (
+                                  <div className="text-sm text-gray-500 italic">
+                                    No time slots set. Click "Add Hours" to add a time slot.
+                                  </div>
+                                )}
+                                {timeSlots.map((slot, index) => (
+                                  <div key={slot.id} className="flex items-center space-x-2 p-2 bg-white rounded border">
+                                    <select
+                                      value={slot.start}
+                                      onChange={(e) => handleTimeSlotChange(day, slot.id, 'start', e.target.value)}
+                                      className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                    >
+                                      {timeOptions.map(time => (
+                                        <option key={time} value={time}>{time}</option>
+                                      ))}
+                                    </select>
+                                    <span className="text-sm text-gray-500">to</span>
+                                    <select
+                                      value={slot.end}
+                                      onChange={(e) => handleTimeSlotChange(day, slot.id, 'end', e.target.value)}
+                                      className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                    >
+                                      {timeOptions.map(time => (
+                                        <option key={time} value={time}>{time}</option>
+                                      ))}
+                                    </select>
+                                    <button
+                                      onClick={() => handleRemoveTimeSlot(day, slot.id)}
+                                      className="text-red-600 hover:text-red-700 p-1"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="space-y-1">
+                                {available ? (
+                                  timeSlots.length > 0 ? (
+                                    timeSlots.map((slot, index) => (
+                                      <div key={slot.id} className="text-sm text-gray-600">
+                                        {slot.start} - {slot.end}
+                                      </div>
+                                    ))
+                                  ) : (
+                                      <span className="text-sm text-gray-500">{hours || 'No hours set'}</span>
+                                  )
+                                ) : (
+                                  <span className="text-sm text-gray-500">Unavailable</span>
                                 )}
                               </div>
-                              
-                              {editingHours ? (
-                                <div className="space-y-2">
-                                  {available && timeSlots.length === 0 && (
-                                    <div className="text-sm text-gray-500 italic">
-                                      No time slots set. Click "Add Hours" to add a time slot.
-                                    </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Custom Availability */}
+                    <div>
+                      <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-4 h-4 text-gray-400" />
+                          <h5 className="text-sm font-medium text-gray-900">CUSTOM AVAILABILITY</h5>
+                          <HelpCircle className="w-4 h-4 text-gray-400" />
+                        </div>
+                        {!editingAvailability ? (
+                          <button
+                            onClick={() => setEditingAvailability(true)}
+                            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            Add Date Override
+                          </button>
+                        ) : (
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => setEditingAvailability(false)}
+                              className="text-sm text-green-600 hover:text-green-700 font-medium"
+                            >
+                              Done
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {editingAvailability && (
+                        <div className="mb-4">
+                          <button
+                            onClick={handleAddCustomAvailability}
+                            className="flex items-center text-sm text-blue-600 hover:text-blue-700 font-medium"
+                          >
+                            <Plus className="w-4 h-4 mr-1" />
+                            Add Custom Date
+                          </button>
+                        </div>
+                      )}
+                      
+                      {customAvailability.length === 0 ? (
+                        <div className="text-center p-6 bg-gray-50 rounded-lg">
+                            <Calendar className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500 mb-4">Add a date override</p>
+                          <p className="text-xs text-gray-500 mb-4">Customize this provider's availability for specific dates.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {customAvailability.map((item) => (
+                            <div key={item.id} className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 p-3 bg-gray-50 rounded-lg">
+                              <div className="flex-1 flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
+                                <input
+                                  type="date"
+                                  value={item.date}
+                                  onChange={(e) => setCustomAvailability(prev => 
+                                    prev.map(i => i.id === item.id ? { ...i, date: e.target.value } : i)
                                   )}
-                                  {timeSlots.map((slot, index) => (
-                                    <div key={slot.id} className="flex items-center space-x-2 p-2 bg-white rounded border">
-                                      <select
-                                        value={slot.start}
-                                        onChange={(e) => handleTimeSlotChange(day, slot.id, 'start', e.target.value)}
-                                        className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                      >
-                                        {timeOptions.map(time => (
-                                          <option key={time} value={time}>{time}</option>
-                                        ))}
-                                      </select>
-                                      <span className="text-sm text-gray-500">to</span>
-                                      <select
-                                        value={slot.end}
-                                        onChange={(e) => handleTimeSlotChange(day, slot.id, 'end', e.target.value)}
-                                        className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                      >
-                                        {timeOptions.map(time => (
-                                          <option key={time} value={time}>{time}</option>
-                                        ))}
-                                      </select>
-                                      <button
-                                        onClick={() => handleRemoveTimeSlot(day, slot.id)}
-                                        className="text-red-600 hover:text-red-700 p-1"
-                                      >
-                                        <X className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="space-y-1">
-                                  {available ? (
-                                    timeSlots.length > 0 ? (
-                                      timeSlots.map((slot, index) => (
-                                        <div key={slot.id} className="text-sm text-gray-600">
-                                          {slot.start} - {slot.end}
-                                        </div>
-                                      ))
-                                    ) : (
-                                      <span className="text-sm text-gray-500">{hours || 'No hours set'}</span>
-                                    )
-                                  ) : (
-                                    <span className="text-sm text-gray-500">Unavailable</span>
+                                  className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                />
+                                <input
+                                  type="text"
+                                  value={item.hours}
+                                  onChange={(e) => setCustomAvailability(prev => 
+                                    prev.map(i => i.id === item.id ? { ...i, hours: e.target.value } : i)
                                   )}
-                                </div>
+                                  placeholder="9:00 AM - 6:00 PM"
+                                  className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                />
+                              </div>
+                              {editingAvailability && (
+                                <button
+                                  onClick={() => handleRemoveCustomAvailability(item.id)}
+                                  className="text-red-600 hover:text-red-700"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
                               )}
                             </div>
                           ))}
                         </div>
-                      </div>
-
-                      {/* Custom Availability */}
-                      <div>
-                        <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 mb-4">
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="w-4 h-4 text-gray-400" />
-                            <h5 className="text-sm font-medium text-gray-900">CUSTOM AVAILABILITY</h5>
-                            <HelpCircle className="w-4 h-4 text-gray-400" />
-                          </div>
-                          {!editingAvailability ? (
-                            <button
-                              onClick={() => setEditingAvailability(true)}
-                              className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                            >
-                              Add Date Override
-                            </button>
-                          ) : (
-                            <div className="flex space-x-2">
-                              <button
-                                onClick={() => setEditingAvailability(false)}
-                                className="text-sm text-green-600 hover:text-green-700 font-medium"
-                              >
-                                Done
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        
-                        {editingAvailability && (
-                          <div className="mb-4">
-                            <button
-                              onClick={handleAddCustomAvailability}
-                              className="flex items-center text-sm text-blue-600 hover:text-blue-700 font-medium"
-                            >
-                              <Plus className="w-4 h-4 mr-1" />
-                              Add Custom Date
-                            </button>
-                          </div>
-                        )}
-                        
-                        {customAvailability.length === 0 ? (
-                          <div className="text-center p-6 bg-gray-50 rounded-lg">
-                            <Calendar className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                            <p className="text-sm text-gray-500 mb-4">Add a date override</p>
-                            <p className="text-xs text-gray-500 mb-4">Customize this provider's availability for specific dates.</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-2">
-                            {customAvailability.map((item) => (
-                              <div key={item.id} className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0 p-3 bg-gray-50 rounded-lg">
-                                <div className="flex-1 flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
-                                  <input
-                                    type="date"
-                                    value={item.date}
-                                    onChange={(e) => setCustomAvailability(prev => 
-                                      prev.map(i => i.id === item.id ? { ...i, date: e.target.value } : i)
-                                    )}
-                                    className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                  />
-                                  <input
-                                    type="text"
-                                    value={item.hours}
-                                    onChange={(e) => setCustomAvailability(prev => 
-                                      prev.map(i => i.id === item.id ? { ...i, hours: e.target.value } : i)
-                                    )}
-                                    placeholder="9:00 AM - 6:00 PM"
-                                    className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                  />
-                                </div>
-                                {editingAvailability && (
-                                  <button
-                                    onClick={() => handleRemoveCustomAvailability(item.id)}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>
-              </div>
+                    </div>
+                  </div>
 
               {/* Recent Jobs Card */}
               {recentJobs.length > 0 && (
@@ -1563,54 +1403,54 @@ const TeamMemberDetails = () => {
                       <div className="flex items-center space-x-2">
                         <h3 className="text-lg font-semibold text-gray-900">Recent Jobs</h3>
                         <Calendar className="w-4 h-4 text-gray-400" />
-                      </div>
-                    </div>
+                        </div>
+                        </div>
                     <div className="space-y-4">
                       {recentJobs.slice(0, 5).map((job) => (
                         <div key={job.id} className="border border-gray-200 rounded-lg p-4">
                           <div className="flex flex-col space-y-2 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-                            <div>
+                        <div>
                               <h4 className="font-medium text-gray-900">{job.service_name}</h4>
                               <p className="text-sm text-gray-600">
                                 {job.customer_first_name} {job.customer_last_name}
                               </p>
-                              <p className="text-sm text-gray-500">
+                        <p className="text-sm text-gray-500">
                                 {new Date(job.scheduled_date).toLocaleDateString()}
-                              </p>
-                            </div>
+                        </p>
+                      </div>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              job.status === 'completed' ? 'bg-green-100 text-green-800' :
-                              job.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              {job.status.replace('_', ' ')}
-                            </span>
+                                      job.status === 'completed' ? 'bg-green-100 text-green-800' :
+                                      job.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-gray-100 text-gray-800'
+                                    }`}>
+                                      {job.status.replace('_', ' ')}
+                                    </span>
                           </div>
                         </div>
-                      ))}
+                                      ))}
+                                    </div>
+                                  </div>
+                </div>
+                            )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Add Territory Modal */}
       {showAddTerritoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">Add Territory</h3>
-              <button
+                        <button 
                 onClick={() => setShowAddTerritoryModal(false)}
                 className="text-gray-400 hover:text-gray-600"
-              >
+                        >
                 <X className="w-5 h-5" />
-              </button>
-            </div>
-            
+                        </button>
+                      </div>
+                      
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Territory</label>
@@ -1618,7 +1458,7 @@ const TeamMemberDetails = () => {
                   <div className="text-center py-4">
                     <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
                     <p className="text-sm text-gray-500 mt-2">Loading territories...</p>
-                  </div>
+                                </div>
                 ) : (
                   <select
                     onChange={(e) => {
@@ -1643,9 +1483,9 @@ const TeamMemberDetails = () => {
                       ))}
                   </select>
                 )}
-              </div>
-            </div>
-            
+        </div>
+      </div>
+
             <div className="flex space-x-3 mt-6">
               <button
                 onClick={() => setShowAddTerritoryModal(false)}
@@ -1683,7 +1523,7 @@ const TeamMemberDetails = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                 />
               </div>
-             
+              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Proficiency Level</label>
                 <select
@@ -1720,4 +1560,4 @@ const TeamMemberDetails = () => {
   )
 }
 
-export default TeamMemberDetails
+export default TeamMemberDetails 

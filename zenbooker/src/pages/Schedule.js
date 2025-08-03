@@ -6,7 +6,7 @@ import { useNavigate } from "react-router-dom"
 
 import EditJobModal from "../components/edit-job-modal"
 import { useAuth } from "../context/AuthContext"
-import { jobsAPI } from "../services/api"
+import { jobsAPI, teamAPI } from "../services/api"
 
 const ZenbookerSchedule = () => {
   const { user } = useAuth()
@@ -20,6 +20,7 @@ const ZenbookerSchedule = () => {
   const [selectedJob, setSelectedJob] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [teamMembers, setTeamMembers] = useState([])
   const navigate = useNavigate()
 
   // Get current user with useMemo to prevent infinite re-renders
@@ -28,11 +29,24 @@ const ZenbookerSchedule = () => {
   useEffect(() => {
     if (currentUser?.id) {
       loadJobs()
+      loadTeamMembers()
     } else if (!currentUser) {
       console.log('❌ No authenticated user, redirecting to signin')
       navigate('/signin')
     }
   }, [currentUser, currentView, currentDate, navigate])
+
+  const loadTeamMembers = async () => {
+    if (!currentUser?.id) return
+    try {
+      const response = await teamAPI.getAll(currentUser.id)
+      // response may be { teamMembers: [...] } or just an array
+      const members = Array.isArray(response) ? response : (response.teamMembers || response || [])
+      setTeamMembers(members)
+    } catch (error) {
+      setTeamMembers([])
+    }
+  }
 
   const loadJobs = async () => {
     if (!currentUser?.id) return
@@ -192,13 +206,15 @@ const ZenbookerSchedule = () => {
                   default: return 'bg-gray-100 text-gray-800 border-gray-200';
                 }
               };
-              
+              // Find the team member color
+              const teamMember = teamMembers.find(tm => tm.id === job.team_member_id)
+              const memberColor = teamMember?.color || '#2563EB'
               return (
                 <div key={job.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-200">
                   <div className="flex flex-col space-y-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
                     <div className="flex-1">
                       <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-3 mb-4">
-                        <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
+                        <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: memberColor }}>
                           <span className="text-white font-semibold text-sm">
                             {job.team_member_first_name?.charAt(0) || job.service_name?.charAt(0) || 'J'}
                           </span>

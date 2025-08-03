@@ -4,7 +4,6 @@ import MobileHeader from "../components/mobile-header"
 import { Plus, Search, Filter, Users, TrendingUp, Calendar, DollarSign, Clock, Eye, Edit, Trash2, UserPlus, BarChart3, AlertCircle, MapPin, Loader2, Power, PowerOff } from "lucide-react"
 import { useAuth } from "../context/AuthContext"
 import { teamAPI } from "../services/api"
-import AddTeamMemberModal from "../components/add-team-member-modal"
 import LoadingButton from "../components/loading-button"
 import { useNavigate } from "react-router-dom"
 
@@ -14,9 +13,7 @@ const ZenbookerTeam = () => {
   console.log('Auth loading:', authLoading)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [activeTab, setActiveTab] = useState("active")
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [selectedMember, setSelectedMember] = useState(null)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [memberToDelete, setMemberToDelete] = useState(null)
@@ -121,12 +118,12 @@ const ZenbookerTeam = () => {
   }
 
   const handleAddMember = () => {
-    setIsAddModalOpen(true)
+    navigate('/add-team-member')
   }
 
   const handleEditMember = (member) => {
     setSelectedMember(member)
-    setIsEditModalOpen(true)
+    // setIsEditModalOpen(true) // Removed
   }
 
   const handleViewMember = (member) => {
@@ -161,7 +158,7 @@ const ZenbookerTeam = () => {
 
   const handleMemberUpdate = () => {
     fetchTeamMembers()
-    setIsEditModalOpen(false)
+    // setIsEditModalOpen(false) // Removed
     setSelectedMember(null)
   }
 
@@ -422,7 +419,7 @@ const ZenbookerTeam = () => {
                             </div>
                           ) : (
                             <ul className="divide-y divide-gray-200">
-                              {teamMembers
+                              {Array.isArray(teamMembers) ? teamMembers
                                 .filter(member => {
                                   if (activeTab === "active") return member.status === 'active';
                                   if (activeTab === "pending") return member.status === 'pending';
@@ -575,7 +572,11 @@ const ZenbookerTeam = () => {
                                       </div>
                                     </div>
                                   </li>
-                                ))}
+                                )) : (
+                                  <li className="px-4 py-4 text-center text-gray-500">
+                                    No team members found or data is not in expected format.
+                                  </li>
+                                )}
                             </ul>
                           )}
                         </div>
@@ -589,22 +590,10 @@ const ZenbookerTeam = () => {
         </div>
 
         {/* Add Team Member Modal */}
-        <AddTeamMemberModal
-          isOpen={isAddModalOpen}
-          onClose={() => setIsAddModalOpen(false)}
-          onSuccess={handleMemberUpdate}
-          userId={user?.id}
-        />
+        {/* Removed AddTeamMemberModal */}
 
         {/* Edit Team Member Modal */}
-        <AddTeamMemberModal
-          isOpen={isEditModalOpen}
-          onClose={() => setIsEditModalOpen(false)}
-          onSuccess={handleMemberUpdate}
-          member={selectedMember}
-          isEditing={true}
-          userId={user?.id}
-        />
+        {/* Removed AddTeamMemberModal */}
 
         {/* Delete Confirmation Modal */}
         {showDeleteModal && memberToDelete && (

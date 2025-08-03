@@ -28,6 +28,7 @@ import ZenbookerOnlineBooking from "./pages/zenbooker-online-booking"
 import ZenbookerWebsiteEmbed from "./pages/zenbooker-website-embed"
 import ZenbookerSettings from "./pages/zenbooker-settings"
 import TeamMemberDetails from "./pages/team-member-details"
+import AddTeamMember from "./pages/add-team-member"
 import ServiceDetails from "./pages/service-details"
 import WhatsNewPage from "./pages/whats-new"
 import HelpPage from "./pages/help"
@@ -105,6 +106,7 @@ root.render(
       <Route path="invoices/:invoiceId/edit" element={<ProtectedRoute><InvoiceEdit /></ProtectedRoute>} />
       <Route path="team" element={<ZenbookerTeam />} />
       <Route path="team/:memberId" element={<ProtectedRoute><TeamMemberDetails /></ProtectedRoute>} />
+      <Route path="add-team-member" element={<AddTeamMember />} />
       <Route path="services" element={<ZenbookerServices />} />
       <Route path="services/:serviceId" element={<ServiceDetails />} />
       <Route path="services/:serviceId/:section" element={<ServiceDetails />} />

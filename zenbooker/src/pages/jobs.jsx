@@ -112,7 +112,7 @@ const ZenbookerJobs = () => {
   }
 
   const handleCreateJob = () => {
-    navigate('/create-job')
+    navigate('/createjob')
   }
 
   const handleJobUpdate = async () => {
@@ -140,10 +140,10 @@ const ZenbookerJobs = () => {
       
       await invoicesAPI.create(invoiceData)
       
-      // Update job invoice status
-      await jobsAPI.update(job.id, { invoice_status: 'invoiced' })
-      await fetchJobs() // Refresh jobs list
-      alert('Invoice created and sent successfully!')
+        // Update job invoice status
+        await jobsAPI.update(job.id, { invoice_status: 'invoiced' })
+        await fetchJobs() // Refresh jobs list
+        alert('Invoice created and sent successfully!')
     } catch (error) {
       console.error('Error sending invoice:', error)
       alert('Error sending invoice')
@@ -556,16 +556,16 @@ const ZenbookerJobs = () => {
                       {/* Basic Job Info */}
                       <div className="space-y-3 mb-6">
                         <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-gray-600">Due {formatDate(job.scheduled_date)}</p>
-                            <p className="text-sm text-gray-600">{formatTime(job.scheduled_date)}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm text-gray-600">Amount</p>
-                            <p className="text-lg font-semibold text-gray-900">{formatCurrency(job.total_amount || job.service_price || 0)}</p>
-                          </div>
+                        <div>
+                          <p className="text-sm text-gray-600">Due {formatDate(job.scheduled_date)}</p>
+                          <p className="text-sm text-gray-600">{formatTime(job.scheduled_date)}</p>
                         </div>
-                        
+                                                 <div className="text-right">
+                            <p className="text-sm text-gray-600">Amount</p>
+                           <p className="text-lg font-semibold text-gray-900">{formatCurrency(job.total_amount || job.service_price || 0)}</p>
+                         </div>
+                      </div>
+                      
                         {/* Customer Info */}
                         <div className="flex items-center space-x-2 text-sm text-gray-600">
                           <Users className="w-4 h-4" />
@@ -584,16 +584,16 @@ const ZenbookerJobs = () => {
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-gray-600">Invoice Status</span>
                           <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            job.invoice_status === 'paid' ? 'bg-green-100 text-green-800' :
-                            job.invoice_status === 'unpaid' ? 'bg-red-100 text-red-800' :
-                            job.invoice_status === 'invoiced' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
+                             job.invoice_status === 'paid' ? 'bg-green-100 text-green-800' :
+                             job.invoice_status === 'unpaid' ? 'bg-red-100 text-red-800' :
+                             job.invoice_status === 'invoiced' ? 'bg-blue-100 text-blue-800' :
+                             'bg-gray-100 text-gray-800'
                           }`}>
-                            {job.invoice_status || 'No invoice'}
+                           {job.invoice_status || 'No invoice'}
                           </span>
-                        </div>
                       </div>
-                      
+                    </div>
+                    
                       {/* Action Buttons */}
                       <div className="flex items-center justify-between">
                         <button
