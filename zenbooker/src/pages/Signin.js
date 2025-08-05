@@ -126,18 +126,20 @@ export default function SignInForm() {
 
           {/* Sign In Form */}
           <form
-            id="login-form"
+            id="signin-form"
+            method="post"
             autoComplete="on"
-            formNoValidate={false}
             onSubmit={handleSubmit}
             className="space-y-6"
           >
             {/* Email Input */}
             <div>
+              <label htmlFor="email" className="sr-only">Email Address</label>
               <input
+                id="email"
                 type="email"
                 name="email"
-                autoComplete="username"
+                autoComplete="email"
                 placeholder="Email"
                 value={formData.email}
                 onChange={handleInputChange}
@@ -154,7 +156,9 @@ export default function SignInForm() {
 
             {/* Password Input */}
             <div>
+              <label htmlFor="password" className="sr-only">Password</label>
               <input
+                id="password"
                 type="password"
                 name="password"
                 placeholder="Password"
