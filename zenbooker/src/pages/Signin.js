@@ -131,6 +131,7 @@ export default function SignInForm() {
               <input
                 type="email"
                 name="email"
+                autoComplete="username"
                 placeholder="Email"
                 value={formData.email}
                 onChange={handleInputChange}

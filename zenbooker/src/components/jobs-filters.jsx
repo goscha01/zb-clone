@@ -1,11 +1,33 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Search, ChevronDown, X, Calendar } from "lucide-react"
+import { territoriesAPI } from "../services/api"
+import { useAuth } from "../context/AuthContext"
 
 const JobsFilters = ({ filters, onFilterChange, activeTab }) => {
   const [searchValue, setSearchValue] = useState(filters.search || "")
   const [showDateRange, setShowDateRange] = useState(false)
+  const [territories, setTerritories] = useState([])
+  const [territoryLoading, setTerritoryLoading] = useState(false)
+  const { user } = useAuth();
+
+  useEffect(() => {
+    const fetchTerritories = async () => {
+      if (!user?.id) return
+      setTerritoryLoading(true)
+      try {
+        const data = await territoriesAPI.getAll(user.id)
+        setTerritories(data.territories || data)
+      } catch (e) {
+        setTerritories([])
+      } finally {
+        setTerritoryLoading(false)
+      }
+    }
+    fetchTerritories()
+    // eslint-disable-next-line
+  }, [user?.id])
 
   const handleSearchChange = (value) => {
     setSearchValue(value)
@@ -86,6 +108,22 @@ const JobsFilters = ({ filters, onFilterChange, activeTab }) => {
 
         {/* Filters */}
         <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
+          {/* Territory Filter */}
+          <div className="relative">
+            <select
+              value={filters.territoryId || ""}
+              onChange={e => onFilterChange({ territoryId: e.target.value })}
+              className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              disabled={territoryLoading}
+            >
+              <option value="">All Territories</option>
+              {territories.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+          </div>
+
           <div className="relative">
             <select 
               value={filters.invoiceStatus || ""}

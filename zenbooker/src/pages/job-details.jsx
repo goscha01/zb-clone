@@ -1,7 +1,5 @@
-import { useState, useEffect } from "react"
-import { useParams, useNavigate } from "react-router-dom"
-import Sidebar from "../components/sidebar"
-import MobileHeader from "../components/mobile-header"
+import React, { useState, useEffect } from "react"
+import { useParams } from "react-router-dom"
 import { 
   ArrowLeft, 
   Edit, 
@@ -31,297 +29,312 @@ import {
   Clipboard,
   Home,
   Plus,
-  Tag
+  Tag,
+  Star,
+  MessageSquare,
+  Bell,
+  Zap,
+  Shield,
+  Award,
+  Target,
+  Navigation,
+  Package,
+  Tool,
+  Wrench,
+  Paintbrush,
+  Leaf,
+  Sparkles,
+  MoreVertical,
+  ExternalLink,
+  Printer,
+  Send,
+  Edit3,
+  MapPin as LocationIcon,
+  Calendar as CalendarIcon,
+  Copy,
+  Trash2,
+  Menu
 } from "lucide-react"
-import { jobsAPI, teamAPI, invoicesAPI, notificationAPI, territoriesAPI } from "../services/api"
-import { useAuth } from "../context/AuthContext"
-import { formatPhoneNumber } from "../utils/phoneFormatter"
+import { jobsAPI, notificationAPI, territoriesAPI, teamAPI, invoicesAPI } from "../services/api"
+import Sidebar from "../components/sidebar"
+import { useNavigate } from "react-router-dom"
 
 const JobDetails = () => {
-  const { jobId } = useParams()
-  const navigate = useNavigate()
-  const { user, loading: authLoading } = useAuth()
-  
+  const { jobId } = useParams();
+  const navigate = useNavigate();
   const [job, setJob] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState("")
+
+  // Google Places Autocomplete state
+  const [addressSuggestions, setAddressSuggestions] = useState([])
+  const [addressLoading, setAddressLoading] = useState(false)
+
+  const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(false)
-  const [saving, setSaving] = useState(false)
+  const [showActionMenu, setShowActionMenu] = useState(false)
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false)
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [showEditServiceModal, setShowEditServiceModal] = useState(false)
+  const [showEditAddressModal, setShowEditAddressModal] = useState(false)
+
+  // For address modal mapping
+  useEffect(() => {
+    if (showEditAddressModal && job) {
+      setFormData(prev => ({
+        ...prev,
+        serviceAddress: {
+          street: job.service_address_street || "",
+          city: job.service_address_city || "",
+          state: job.service_address_state || "",
+          zipCode: job.service_address_zip || ""
+        }
+      }))
+    }
+    // eslint-disable-next-line
+  }, [showEditAddressModal, job?.service_address_street, job?.service_address_city, job?.service_address_state, job?.service_address_zip])
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false)
   const [successMessage, setSuccessMessage] = useState("")
-  const [teamMembers, setTeamMembers] = useState([])
+  const [error, setError] = useState("")
+
+  // Territories
   const [territories, setTerritories] = useState([])
-  const [showTeamDropdown, setShowTeamDropdown] = useState(false)
   const [showTerritoryDropdown, setShowTerritoryDropdown] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [emailNotifications, setEmailNotifications] = useState(false)
-  const [smsNotifications, setSmsNotifications] = useState(true)
-  const [showSkillsModal, setShowSkillsModal] = useState(false)
-  const [selectedSkills, setSelectedSkills] = useState([])
-  const [showCustomerModal, setShowCustomerModal] = useState(false)
-  const [showServiceModal, setShowServiceModal] = useState(false)
+
+  // Team
+  const [teamMembers, setTeamMembers] = useState([])
+  const [assigning, setAssigning] = useState(false)
+  const [selectedTeamMember, setSelectedTeamMember] = useState(null)
+
+  // Invoice
+  const [invoice, setInvoice] = useState(null)
+  const [editingInvoice, setEditingInvoice] = useState(false)
+  const [invoiceAmount, setInvoiceAmount] = useState(0)
+
+  // Notes
+  const [editingNotes, setEditingNotes] = useState(false)
+  const [notesValue, setNotesValue] = useState("")
+
+  // Notification preferences
+  const [emailNotifications, setEmailNotifications] = useState(true)
+  const [smsNotifications, setSmsNotifications] = useState(false)
+
+  // Form data
+  const [formData, setFormData] = useState({
+    scheduledDate: "",
+    scheduledTime: "",
+    notes: "",
+    internalNotes: "",
+    service_name: "",
+    bathroom_details: "",
+    duration: 0,
+    serviceAddress: {
+      street: "",
+      city: "",
+      state: "",
+      zipCode: ""
+    }
+  })
+
+  // Fetch job and notification preferences from backend
+  // Fetch job and notification preferences from backend
+  useEffect(() => {
+    const fetchJob = async () => {
+      setLoading(true)
+      try {
+        const jobData = await jobsAPI.getById(jobId)
+        setJob(jobData)
+        setFormData({
+          scheduledDate: jobData.scheduled_date ? jobData.scheduled_date.split('T')[0] : "",
+          scheduledTime: jobData.scheduled_date ? jobData.scheduled_date.split('T')[1]?.substring(0, 5) : "",
+          notes: jobData.notes || "",
+          internalNotes: jobData.internal_notes || "",
+          service_name: jobData.service_name || "",
+          bathroom_details: jobData.bathroom_count || "",
+          duration: jobData.duration || 0,
+          serviceAddress: {
+            street: jobData.service_address_street || "",
+            city: jobData.service_address_city || "",
+            state: jobData.service_address_state || "",
+            zipCode: jobData.service_address_zip || ""
+          }
+        })
+        // Fetch notification preferences if customer id exists
+        if (jobData.customer_id) {
+          try {
+            const prefs = await notificationAPI.getPreferences(jobData.customer_id)
+            setEmailNotifications(!!prefs.email)
+            setSmsNotifications(!!prefs.sms)
+          } catch (e) {
+            // fallback to default
+          }
+        }
+      } catch (err) {
+        setError("Failed to load job details")
+      } finally {
+        setLoading(false)
+      }
+    }
+    if (jobId) fetchJob()
+  }, [jobId])
+
+  // Fetch territories for dropdown
+  useEffect(() => {
+    const fetchTerritories = async () => {
+      try {
+        // Try to get userId from job or from localStorage
+        let userId = null
+        if (job && job.user_id) userId = job.user_id
+        else {
+          const user = localStorage.getItem('user')
+          if (user) userId = JSON.parse(user).id
+        }
+        if (userId) {
+          const data = await territoriesAPI.getAll(userId)
+          setTerritories(data.territories || data)
+        }
+      } catch (e) {
+        setTerritories([])
+      }
+    }
+    fetchTerritories()
+  }, [job])
+
+  // Fetch team members for assignment
+  useEffect(() => {
+    const fetchTeam = async () => {
+      try {
+        let userId = null
+        if (job && job.user_id) userId = job.user_id
+        else {
+          const user = localStorage.getItem('user')
+          if (user) userId = JSON.parse(user).id
+        }
+        if (userId) {
+          const data = await teamAPI.getAll(userId)
+          setTeamMembers(data.teamMembers || data)
+        }
+      } catch (e) {
+        setTeamMembers([])
+      }
+    }
+    fetchTeam()
+  }, [job])
+
+  // Fetch invoice data
+  useEffect(() => {
+    const fetchInvoice = async () => {
+      if (!job || !job.invoice_id) return
+      try {
+        const data = await invoicesAPI.getById(job.invoice_id, job.user_id)
+        setInvoice(data)
+        setInvoiceAmount(data.total_amount || 0)
+      } catch (e) {
+        setInvoice(null)
+      }
+    }
+    fetchInvoice()
+  }, [job])
+
+  // Notes value sync
+  useEffect(() => {
+    if (job) setNotesValue(job.notes || "")
+  }, [job])
+
+  const statusOptions = [
+    { key: 'pending', label: 'Pending', color: 'bg-gray-400' },
+    { key: 'confirmed', label: 'Confirmed', color: 'bg-blue-500' },
+    { key: 'in_progress', label: 'In Progress', color: 'bg-orange-500' },
+    { key: 'completed', label: 'Completed', color: 'bg-purple-500' },
+    { key: 'cancelled', label: 'Cancelled', color: 'bg-red-500' }
+  ]
+
+  const handleStatusChange = async (newStatus) => {
+    if (!job) return
+    try {
+      setLoading(true)
+      await jobsAPI.updateStatus(job.id, newStatus)
+      setJob(prev => ({ ...prev, status: newStatus }))
+      setSuccessMessage(`Job marked as ${newStatus}`)
+      setTimeout(() => setSuccessMessage(""), 3000)
+    } catch (error) {
+      setError('Failed to update status')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleNotificationToggle = async (type, value) => {
+    if (!job || !job.customer_id) return
     try {
       if (type === 'email') {
         setEmailNotifications(value)
       } else if (type === 'sms') {
         setSmsNotifications(value)
       }
-      
-      // Save notification preferences to backend
       await notificationAPI.updatePreferences(job.customer_id, {
-        email_notifications: type === 'email' ? value : emailNotifications,
-        sms_notifications: type === 'sms' ? value : smsNotifications
+        email: type === 'email' ? value : emailNotifications,
+        sms: type === 'sms' ? value : smsNotifications
       })
-      
-      console.log(`${type} notifications:`, value ? 'enabled' : 'disabled')
     } catch (error) {
-      console.error('Error updating notification preferences:', error)
-      // Revert the toggle if the API call failed
-      if (type === 'email') {
-        setEmailNotifications(!value)
-      } else if (type === 'sms') {
-        setSmsNotifications(!value)
-      }
+      setError('Failed to update notification preferences')
     }
   }
 
-  // Form data for editing
-  const [formData, setFormData] = useState({
-    scheduledDate: "",
-    scheduledTime: "",
-    notes: "",
-    status: "",
-    teamMemberId: "",
-    territoryId: "",
-    skills: []
-  })
-
-  const loadNotificationPreferences = async () => {
+  // Helper to reload job from backend
+  const reloadJob = async () => {
+    setLoading(true)
     try {
-      const preferences = await notificationAPI.getPreferences(job.customer_id)
-      setEmailNotifications(preferences.email_notifications || false)
-      setSmsNotifications(preferences.sms_notifications || true)
-    } catch (error) {
-      console.error('Error loading notification preferences:', error)
-    }
-  }
-
-  useEffect(() => {
-    if (!authLoading && user?.id && jobId) {
-      fetchJobDetails()
-      loadTeamMembers()
-      loadTerritories()
-    } else if (!authLoading && !user?.id) {
-      navigate('/signin')
-    }
-  }, [jobId, user?.id, authLoading])
-
-  useEffect(() => {
-    if (job) {
+      const jobData = await jobsAPI.getById(jobId)
+      setJob(jobData)
       setFormData({
-        scheduledDate: job.scheduled_date ? job.scheduled_date.split('T')[0] : "",
-        scheduledTime: job.scheduled_date ? job.scheduled_date.split('T')[1]?.substring(0, 5) : "",
-        notes: job.notes || "",
-        status: job.status || "",
-        teamMemberId: job.team_member_id || "",
-        territoryId: job.territory_id || "",
-        skills: job.skills ? JSON.parse(job.skills) : []
-      })
-      // Parse skills from job data
-      try {
-        if (job.skills) {
-          const parsedSkills = typeof job.skills === 'string' ? JSON.parse(job.skills) : job.skills
-          setSelectedSkills(Array.isArray(parsedSkills) ? parsedSkills : [])
-          console.log('Loaded skills from job:', parsedSkills)
-        } else {
-          setSelectedSkills([])
+        scheduledDate: jobData.scheduled_date ? jobData.scheduled_date.split('T')[0] : "",
+        scheduledTime: jobData.scheduled_date ? jobData.scheduled_date.split('T')[1]?.substring(0, 5) : "",
+        notes: jobData.notes || "",
+        internalNotes: jobData.internal_notes || "",
+        service_name: jobData.service_name || "",
+        bathroom_details: jobData.bathroom_count || "",
+        duration: jobData.duration || 0,
+        serviceAddress: {
+          street: jobData.service_address_street || "",
+          city: jobData.service_address_city || "",
+          state: jobData.service_address_state || "",
+          zipCode: jobData.service_address_zip || ""
         }
-      } catch (error) {
-        console.error('Error parsing skills:', error)
-        setSelectedSkills([])
-      }
-      loadNotificationPreferences()
-    }
-  }, [job])
-
-  const fetchJobDetails = async () => {
-    if (!user?.id || !jobId) return
-    
-    try {
-      setLoading(true)
-      setError("")
-      
-      const response = await jobsAPI.getById(jobId)
-      console.log('Job details response:', response)
-      
-      if (response && response.job) {
-        setJob(response.job)
-      } else if (response && response.id) {
-        setJob(response)
-      } else {
-        setError('Job not found')
-      }
-    } catch (error) {
-      console.error('Error fetching job details:', error)
-      setError('Failed to load job details. Please try again.')
+      })
+    } catch (err) {
+      setError("Failed to reload job details")
     } finally {
       setLoading(false)
     }
   }
 
-  const loadTeamMembers = async () => {
-    if (!user?.id) return
-    
-    try {
-      const response = await teamAPI.getAll(user.id)
-      const teamArray = Array.isArray(response) ? response : (response?.teamMembers || response || [])
-      setTeamMembers(teamArray)
-    } catch (error) {
-      console.error('Error loading team members:', error)
-      setTeamMembers([])
-    }
-  }
-
-  const loadTerritories = async () => {
-    if (!user?.id) return
-    
-    try {
-      const response = await territoriesAPI.getAll(user.id)
-      const territoriesArray = Array.isArray(response) ? response : (response?.territories || response || [])
-      setTerritories(territoriesArray)
-    } catch (error) {
-      console.error('Error loading territories:', error)
-      setTerritories([])
-    }
-  }
-
   const handleSave = async () => {
     if (!job) return
-    
     try {
-      setSaving(true)
-      setError("")
-      
-      const updateData = {
+      setLoading(true)
+      const updatedJob = {
+        ...job,
         scheduled_date: formData.scheduledDate && formData.scheduledTime 
           ? `${formData.scheduledDate}T${formData.scheduledTime}:00.000Z`
           : job.scheduled_date,
         notes: formData.notes,
-        status: formData.status,
-        team_member_id: formData.teamMemberId || null,
-        territory_id: formData.territoryId || null,
-        skills: JSON.stringify(selectedSkills)
+        internal_notes: formData.internalNotes,
+        service_name: formData.service_name,
+        bathroom_count: formData.bathroom_details,
+        duration: formData.duration,
+        service_address_street: formData.serviceAddress.street,
+        service_address_city: formData.serviceAddress.city,
+        service_address_state: formData.serviceAddress.state,
+        service_address_zip: formData.serviceAddress.zipCode
       }
-
-      await jobsAPI.update(job.id, updateData)
-      
-      // Refresh job data
-      await fetchJobDetails()
-      
-      setEditing(false)
+      await jobsAPI.update(job.id, updatedJob)
       setSuccessMessage('Job updated successfully!')
       setTimeout(() => setSuccessMessage(""), 3000)
+      await reloadJob()
     } catch (error) {
-      console.error('Error updating job:', error)
-      setError('Failed to update job. Please try again.')
+      setError('Failed to update job')
     } finally {
-      setSaving(false)
+      setLoading(false)
     }
-  }
-
-  const handleStatusChange = async (newStatus) => {
-    if (!job) return
-    
-    try {
-      await jobsAPI.updateStatus(job.id, newStatus)
-      await fetchJobDetails() // Refresh job data
-      setSuccessMessage(`Job status updated to ${newStatus}`)
-      setTimeout(() => setSuccessMessage(""), 3000)
-    } catch (error) {
-      console.error('Error updating job status:', error)
-      setError('Failed to update job status')
-    }
-  }
-
-  const handleAssignJob = (job) => {
-    // Open team member assignment modal or navigate to assignment page
-    setEditing(true)
-  }
-
-  const handleSendInvoice = async (job) => {
-    try {
-      // Create invoice for the job using the proper API
-      const invoiceData = {
-        userId: user.id,
-        customerId: job.customer_id,
-        jobId: job.id,
-        totalAmount: job.total_amount || job.service_price,
-        status: 'sent'
-      }
-      
-      await invoicesAPI.create(invoiceData)
-      
-      // Update job invoice status
-      await jobsAPI.update(job.id, { invoice_status: 'invoiced' })
-      await fetchJobDetails() // Refresh jobs list
-      setSuccessMessage('Invoice created and sent successfully!')
-      setTimeout(() => setSuccessMessage(""), 3000)
-    } catch (error) {
-      console.error('Error sending invoice:', error)
-      setError('Error sending invoice')
-    }
-  }
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800'
-      case 'confirmed': return 'bg-blue-100 text-blue-800'
-      case 'in_progress': return 'bg-orange-100 text-orange-800'
-      case 'completed': return 'bg-green-100 text-green-800'
-      case 'cancelled': return 'bg-red-100 text-red-800'
-      default: return 'bg-gray-100 text-gray-800'
-    }
-  }
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'pending': return 'Pending'
-      case 'confirmed': return 'Confirmed'
-      case 'in_progress': return 'In Progress'
-      case 'completed': return 'Completed'
-      case 'cancelled': return 'Cancelled'
-      default: return status
-    }
-  }
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'pending': return <Clock className="w-4 h-4" />
-      case 'confirmed': return <CheckCircle className="w-4 h-4" />
-      case 'in_progress': return <PlayCircle className="w-4 h-4" />
-      case 'completed': return <CheckCircle className="w-4 h-4" />
-      case 'cancelled': return <XCircle className="w-4 h-4" />
-      default: return <Clock className="w-4 h-4" />
-    }
-  }
-
-  const getSelectedTeamMember = () => {
-    if (!job?.team_member_id) return null
-    return teamMembers.find(member => member.id === job.team_member_id)
-  }
-
-  const getSelectedTerritory = () => {
-    if (!job?.territory_id) return null
-    return territories.find(territory => territory.id === job.territory_id)
-  }
-
-  const formatCurrency = (amount) => {
-    if (!amount) return '$0.00'
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount)
   }
 
   const formatDate = (dateString) => {
@@ -329,9 +342,9 @@ const JobDetails = () => {
     const date = new Date(dateString)
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
-      year: 'numeric',
       month: 'short',
-      day: 'numeric'
+      day: 'numeric',
+      year: 'numeric'
     })
   }
 
@@ -345,853 +358,1184 @@ const JobDetails = () => {
     })
   }
 
-  const getStatusSteps = () => {
-    const steps = [
-      { key: 'scheduled', label: 'Scheduled', icon: Calendar },
-      { key: 'en_route', label: 'En Route', icon: Truck },
-      { key: 'started', label: 'Started', icon: PlayCircle },
-      { key: 'complete', label: 'Complete', icon: CheckCircle },
-      { key: 'paid', label: 'Paid', icon: DollarSign }
-    ]
-    
-    const currentStatus = job?.status || 'pending'
-    let currentStepIndex = 0
-    
-    switch (currentStatus) {
-      case 'pending':
-        currentStepIndex = 0
-        break
-      case 'confirmed':
-        currentStepIndex = 1
-        break
-      case 'in_progress':
-        currentStepIndex = 2
-        break
-      case 'completed':
-        currentStepIndex = 3
-        break
-      default:
-        currentStepIndex = 0
-    }
-    
-    return steps.map((step, index) => ({
-      ...step,
-      completed: index <= currentStepIndex,
-      current: index === currentStepIndex
-    }))
-  }
-
-  const getCustomerInitials = (customer) => {
-    if (!customer) return ''
-    const firstName = customer.first_name || ''
-    const lastName = customer.last_name || ''
+  const getCustomerInitials = () => {
+    const firstName = job.customer_first_name || ''
+    const lastName = job.customer_last_name || ''
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase()
   }
 
-  const handleSkillToggle = (skill) => {
-    setSelectedSkills(prev => {
-      const isSelected = prev.find(s => s.name === skill.name)
-      if (isSelected) {
-        return prev.filter(s => s.name !== skill.name)
-      } else {
-        return [...prev, skill]
-      }
-    })
+  const getCurrentStatusIndex = () => {
+    return statusOptions.findIndex(option => option.key === job.status)
   }
 
-  const handleSkillsSave = async () => {
-    try {
-      // Save skills to job
-      if (job) {
-        // Always include at least one other field to avoid 'no field to update' error
-        const updateData = {
-          skills: JSON.stringify(selectedSkills),
-          notes: job.notes || " "
-        }
-        await jobsAPI.update(job.id, updateData)
-        // Refresh job data to show updated skills
-        await fetchJobDetails()
-        setSuccessMessage('Skills updated successfully!')
-        setTimeout(() => setSuccessMessage(""), 3000)
-      }
-      setShowSkillsModal(false)
-    } catch (error) {
-      console.error('Error saving skills:', error)
-      setError('Failed to save skills')
-    }
-  }
+  const ActionMenu = () => (
+    <div className="relative">
+      <button
+        onClick={() => setShowActionMenu(!showActionMenu)}
+        className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+      >
+        <MoreVertical className="w-5 h-5 text-gray-600" />
+      </button>
+      
+      {showActionMenu && (
+        <>
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => setShowActionMenu(false)}
+          />
+          <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+            <button
+              onClick={() => {
+                setShowEditServiceModal(true)
+                setShowActionMenu(false)
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
+            >
+              <Edit3 className="w-4 h-4" />
+              <span>Edit Service</span>
+            </button>
+            <button
+              onClick={() => {
+                setShowEditAddressModal(true)
+                setShowActionMenu(false)
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
+            >
+              <MapPin className="w-4 h-4" />
+              <span>Edit Address</span>
+            </button>
+            <button
+              onClick={() => {
+                setShowRescheduleModal(true)
+                setShowActionMenu(false)
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-50 flex items-center space-x-2"
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Reschedule</span>
+            </button>
+            <hr className="my-1" />
+            <button
+              onClick={() => {
+                setShowCancelModal(true)
+                setShowActionMenu(false)
+              }}
+              className="w-full text-left px-4 py-2 hover:bg-gray-50 text-red-600 flex items-center space-x-2"
+            >
+              <X className="w-4 h-4" />
+              <span>Cancel Job</span>
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
 
-  const handleEditCustomer = () => {
-    setShowCustomerModal(true)
-  }
-
-  const handleEditService = () => {
-    setShowServiceModal(true)
-  }
-
-  const handleCustomerSave = async (customerData) => {
-    try {
-      // Update customer information
-      // This would typically call a customer API update method
-      console.log('Updating customer:', customerData)
-      setSuccessMessage('Customer information updated successfully!')
-      setTimeout(() => setSuccessMessage(""), 3000)
-      setShowCustomerModal(false)
-    } catch (error) {
-      console.error('Error updating customer:', error)
-      setError('Failed to update customer information')
-    }
-  }
-
-  const handleServiceSave = async (serviceData) => {
-    try {
-      // Update service information in the backend
-      if (job) {
-        await jobsAPI.update(job.id, {
-          service_name: serviceData.service_name,
-          duration: serviceData.duration,
-          service_price: serviceData.service_price,
-          service_description: serviceData.service_description,
-          notes: serviceData.notes
-        });
-        await fetchJobDetails();
-      }
-      setSuccessMessage('Service information updated successfully!')
-      setTimeout(() => setSuccessMessage(""), 3000)
-    } catch (error) {
-      console.error('Error updating service:', error)
-      setError('Failed to update service information')
-    }
-  }
-
-  // Dynamic skills input
-  const [availableSkills, setAvailableSkills] = useState([
-    { name: 'Cleaning', level: 'Expert' },
-    { name: 'Plumbing', level: 'Intermediate' },
-    { name: 'Electrical', level: 'Beginner' },
-    { name: 'Carpentry', level: 'Expert' },
-    { name: 'Landscaping', level: 'Intermediate' },
-    { name: 'Painting', level: 'Expert' }
-  ])
-  const [skillInput, setSkillInput] = useState("");
-  const [skillLevel, setSkillLevel] = useState("");
-  const skillLevels = ["Beginner", "Intermediate", "Expert"];
-
-  // Show loading if user is not available
-  if (!user) {
+  const Modal = ({ isOpen, onClose, title, children, maxWidth = "max-w-md" }) => {
+    if (!isOpen) return null
+    
     return (
-      <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-100 items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (loading) {
-    return (
-      <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-100 items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading job details...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-100 items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-          <p className="text-red-600 font-medium">{error}</p>
-          <button
-            onClick={() => navigate('/jobs')}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Back to Jobs
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  if (!job) {
-    return (
-      <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-100 items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="w-12 h-12 text-gray-500 mx-auto mb-4" />
-          <p className="text-gray-600 font-medium">Job not found</p>
-          <button
-            onClick={() => navigate('/jobs')}
-            className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            Back to Jobs
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  const statusSteps = getStatusSteps()
-  const selectedTeamMember = getSelectedTeamMember()
-  const selectedTerritory = getSelectedTerritory()
-
-  return (
-    <div className="flex h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 overflow-hidden">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
-      <div className="flex-1 flex flex-col min-w-0">
-        <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
-
-        {/* Header */}
-        <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 px-4 lg:px-6 py-4 lg:py-6 shadow-sm">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-            <div className="flex items-center space-x-4">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className={`bg-white rounded-lg shadow-xl ${maxWidth} w-full max-h-[90vh] overflow-y-auto`}>
+          <div className="p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
               <button
-                onClick={() => navigate("/jobs")}
-                className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors duration-200"
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600 p-1"
               >
-                <ArrowLeft className="w-5 h-5" />
-                <span className="text-sm font-medium">All Jobs</span>
+                <X className="w-5 h-5" />
               </button>
-              <div className="hidden lg:block h-6 w-px bg-gray-300"></div>
-              <div className="min-w-0 flex-1">
-                <h1 className="text-lg lg:text-2xl font-bold text-gray-900 truncate">
-                  {job.service_name} for {job.customer_first_name} {job.customer_last_name}
-                </h1>
-                <p className="text-gray-600 text-sm">Job #{job.id}</p>
-              </div>
             </div>
+            {children}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
-            {/* Territory Dropdown */}
-            <div className="relative">
+  const RescheduleModal = () => (
+    <Modal
+      isOpen={showRescheduleModal}
+      onClose={() => setShowRescheduleModal(false)}
+      title="Reschedule Job"
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
+          <input
+            type="date"
+            value={formData.scheduledDate}
+            onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+          <input
+            type="time"
+            value={formData.scheduledTime}
+            onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+      </div>
+      
+      <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 mt-6">
+        <button
+          onClick={() => setShowRescheduleModal(false)}
+          className="px-4 py-2 text-gray-600 hover:text-gray-800 order-2 sm:order-1"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => {
+            handleSave()
+            setShowRescheduleModal(false)
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 order-1 sm:order-2"
+        >
+          Reschedule
+        </button>
+      </div>
+    </Modal>
+  )
+
+  const CancelModal = () => (
+    <Modal
+      isOpen={showCancelModal}
+      onClose={() => setShowCancelModal(false)}
+      title="Cancel Job"
+    >
+      <p className="text-gray-600 mb-6">
+        Are you sure you want to cancel this job? This action cannot be undone.
+      </p>
+      
+      <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3">
+        <button
+          onClick={() => setShowCancelModal(false)}
+          className="px-4 py-2 text-gray-600 hover:text-gray-800 order-2 sm:order-1"
+        >
+          Keep Job
+        </button>
+        <button
+          onClick={() => {
+            handleStatusChange('cancelled')
+            setShowCancelModal(false)
+          }}
+          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 order-1 sm:order-2"
+        >
+          Cancel Job
+        </button>
+      </div>
+    </Modal>
+  )
+
+  const EditServiceModal = () => (
+    <Modal
+      isOpen={showEditServiceModal}
+      onClose={() => setShowEditServiceModal(false)}
+      title="Edit Service"
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Service Name</label>
+          <input
+            type="text"
+            value={formData.service_name}
+            onChange={(e) => setFormData(prev => ({ ...prev, service_name: e.target.value }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Bathroom Details</label>
+          <textarea
+            value={formData.bathroom_details}
+            onChange={(e) => setFormData(prev => ({ ...prev, bathroom_details: e.target.value }))}
+            rows={3}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Duration (minutes)</label>
+          <input
+            type="number"
+            value={formData.duration}
+            onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+      </div>
+      
+      <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 mt-6">
+        <button
+          onClick={() => setShowEditServiceModal(false)}
+          className="px-4 py-2 text-gray-600 hover:text-gray-800 order-2 sm:order-1"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => {
+            handleSave()
+            setShowEditServiceModal(false)
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 order-1 sm:order-2"
+        >
+          Save Changes
+        </button>
+      </div>
+    </Modal>
+  )
+
+  const EditAddressModal = () => (
+    <Modal
+      isOpen={showEditAddressModal}
+      onClose={() => setShowEditAddressModal(false)}
+      title="Edit Address"
+    >
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Street Address</label>
+          <input
+            type="text"
+            value={formData.serviceAddress.street}
+            onChange={async (e) => {
+              const value = e.target.value
+              setFormData(prev => ({
+                ...prev,
+                serviceAddress: { ...prev.serviceAddress, street: value }
+              }))
+              // Call backend autocomplete endpoint for suggestions
+              if (value.length > 2) {
+                setAddressLoading(true)
+                try {
+                  const res = await fetch(`/api/places/autocomplete?input=${encodeURIComponent(value)}`)
+                  const data = await res.json()
+                  setAddressSuggestions(data.predictions || [])
+                } catch {
+                  setAddressSuggestions([])
+                } finally {
+                  setAddressLoading(false)
+                }
+              } else {
+                setAddressSuggestions([])
+              }
+            }}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            autoFocus
+            placeholder="Start typing address..."
+            autoComplete="off"
+          />
+          {addressLoading && <div className="text-xs text-gray-400 mt-1">Loading suggestions...</div>}
+          {addressSuggestions.length > 0 && (
+            <div className="absolute z-50 bg-white border border-gray-200 rounded shadow mt-1 w-full max-h-48 overflow-y-auto">
+              {addressSuggestions.map(s => (
+                <button
+                  key={s.place_id}
+                  className="w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
+                  onClick={async (e) => {
+                    e.preventDefault()
+                    setAddressSuggestions([])
+                    setAddressLoading(true)
+                    try {
+                      // Fetch full address details from backend
+                      const res = await fetch(`/api/places/details?place_id=${s.place_id}`)
+                      const data = await res.json()
+                      // Assume backend returns { street, city, state, zipCode }
+                      setFormData(prev => ({
+                        ...prev,
+                        serviceAddress: {
+                          street: data.street || s.description || "",
+                          city: data.city || "",
+                          state: data.state || "",
+                          zipCode: data.zipCode || ""
+                        }
+                      }))
+                    } catch {
+                      // fallback: just set street
+                      setFormData(prev => ({ ...prev, serviceAddress: { ...prev.serviceAddress, street: s.description } }))
+                    } finally {
+                      setAddressLoading(false)
+                    }
+                  }}
+                >
+                  {s.description}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+          <input
+            type="text"
+            value={formData.serviceAddress.city}
+            onChange={(e) => setFormData(prev => ({ 
+              ...prev, 
+              serviceAddress: { ...prev.serviceAddress, city: e.target.value }
+            }))}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
+            <input
+              type="text"
+              value={formData.serviceAddress.state}
+              onChange={(e) => setFormData(prev => ({ 
+                ...prev, 
+                serviceAddress: { ...prev.serviceAddress, state: e.target.value }
+              }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">ZIP Code</label>
+            <input
+              type="text"
+              value={formData.serviceAddress.zipCode}
+              onChange={(e) => setFormData(prev => ({ 
+                ...prev, 
+                serviceAddress: { ...prev.serviceAddress, zipCode: e.target.value }
+              }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
+      </div>
+      
+      <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 mt-6">
+        <button
+          onClick={() => setShowEditAddressModal(false)}
+          className="px-4 py-2 text-gray-600 hover:text-gray-800 order-2 sm:order-1"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => {
+            handleSave()
+            setShowEditAddressModal(false)
+          }}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 order-1 sm:order-2"
+        >
+          Save Changes
+        </button>
+      </div>
+    </Modal>
+  )
+
+  const MobileSidebar = () => (
+    <>
+      {showMobileSidebar && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" 
+          onClick={() => setShowMobileSidebar(false)}
+        />
+      )}
+      <div className={`fixed top-0 right-0 h-full w-80 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-50 lg:hidden overflow-y-auto ${
+        showMobileSidebar ? 'translate-x-0' : 'translate-x-full'
+      }`}>
+        <div className="p-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-gray-900">Job Details</h2>
+            <button
+              onClick={() => setShowMobileSidebar(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
+        </div>
+        <div className="p-4 space-y-6">
+          <SidebarContent />
+        </div>
+      </div>
+    </>
+  )
+
+  const SidebarContent = () => (
+    <>
+      {/* Customer Card */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h3 className="font-semibold text-gray-900 mb-4">Customer</h3>
+        
+        <div className="flex items-center space-x-3 mb-4">
+          <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center">
+            <span className="text-white font-semibold text-sm">{getCustomerInitials()}</span>
+          </div>
+          <div>
+            <p className="font-semibold text-gray-900">
+              {job.customer_first_name} {job.customer_last_name}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center space-x-2 text-sm">
+            <Phone className="w-4 h-4 text-gray-400" />
+            <a href={`tel:${job.customer_phone}`} className="text-blue-600 hover:text-blue-700">
+              {job.customer_phone}
+            </a>
+          </div>
+          <div className="flex items-center space-x-2 text-sm">
+            <Mail className="w-4 h-4 text-gray-400" />
+            <a href={`mailto:${job.customer_email}`} className="text-blue-600 hover:text-blue-700 truncate">
+              {job.customer_email}
+            </a>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="flex justify-between items-center text-sm">
+            <span className="font-medium text-gray-700">BILLING ADDRESS</span>
+            <button className="text-blue-600 hover:text-blue-700 font-medium">Edit</button>
+          </div>
+          <p className="text-sm text-gray-600 mt-1">Same as service address</p>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="text-sm">
+            <div className="flex justify-between items-center mb-2">
+              <span className="font-medium text-gray-700">EXPECTED PAYMENT METHOD</span>
+            </div>
+            <div className="flex items-center space-x-2 text-gray-600">
+              <CreditCard className="w-4 h-4" />
+              <span>No payment method on file</span>
+            </div>
+            <button className="text-blue-600 hover:text-blue-700 text-sm font-medium mt-1">
+              Add a card to charge later
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Team Section */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h3 className="font-semibold text-gray-900 mb-4">Team</h3>
+        <div className="space-y-4">
+          {/* Job Requirements Editable */}
+          <div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700">JOB REQUIREMENTS</span>
               <button
-                onClick={() => setShowTerritoryDropdown(!showTerritoryDropdown)}
-                className="flex items-center space-x-2 px-3 lg:px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 w-full lg:w-auto"
-              >
-                <Building className="w-4 h-4 text-gray-600" />
-                <span className="text-sm font-medium text-gray-700 truncate">
-                  {selectedTerritory ? selectedTerritory.name : 'Select Territory'}
-                </span>
-                {showTerritoryDropdown ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-              </button>
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                onClick={() => setEditing('team')}
+              >Edit</button>
+            </div>
+            {editing === 'team' ? (
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Workers needed</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formData.workers_needed || job.workers_needed || 1}
+                    onChange={e => setFormData(prev => ({ ...prev, workers_needed: parseInt(e.target.value) || 1 }))}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded"
+                  />
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600">Skills needed</span>
+                  <input
+                    type="text"
+                    value={formData.skills || (job.skills && job.skills.join(', ')) || ''}
+                    onChange={e => setFormData(prev => ({ ...prev, skills: e.target.value }))}
+                    className="w-32 px-2 py-1 border border-gray-300 rounded"
+                    placeholder="Comma separated"
+                  />
+                </div>
+                <div className="flex justify-end space-x-2 mt-2">
+                  <button
+                    className="px-3 py-1 text-gray-600 border border-gray-300 rounded"
+                    onClick={() => { setEditing(false); setFormData(f => ({ ...f, workers_needed: job.workers_needed, skills: (job.skills && job.skills.join(', ')) || '' })) }}
+                  >Cancel</button>
+                  <button
+                    className="px-3 py-1 bg-blue-600 text-white rounded"
+                    onClick={async () => {
+                      setLoading(true)
+                      try {
+                        await jobsAPI.update(job.id, {
+                          ...job,
+                          workers_needed: formData.workers_needed || job.workers_needed,
+                          skills: (formData.skills || '').split(',').map(s => s.trim()).filter(Boolean)
+                        })
+                        setEditing(false)
+                        setSuccessMessage('Job requirements updated!')
+                        setTimeout(() => setSuccessMessage(''), 2000)
+                        await reloadJob()
+                      } catch (e) {
+                        setError('Failed to update requirements')
+                      } finally {
+                        setLoading(false)
+                      }
+                    }}
+                  >Save</button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Workers needed</span>
+                  <span className="font-medium">{job.workers_needed} service provider</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Skills needed</span>
+                  <span className="font-medium">{job.skills && job.skills.length ? job.skills.join(', ') : 'No skill tags required'}</span>
+                </div>
+              </div>
+            )}
+          </div>
 
-              {showTerritoryDropdown && (
-                <div className="absolute right-0 mt-2 w-full lg:w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-20">
-                  {territories.map((territory) => (
+          {/* Assigned Team Member Editable */}
+          <div className="pt-4 border-t border-gray-200">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700">ASSIGNED</span>
+              <button
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                onClick={() => setAssigning(true)}
+              >Assign</button>
+            </div>
+            <div className="text-center py-4">
+              {job.team_member_id ? (
+                <>
+                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Users className="w-6 h-6 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 font-medium mb-1">
+                    {(() => {
+                      const member = teamMembers.find(m => String(m.id) === String(job.team_member_id));
+                      if (!member) return <span className="text-red-500">Assigned (not found in team list)</span>;
+                      return member.name || member.fullName || member.email || member.id;
+                    })()}
+                  </p>
+                  <button
+                    className="text-xs text-red-600 hover:underline"
+                    onClick={async () => {
+                      setLoading(true)
+                      try {
+                        await jobsAPI.assignToTeamMember(job.id, null)
+                        setSuccessMessage('Unassigned!')
+                        setTimeout(() => setSuccessMessage(''), 2000)
+                        await reloadJob()
+                      } catch (e) {
+                        setError('Failed to unassign')
+                      } finally {
+                        setLoading(false)
+                      }
+                    }}
+                  >Unassign</button>
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                    <Users className="w-6 h-6 text-gray-400" />
+                  </div>
+                  <p className="text-gray-500 font-medium mb-1">Unassigned</p>
+                  <p className="text-xs text-gray-400">No service providers are assigned to this job</p>
+                </>
+              )}
+              {assigning && (
+                <div className="mt-3">
+                  <select
+                    className="w-full border border-gray-300 rounded p-2"
+                    value={selectedTeamMember || ''}
+                    onChange={e => setSelectedTeamMember(e.target.value)}
+                  >
+                    <option value="">Select team member</option>
+                    {teamMembers.map(m => (
+                      <option key={m.id} value={m.id}>{m.name || m.email || m.id}</option>
+                    ))}
+                  </select>
+                  <div className="flex justify-end space-x-2 mt-2">
                     <button
-                      key={territory.id}
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, territoryId: territory.id }))
-                        setShowTerritoryDropdown(false)
+                      className="px-3 py-1 text-gray-600 border border-gray-300 rounded"
+                      onClick={() => { setAssigning(false); setSelectedTeamMember(null) }}
+                    >Cancel</button>
+                    <button
+                      className="px-3 py-1 bg-blue-600 text-white rounded"
+                      onClick={async () => {
+                        if (!selectedTeamMember) return
+                        setLoading(true)
+                        try {
+                          await jobsAPI.assignToTeamMember(job.id, selectedTeamMember)
+                          setAssigning(false)
+                          setSelectedTeamMember(null)
+                          setSuccessMessage('Assigned!')
+                          setTimeout(() => setSuccessMessage(''), 2000)
+                          await reloadJob()
+                        } catch (e) {
+                          setError('Failed to assign')
+                        } finally {
+                          setLoading(false)
+                        }
                       }}
-                      className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors duration-200"
-                    >
-                      <div className="font-medium text-gray-900">{territory.name}</div>
-                      <div className="text-sm text-gray-500">{territory.location}</div>
-                    </button>
-                  ))}
+                    >Assign</button>
+                  </div>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Status Timeline - Mobile Responsive */}
-          <div className="mt-6">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-              {/* Desktop Timeline */}
-              <div className="hidden lg:flex items-center justify-between w-full">
-                {statusSteps.map((step, index) => (
-                  <div key={step.key} className="flex items-center">
-                    <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-                      step.completed 
-                        ? 'bg-green-500 text-white' 
-                        : step.current 
-                          ? 'bg-blue-500 text-white' 
-                          : 'bg-gray-200 text-gray-500'
-                    }`}>
-                      {step.completed ? (
-                        <Check className="w-4 h-4" />
-                      ) : (
-                        <step.icon className="w-4 h-4" />
-                      )}
-                    </div>
-                    <span className={`ml-2 text-sm font-medium ${
-                      step.completed 
-                        ? 'text-green-600' 
-                        : step.current 
-                          ? 'text-blue-600' 
-                          : 'text-gray-500'
-                    }`}>
-                      {step.label}
-                    </span>
-                    {index < statusSteps.length - 1 && (
-                      <div className={`w-16 h-0.5 mx-4 ${
-                        step.completed ? 'bg-green-500' : 'bg-gray-200'
-                      }`} />
-                    )}
-                  </div>
-                ))}
-              </div>
+          <div className="pt-4 border-t border-gray-200">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">Offer job to service providers</span>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" defaultChecked className="sr-only peer" />
+                <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+            <p className="text-xs text-gray-500 mt-1">
+              Allows qualified, available providers to see and claim this job. 
+              <button className="text-blue-600 hover:text-blue-700 ml-1">Learn more</button>
+            </p>
+          </div>
+        </div>
+      </div>
 
-              {/* Mobile Timeline */}
-              <div className="lg:hidden">
-                <div className="flex items-center justify-between">
-                  {statusSteps.map((step, index) => (
-                    <div key={step.key} className="flex flex-col items-center">
-                      <div className={`flex items-center justify-center w-8 h-8 rounded-full ${
-                        step.completed 
-                          ? 'bg-green-500 text-white' 
-                          : step.current 
-                            ? 'bg-blue-500 text-white' 
-                            : 'bg-gray-200 text-gray-500'
-                      }`}>
-                        {step.completed ? (
-                          <Check className="w-4 h-4" />
-                        ) : (
-                          <step.icon className="w-4 h-4" />
-                        )}
-                      </div>
-                      <span className={`text-xs font-medium mt-1 ${
-                        step.completed 
-                          ? 'text-green-600' 
-                          : step.current 
-                            ? 'text-blue-600' 
-                            : 'text-gray-500'
-                      }`}>
-                        {step.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                {/* Progress Bar for Mobile */}
-                <div className="mt-3 w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-300"
-                    style={{ 
-                      width: `${((statusSteps.findIndex(step => step.current) + 1) / statusSteps.length) * 100}%` 
-                    }}
-                  ></div>
-                </div>
+      {/* Notes & Files */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h3 className="font-semibold text-gray-900 mb-4">Notes & Files</h3>
+        <div className="py-4">
+          <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+          {editingNotes ? (
+            <>
+              <textarea
+                className="w-full border border-gray-300 rounded p-2 mb-2"
+                rows={4}
+                value={notesValue}
+                onChange={e => setNotesValue(e.target.value)}
+              />
+              <div className="flex justify-end space-x-2">
+                <button
+                  className="px-3 py-1 text-gray-600 border border-gray-300 rounded"
+                  onClick={() => { setEditingNotes(false); setNotesValue(job.notes || "") }}
+                >Cancel</button>
+                <button
+                  className="px-3 py-1 bg-blue-600 text-white rounded"
+                  onClick={async () => {
+                    setLoading(true)
+                    try {
+                      await jobsAPI.update(job.id, { ...job, notes: notesValue })
+                      setEditingNotes(false)
+                      setSuccessMessage("Notes updated!")
+                      setTimeout(() => setSuccessMessage("") , 2000)
+                      await reloadJob()
+                    } catch (e) {
+                      setError("Failed to update notes")
+                    } finally {
+                      setLoading(false)
+                    }
+                  }}
+                >Save</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-gray-700 mb-2 whitespace-pre-line min-h-[48px]">{job.notes || <span className="text-gray-400">No notes</span>}</p>
+              <button
+                className="px-3 py-1 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 flex items-center space-x-2"
+                onClick={() => setEditingNotes(true)}
+              >
+                <Edit className="w-4 h-4" />
+                <span>{job.notes ? "Edit Note" : "Add Note"}</span>
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Customer Notifications */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h3 className="font-semibold text-gray-900 mb-4">Customer notifications</h3>
+        
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-sm font-medium text-gray-700 mb-3">NOTIFICATION PREFERENCES</h4>
+            
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-700">Emails</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={emailNotifications}
+                    onChange={(e) => handleNotificationToggle('email', e.target.checked)}
+                    className="sr-only peer" 
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
+              
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-700">Text messages</span>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={smsNotifications}
+                    onChange={(e) => handleNotificationToggle('sms', e.target.checked)}
+                    className="sr-only peer" 
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto p-4 lg:p-8">
-            {/* Messages */}
-            {error && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 flex items-center space-x-3">
-                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                <p className="text-red-700 font-medium">{error}</p>
+          <div className="pt-4 border-t border-gray-200">
+            <div className="flex items-start space-x-3">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <CheckCircle className="w-4 h-4 text-blue-600" />
               </div>
-            )}
-
-            {successMessage && (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 flex items-center space-x-3">
-                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-                <p className="text-green-700 font-medium">{successMessage}</p>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
-              {/* Left Column - Job Information */}
-              <div className="lg:col-span-2 space-y-6">
-                {/* Map Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-6">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <MapPin className="w-5 h-5 text-blue-600" />
-                    <h2 className="text-lg font-semibold text-gray-900">Job Location</h2>
-                  </div>
-                  
-                  {/* Map Placeholder */}
-                  <div className="w-full h-48 lg:h-64 bg-gray-100 rounded-xl flex items-center justify-center">
-                    <div className="text-center">
-                      <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                      <p className="text-gray-500 font-medium">Map View</p>
-                      <p className="text-sm text-gray-400">Google Maps integration</p>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4">
-                    <p className="text-gray-900 font-medium">
-                      {job.customer_address || 'Address not available'}
-                    </p>
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium mt-1">
-                      View directions
-                    </button>
-                  </div>
+              <div className="flex-1">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-gray-700">Confirmation</h4>
                 </div>
-
-                {/* Job Details Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center space-x-3">
-                      <Clipboard className="w-5 h-5 text-green-600" />
-                      <h2 className="text-lg font-semibold text-gray-900">Job Details</h2>
-                    </div>
-                    {!editing && (
-                      <button 
-                        onClick={() => setEditing(true)}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-                      >
-                        Edit Service
-                      </button>
-                    )}
-                  </div>
-                  {editing ? (
-                    <form
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        const form = e.target;
-                        const serviceData = {
-                          service_name: form.service_name.value,
-                          duration: form.duration.value,
-                          service_price: form.service_price.value,
-                          service_description: form.service_description.value,
-                          notes: form.notes.value
-                        };
-                        await handleServiceSave(serviceData);
-                        setEditing(false);
-                      }}
-                      className="space-y-4"
-                    >
-                      <div className="flex items-center space-x-3">
-                        <Calendar className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Date & Time</p>
-                          <p className="text-gray-900 font-medium">
-                            {formatTime(job.scheduled_date)} • {formatDate(job.scheduled_date)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <Home className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Service</p>
-                          <input
-                            name="service_name"
-                            type="text"
-                            defaultValue={job.service_name}
-                            className="text-gray-900 font-medium border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <Clock className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Estimated Duration</p>
-                          <input
-                            name="duration"
-                            type="number"
-                            defaultValue={job.duration}
-                            className="text-gray-900 font-medium border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <DollarSign className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Price</p>
-                          <input
-                            name="service_price"
-                            type="number"
-                            step="0.01"
-                            defaultValue={job.service_price}
-                            className="text-gray-900 font-medium border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-3">
-                        <FileText className="w-5 h-5 text-gray-400 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-500">Description</p>
-                          <textarea
-                            name="service_description"
-                            defaultValue={job.service_description}
-                            rows={2}
-                            className="w-full text-gray-900 border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-start space-x-3">
-                        <FileText className="w-5 h-5 text-gray-400 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-500">Notes</p>
-                          <textarea
-                            name="notes"
-                            defaultValue={job.notes}
-                            rows={2}
-                            className="w-full text-gray-900 border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          type="button"
-                          className="px-4 py-2 text-gray-700 hover:text-gray-900"
-                          onClick={() => setEditing(false)}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                        >
-                          Save Changes
-                        </button>
-                      </div>
-                    </form>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="flex items-center space-x-3">
-                        <Calendar className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Date & Time</p>
-                          <p className="text-gray-900 font-medium">
-                            {formatTime(job.scheduled_date)} • {formatDate(job.scheduled_date)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <Home className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Service</p>
-                          <p className="text-gray-900 font-medium">{job.service_name}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <Clock className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Estimated Duration</p>
-                          <p className="text-gray-900 font-medium">
-                            {job.duration ? `${job.duration} minutes` : 'Not specified'}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <DollarSign className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Price</p>
-                          <p className="text-gray-900 font-medium">{job.service_price}</p>
-                        </div>
-                      </div>
-                      {job.service_description && (
-                        <div className="flex items-start space-x-3">
-                          <FileText className="w-5 h-5 text-gray-400 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-gray-500">Description</p>
-                            <p className="text-gray-900">{job.service_description}</p>
-                          </div>
-                        </div>
-                      )}
-                      {job.notes && (
-                        <div className="flex items-start space-x-3">
-                          <FileText className="w-5 h-5 text-gray-400 mt-0.5" />
-                          <div>
-                            <p className="text-sm text-gray-500">Notes</p>
-                            <p className="text-gray-900">{job.notes}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Right Column - Customer & Team Information */}
-              <div className="space-y-6">
-                {/* Customer Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-gray-900">Customer</h2>
-                  </div>
-                  {/* Inline editable customer fields */}
-                  <form
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      const form = e.target;
-                      const customerData = {
-                        first_name: form.first_name.value,
-                        last_name: form.last_name.value,
-                        phone: form.phone.value,
-                        email: form.email.value,
-                        address: form.address.value
-                      };
-                      await handleCustomerSave(customerData);
-                    }}
-                  >
-                    <div className="flex items-center space-x-3 mb-4">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <span className="text-blue-600 font-semibold text-sm">
-                          {getCustomerInitials(job)}
-                        </span>
-                      </div>
-                      <div>
-                        <input
-                          name="first_name"
-                          type="text"
-                          defaultValue={job.customer_first_name}
-                          className="text-gray-900 font-medium border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent mr-2"
-                          style={{ width: 90 }}
-                        />
-                        <input
-                          name="last_name"
-                          type="text"
-                          defaultValue={job.customer_last_name}
-                          className="text-gray-900 font-medium border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                          style={{ width: 90 }}
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-3">
-                        <Phone className="w-4 h-4 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Phone</p>
-                          <input
-                            name="phone"
-                            type="tel"
-                            defaultValue={job.customer_phone}
-                            className="text-gray-900 border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <Mail className="w-4 h-4 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Email</p>
-                          <input
-                            name="email"
-                            type="email"
-                            defaultValue={job.customer_email}
-                            className="text-gray-900 border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                          />
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <MapPin className="w-4 h-4 text-gray-400" />
-                        <div>
-                          <p className="text-sm text-gray-500">Billing Address</p>
-                          <input
-                            name="address"
-                            type="text"
-                            defaultValue={job.customer_address}
-                            className="text-gray-900 border-b border-gray-200 focus:border-blue-500 outline-none bg-transparent"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex justify-end mt-4">
-                      <button
-                        type="submit"
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                      >
-                        Save Changes
-                      </button>
-                    </div>
-                  </form>
-                </div>
-
-                {/* Team Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-gray-900">Team</h2>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm text-gray-500 mb-2">Job Requirements</p>
-                      <div className="space-y-2">
-                        <div className="flex items-center space-x-3">
-                          <Users className="w-4 h-4 text-gray-400" />
-                          <span className="text-gray-900">Workers needed: 1 service provider</span>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <Settings className="w-4 h-4 text-gray-400" />
-                          <div className="flex-1">
-                            <span className="text-gray-900">Skills needed: </span>
-                            {selectedSkills.length > 0 ? (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {selectedSkills.map((skill, index) => (
-                                  <span key={index} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                    {skill.name} ({skill.level})
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-gray-500">No skill tags required</span>
-                            )}
-                            <button 
-                              onClick={() => setShowSkillsModal(true)}
-                              className="text-blue-600 hover:text-blue-700 text-sm font-medium ml-2"
-                            >
-                              {selectedSkills.length > 0 ? 'Edit' : 'Add'} skills
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-sm text-gray-500 mb-2">Assigned</p>
-                      {selectedTeamMember ? (
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                            <span className="text-green-600 font-semibold text-xs">
-                              {selectedTeamMember.first_name.charAt(0)}{selectedTeamMember.last_name.charAt(0)}
-                            </span>
-                          </div>
-                          <div>
-                            <p className="text-gray-900 font-medium">
-                              {selectedTeamMember.first_name} {selectedTeamMember.last_name}
-                            </p>
-                            <p className="text-sm text-gray-500">{selectedTeamMember.role}</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center">
-                            <User className="w-4 h-4 text-gray-400" />
-                          </div>
-                          <span className="text-gray-500">Unassigned</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="pt-4 border-t border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <p className="text-sm text-gray-500">Offer job to service providers</p>
-                          <p className="text-xs text-gray-400">Qualified, available providers can see and claim this job</p>
-                        </div>
-                        <button className="w-12 h-6 bg-blue-600 rounded-full relative">
-                          <div className="w-5 h-5 bg-white rounded-full absolute top-0.5 right-0.5 transition-transform duration-200"></div>
-                        </button>
-                      </div>
-                      <button className="text-blue-600 hover:text-blue-700 text-sm font-medium mt-2">
-                        Learn more
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <p className="text-sm font-semibold text-gray-900">Appointment Confirmation</p>
+                <p className="text-xs text-gray-500">10 minutes ago • Email • Opened</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Skills Modal */}
-      {showSkillsModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-gray-900">Select Skills</h3>
-                <button
-                  onClick={() => setShowSkillsModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+      {/* Customer Feedback */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h3 className="font-semibold text-gray-900 mb-4">Customer feedback</h3>
+        
+        <p className="text-sm text-gray-600 mb-2">
+          An email will be sent to the customer asking them to rate the service after the job is marked complete.
+        </p>
+        <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">
+          Learn more.
+        </button>
+      </div>
 
-              {/* Skills input with dropdown */}
-              <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Skill Name</label>
-              <input
-              type="text"
-              value={skillInput}
-              onChange={e => setSkillInput(e.target.value)}
-              placeholder="Type or select a skill"
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              list="skills-list"
-              />
-              <datalist id="skills-list">
-              {availableSkills.map(skill => (
-              <option key={skill.name} value={skill.name} />
-              ))}
-              </datalist>
-              </div>
-              <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Skill Level</label>
-              <select
-              value={skillLevel}
-              onChange={e => setSkillLevel(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-              >
-              <option value="">Select level</option>
-              {skillLevels.map(level => (
-              <option key={level} value={level}>{level}</option>
-              ))}
-              </select>
-              </div>
-              <div className="flex justify-end mb-4">
-              <button
-              type="button"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-              onClick={() => {
-              if (!skillInput || !skillLevel) return;
-              const exists = selectedSkills.find(s => s.name.toLowerCase() === skillInput.toLowerCase());
-              if (!exists) {
-              const newSkill = { name: skillInput, level: skillLevel };
-              setSelectedSkills(prev => [...prev, newSkill]);
-              // Add to availableSkills if not present
-              if (!availableSkills.find(s => s.name.toLowerCase() === skillInput.toLowerCase())) {
-              setAvailableSkills(prev => [...prev, newSkill]);
-              }
-              }
-              setSkillInput("");
-              setSkillLevel("");
-              }}
-              >
-              Add Skill
-              </button>
-              </div>
-              {/* List selected skills with remove option */}
-              <div className="flex flex-wrap gap-2">
-              {selectedSkills.map((skill, idx) => (
-              <span key={idx} className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              {skill.name} ({skill.level})
-              <button
-              type="button"
-              className="ml-1 text-blue-600 hover:text-red-600"
-              onClick={() => setSelectedSkills(selectedSkills.filter((_, i) => i !== idx))}
-              >
-              <X className="w-3 h-3" />
-              </button>
-              </span>
-              ))}
-              </div>
+      {/* Conversion Summary */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <h3 className="font-semibold text-gray-900 mb-4">Conversion summary</h3>
+        
+        <div className="text-center py-4">
+          <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+            <Target className="w-6 h-6 text-gray-400" />
+          </div>
+          <p className="text-gray-500 text-sm">No conversion data available</p>
+        </div>
+      </div>
+    </>
+  )
 
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  onClick={() => setShowSkillsModal(false)}
-                  className="px-4 py-2 text-gray-700 hover:text-gray-900"
+  if (loading || !job) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <span className="text-gray-500 text-lg">Loading job details...</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <Sidebar />
+      <div className="flex-1">
+        {/* Header */}
+        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 sm:space-x-4 min-w-0 flex-1">
+            <button
+              className="flex items-center text-blue-600 hover:text-blue-700 flex-shrink-0"
+              onClick={() => navigate('/jobs')}
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              <span className="text-sm hidden sm:inline">All Jobs</span>
+            </button>
+            
+            <div className="min-w-0 flex-1">
+              <h1 className="text-lg sm:text-xl font-semibold text-gray-900 truncate">
+                {job.service_name} for {job.customer_first_name} {job.customer_last_name}
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600">Job #{job.id}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+            {/* Mobile sidebar toggle */}
+            <button
+              onClick={() => setShowMobileSidebar(true)}
+              className="lg:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              <Menu className="w-5 h-5 text-gray-600" />
+            </button>
+
+            <div className="hidden sm:flex items-center space-x-2 relative">
+              <span className="text-sm text-gray-600">Territory</span>
+              <div className="flex items-center bg-gray-100 px-2 py-1 rounded cursor-pointer relative"
+                onClick={() => setShowTerritoryDropdown(v => !v)}
+              >
+                <MapPin className="w-3 h-3 text-gray-500 mr-1" />
+                <span className="text-sm font-medium mr-1">{job.territory}</span>
+                <ChevronDown className="w-3 h-3 text-gray-500" />
+              </div>
+              {showTerritoryDropdown && (
+                <div className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded shadow z-50">
+                  {territories.filter(t => t.name !== job.territory).map(t => (
+                    <button
+                      key={t.id || t.name}
+                      className={`w-full text-left px-4 py-2 hover:bg-gray-100`}
+                      onClick={async () => {
+                        setShowTerritoryDropdown(false)
+                        setLoading(true)
+                        try {
+                          await jobsAPI.update(job.id, { ...job, territory: t.name })
+                          await reloadJob()
+                          setSuccessMessage('Territory updated!')
+                          setTimeout(() => setSuccessMessage(""), 2000)
+                        } catch (e) {
+                          setError('Failed to update territory')
+                        } finally {
+                          setLoading(false)
+                        }
+                      }}
+                    >
+                      {t.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <ActionMenu />
+          </div>
+        </div>
+
+        {/* Status Dropdown - Robust Design */}
+        <div className="mt-4 sm:mt-6">
+          <div className="flex items-center space-x-3">
+            <label className="text-sm font-medium text-gray-700">Status:</label>
+            <div className="relative">
+              <button
+                className="flex items-center border border-gray-300 rounded px-3 py-1 text-sm bg-white hover:bg-gray-50 focus:outline-none"
+                onClick={() => setEditing('status')}
+                style={{ minWidth: 140 }}
+              >
+                <span className={`inline-block w-2 h-2 rounded-full mr-2 ${statusOptions.find(s => s.key === job.status)?.color || 'bg-gray-300'}`}></span>
+                <span>{statusOptions.find(s => s.key === job.status)?.label || job.status}</span>
+                <ChevronDown className="w-4 h-4 ml-2 text-gray-400" />
+              </button>
+              {editing === 'status' && (
+                <div className="absolute z-50 mt-1 w-48 bg-white border border-gray-200 rounded shadow-lg">
+                  {statusOptions.map(status => (
+                    <button
+                      key={status.key}
+                      className={`w-full flex items-center px-4 py-2 text-left hover:bg-gray-50 ${job.status === status.key ? 'font-semibold bg-gray-100' : ''}`}
+                      onClick={() => setSelectedTeamMember(status.key)}
+                    >
+                      <span className={`inline-block w-2 h-2 rounded-full mr-2 ${status.color}`}></span>
+                      {status.label}
+                    </button>
+                  ))}
+                  <div className="flex justify-end space-x-2 p-2 border-t border-gray-100">
+                    <button
+                      className="px-3 py-1 text-gray-600 border border-gray-300 rounded"
+                      onClick={() => { setEditing(false); setSelectedTeamMember(null) }}
+                    >Cancel</button>
+                    <button
+                      className="px-3 py-1 bg-blue-600 text-white rounded"
+                      onClick={async () => {
+                        if (!selectedTeamMember || selectedTeamMember === job.status) { setEditing(false); return; }
+                        setLoading(true)
+                        try {
+                          await jobsAPI.updateStatus(job.id, selectedTeamMember)
+                          setSuccessMessage(`Job marked as ${statusOptions.find(s => s.key === selectedTeamMember)?.label || selectedTeamMember}`)
+                          setTimeout(() => setSuccessMessage(""), 2000)
+                          setEditing(false)
+                          setSelectedTeamMember(null)
+                          await reloadJob()
+                        } catch (err) {
+                          setError('Failed to update status')
+                        } finally {
+                          setLoading(false)
+                        }
+                      }}
+                    >Save</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Success/Error Messages */}
+      {successMessage && (
+        <div className="mx-4 sm:mx-6 mt-4 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-3">
+          <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+          <p className="text-green-700 font-medium">{successMessage}</p>
+        </div>
+      )}
+
+      {error && (
+        <div className="mx-4 sm:mx-6 mt-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
+          <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+          <p className="text-red-700 font-medium">{error}</p>
+        </div>
+      )}
+
+      {/* Main Content */}
+      <div className="flex flex-col lg:flex-row">
+        {/* Left Column */}
+        <div className="flex-1 p-4 sm:p-6">
+          {/* Map Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 sm:mb-6">
+            <div className="relative">
+              {/* Google Maps Placeholder */}
+              <div className="w-full h-48 sm:h-64 bg-gradient-to-br from-green-100 to-blue-100 rounded-t-lg flex items-center justify-center">
+                <div className="text-center">
+                  <div className="w-10 sm:w-12 h-10 sm:h-12 bg-blue-500 rounded-lg flex items-center justify-center mx-auto mb-3">
+                    <MapPin className="w-5 sm:w-6 h-5 sm:h-6 text-white" />
+                  </div>
+                  <p className="text-gray-600 font-medium">Interactive Map</p>
+                  <p className="text-sm text-gray-500">Google Maps Integration</p>
+                </div>
+              </div>
+              
+              {/* Location Info Overlay */}
+              <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-4">
+                <div className="bg-white rounded-lg shadow-lg p-3 sm:p-4">
+                  <div className="flex items-start justify-between">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-gray-900 mb-1 text-sm sm:text-base">JOB LOCATION</h3>
+                      <p className="text-gray-700 font-medium text-sm sm:text-base truncate">{job.service_address_street}</p>
+                      <p className="text-gray-700 text-sm sm:text-base">{job.service_address_city}</p>
+                      <button className="text-blue-600 hover:text-blue-700 text-xs sm:text-sm font-medium mt-1 flex items-center">
+                        View directions <ExternalLink className="w-3 h-3 ml-1" />
+                      </button>
+                    </div>
+                    <button
+                      className="text-blue-600 hover:text-blue-700 text-xs sm:text-sm font-medium ml-2 flex-shrink-0"
+                      onClick={() => setShowEditAddressModal(true)}
+                    >
+                      Edit Address
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Date & Time Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 sm:mb-6 p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
+              <div>
+                <h3 className="text-sm font-medium text-gray-600 mb-2">DATE & TIME</h3>
+                <div className="flex items-center space-x-3">
+                  <Calendar className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-lg sm:text-xl font-semibold text-gray-900">
+                      {formatTime(job.scheduled_date)}
+                    </p>
+                    <p className="text-gray-600 text-sm sm:text-base">{formatDate(job.scheduled_date)}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
+                <button 
+                  onClick={() => setShowCancelModal(true)}
+                  className="px-3 py-2 text-red-600 hover:bg-red-50 rounded border border-red-200 text-sm"
                 >
                   Cancel
                 </button>
-                <button
-                  onClick={handleSkillsSave}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                <button 
+                  onClick={() => setShowRescheduleModal(true)}
+                  className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
                 >
-                  Save
+                  Reschedule
                 </button>
               </div>
             </div>
           </div>
+
+          {/* Job Details Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 sm:mb-6 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-medium text-gray-600">JOB DETAILS</h3>
+              <button
+                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                onClick={() => setEditing(true)}
+              >
+                Edit Service
+              </button>
+            </div>
+            {editing ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Service Name</label>
+                  <input
+                    type="text"
+                    value={formData.service_name}
+                    onChange={e => setFormData(prev => ({ ...prev, service_name: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Bathroom Details</label>
+                  <input
+                    type="text"
+                    value={formData.bathroom_details}
+                    onChange={e => setFormData(prev => ({ ...prev, bathroom_details: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes)</label>
+                  <input
+                    type="number"
+                    value={formData.duration}
+                    onChange={e => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  />
+                </div>
+                <div className="flex justify-end space-x-2 mt-2">
+                  <button
+                    className="px-4 py-2 text-gray-600 border border-gray-300 rounded"
+                    onClick={() => { setEditing(false); setFormData(f => ({ ...f, service_name: job.service_name, bathroom_details: job.bathroom_count, duration: job.duration })) }}
+                  >Cancel</button>
+                  <button
+                    className="px-4 py-2 bg-blue-600 text-white rounded"
+                    onClick={async () => { await handleSave(); setEditing(false); }}
+                  >Save</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start space-x-4">
+                <Clipboard className="w-5 h-5 text-gray-400 mt-1 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900">{job.service_name}</p>
+                  <p className="text-gray-600 text-sm mb-2">Default service category</p>
+                  <div className="space-y-1">
+                    <p className="text-sm"><strong>Bathroom:</strong></p>
+                    <p className="text-sm text-gray-600">{job.bathroom_count}</p>
+                  </div>
+                  <p className="text-sm text-gray-600 mt-2">{job.duration} minutes</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Invoice Section */}
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 space-y-2 sm:space-y-0">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h3 className="text-lg font-semibold text-gray-900">Invoice</h3>
+                  <span className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded">
+                    {job.invoice_status || 'Draft'}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-600">Due Aug 31, 2025</p>
+              </div>
+              
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
+                <button className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center justify-center space-x-2 text-sm">
+                  <Plus className="w-4 h-4" />
+                  <span>Add Payment</span>
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+                <button className="px-4 py-2 border border-gray-300 text-gray-700 rounded hover:bg-gray-50 text-sm">
+                  Send Invoice
+                </button>
+                <div className="flex space-x-2">
+                  <button className="p-2 text-gray-400 hover:text-gray-600 border border-gray-300 rounded">
+                    <Printer className="w-4 h-4" />
+                  </button>
+                  <button className="p-2 text-gray-400 hover:text-gray-600 border border-gray-300 rounded">
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex justify-between">
+                <span className="text-lg font-semibold">$0.00</span>
+                <span className="text-lg font-semibold">${job.total_amount}</span>
+              </div>
+              <div className="flex justify-between text-sm text-gray-600">
+                <span>Amount paid</span>
+                <span>Amount due</span>
+              </div>
+
+              <hr className="my-4" />
+
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span>{job.service_name}</span>
+                  <span>${job.service_price}</span>
+                </div>
+                <div className="text-sm text-gray-600">
+                  {job.bathroom_count} (${job.service_price})
+                </div>
+              </div>
+
+              <button className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center">
+                <Edit className="w-4 h-4 mr-1" />
+                Edit Service & Pricing
+              </button>
+
+              <hr className="my-4" />
+
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>${job.service_price}</span>
+                </div>
+                <div className="flex justify-between font-semibold">
+                  <span>Total</span>
+                  <span>${job.total_amount}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Amount paid</span>
+                  <span>$0.00</span>
+                </div>
+                <div className="flex justify-between font-semibold text-lg">
+                  <span>Total due</span>
+                  <span>${job.total_amount}</span>
+                </div>
+              </div>
+
+              <hr className="my-4" />
+
+              <div>
+                <h4 className="font-semibold mb-3">Payments</h4>
+                <div className="text-center py-8">
+                  <CreditCard className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500 font-medium">No payments</p>
+                  <p className="text-sm text-gray-400">
+                    When you process or record a payment for this invoice, it will appear here.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      )}
 
-      {/* Customer Edit Modal removed, now inline editing */}
+        {/* Right Sidebar - Hidden on mobile, shown as slide-out */}
+        <div className="hidden lg:block w-80 p-6 space-y-6">
+          <SidebarContent />
+        </div>
 
-      {/* Service Edit Modal removed, now inline editing */}
+        {/* Mobile Sidebar */}
+        <MobileSidebar />
+      </div>
+
+      {/* Modals */}
+      <RescheduleModal />
+      <CancelModal />
+      <EditServiceModal />
+      <EditAddressModal />
     </div>
+  </div>
   )
 }
 
-export default JobDetails 
+export default JobDetails

@@ -350,13 +350,7 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
       
       // Close modal
       onClose()
-      
-      // Navigate to customer details page if we have the customer ID
-      if (result && result.customer && result.customer.id) {
-        navigate(`/customer/${result.customer.id}`)
-      } else if (result && result.id) {
-        navigate(`/customer/${result.id}`)
-      }
+      // Do NOT navigate away. The parent will select the new customer.
     } catch (error) {
       console.error('Error in customer modal submit:', error)
       setError(error.message || 'Failed to save customer. Please try again.')

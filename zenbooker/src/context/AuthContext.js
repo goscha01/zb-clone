@@ -15,19 +15,34 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper to decode JWT and check expiration
+  const isTokenExpired = (token) => {
+    if (!token) return true;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      if (!payload.exp) return true;
+      return Date.now() >= payload.exp * 1000;
+    } catch (e) {
+      return true;
+    }
+  };
+
   useEffect(() => {
     // Check if user is already logged in on app start
     const checkAuthStatus = () => {
       const token = localStorage.getItem('authToken');
       const userData = localStorage.getItem('user');
       
-      if (token && userData) {
+      if (token && userData && !isTokenExpired(token)) {
         try {
           setUser(JSON.parse(userData));
         } catch (error) {
           console.error('Error parsing user data:', error);
           authAPI.signout();
         }
+      } else {
+        authAPI.signout();
+        setUser(null);
       }
       setLoading(false);
     };
@@ -73,6 +88,18 @@ export const AuthProvider = ({ children }) => {
     authAPI.signout();
     setUser(null);
   };
+
+  // Listen for token expiration on every page load and API error
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const token = localStorage.getItem('authToken');
+      if (token && isTokenExpired(token)) {
+        logout();
+        window.location.href = '/signin';
+      }
+    }, 60 * 1000); // check every minute
+    return () => clearInterval(interval);
+  }, []);
 
   const isAuthenticated = () => {
     return !!user;
