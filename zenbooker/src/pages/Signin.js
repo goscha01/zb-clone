@@ -125,7 +125,13 @@ export default function SignInForm() {
           )}
 
           {/* Sign In Form */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form
+            id="login-form"
+            autoComplete="on"
+            formNoValidate={false}
+            onSubmit={handleSubmit}
+            className="space-y-6"
+          >
             {/* Email Input */}
             <div>
               <input
