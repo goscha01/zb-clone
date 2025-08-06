@@ -58,6 +58,7 @@ import {
 import { jobsAPI, notificationAPI, territoriesAPI, teamAPI, invoicesAPI } from "../services/api"
 import Sidebar from "../components/sidebar"
 import { useNavigate } from "react-router-dom"
+import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const JobDetails = () => {
   const { jobId } = useParams();
@@ -775,7 +776,7 @@ const JobDetails = () => {
           <div className="flex items-center space-x-2 text-sm">
             <Phone className="w-4 h-4 text-gray-400" />
             <a href={`tel:${job.customer_phone}`} className="text-blue-600 hover:text-blue-700">
-              {job.customer_phone}
+              {formatPhoneNumber(job.customer_phone)}
             </a>
           </div>
           <div className="flex items-center space-x-2 text-sm">
