@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
 
@@ -9,6 +9,22 @@ export default function SignInForm() {
     email: "",
     password: ""
   })
+
+  // Refs for autofill sync
+  const emailRef = useRef(null)
+  const passwordRef = useRef(null)
+
+  // On mount, sync autofilled values into state
+  useEffect(() => {
+    // Timeout allows browser autofill to populate fields first
+    setTimeout(() => {
+      const email = emailRef.current?.value || ""
+      const password = passwordRef.current?.value || ""
+      if (email || password) {
+        setFormData({ email, password })
+      }
+    }, 100)
+  }, [])
   const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
   const [apiError, setApiError] = useState("")
@@ -139,10 +155,11 @@ export default function SignInForm() {
                 id="email"
                 type="email"
                 name="email"
-                autoComplete="email"
+                autoComplete="username"
                 placeholder="Email"
                 value={formData.email}
                 onChange={handleInputChange}
+                ref={emailRef}
                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
                   errors.email ? "border-red-500 bg-red-50" : "border-gray-300 bg-white hover:border-gray-400"
                 }`}
@@ -165,6 +182,7 @@ export default function SignInForm() {
                 value={formData.password}
                 onChange={handleInputChange}
                 autoComplete="current-password"
+                ref={passwordRef}
                 className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors ${
                   errors.password ? "border-red-500 bg-red-50" : "border-gray-300 bg-white hover:border-gray-400"
                 }`}
