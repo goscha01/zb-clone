@@ -29,7 +29,8 @@ const JobsEmptyState = ({ activeTab }) => {
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-8">
-      <div className="text-center">
+      <div className="text-center justify-center items-center">
+        <center>
         <p className="text-lg text-gray-600 mb-6">{getEmptyMessage()}</p>
         <button 
           onClick={handleAddJob}
@@ -37,6 +38,7 @@ const JobsEmptyState = ({ activeTab }) => {
         >
           <Plus className="w-5 h-5" />
         </button>
+        </center>
       </div>
     </div>
   )
