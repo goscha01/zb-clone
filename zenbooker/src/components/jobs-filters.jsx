@@ -61,12 +61,13 @@ const JobsFilters = ({ filters, onFilterChange, activeTab }) => {
       teamMember: "",
       sortBy: "scheduled_date",
       sortOrder: "ASC",
-      dateRange: ""
+      dateRange: "",
+      territoryId: ""
     })
   }
 
   const hasActiveFilters = filters.search || filters.invoiceStatus || filters.teamMember || 
-    filters.sortBy !== "scheduled_date" || filters.sortOrder !== "ASC" || filters.dateRange
+    filters.sortBy !== "scheduled_date" || filters.sortOrder !== "ASC" || filters.dateRange || filters.territoryId
 
   // Parse date range if it exists
   const [startDate, endDate] = filters.dateRange ? filters.dateRange.split(":") : ["", ""]

@@ -24,6 +24,41 @@ export default function SignInForm() {
         setFormData({ email, password })
       }
     }, 100)
+
+    // Listen for autofill events
+    const handleAutofill = () => {
+      setTimeout(() => {
+        const email = emailRef.current?.value || ""
+        const password = passwordRef.current?.value || ""
+        if (email || password) {
+          setFormData({ email, password })
+        }
+      }, 50)
+    }
+
+    // Add event listeners for autofill detection
+    const emailInput = emailRef.current
+    const passwordInput = passwordRef.current
+
+    if (emailInput) {
+      emailInput.addEventListener('animationstart', handleAutofill)
+      emailInput.addEventListener('change', handleAutofill)
+    }
+    if (passwordInput) {
+      passwordInput.addEventListener('animationstart', handleAutofill)
+      passwordInput.addEventListener('change', handleAutofill)
+    }
+
+    return () => {
+      if (emailInput) {
+        emailInput.removeEventListener('animationstart', handleAutofill)
+        emailInput.removeEventListener('change', handleAutofill)
+      }
+      if (passwordInput) {
+        passwordInput.removeEventListener('animationstart', handleAutofill)
+        passwordInput.removeEventListener('change', handleAutofill)
+      }
+    }
   }, [])
   const [errors, setErrors] = useState({})
   const [isLoading, setIsLoading] = useState(false)
@@ -147,6 +182,7 @@ export default function SignInForm() {
             autoComplete="on"
             onSubmit={handleSubmit}
             className="space-y-6"
+            action="javascript:void(0)"
           >
             {/* Email Input */}
             <div>
@@ -155,7 +191,7 @@ export default function SignInForm() {
                 id="email"
                 type="email"
                 name="email"
-                autoComplete="username"
+                autoComplete="username email"
                 placeholder="Email"
                 value={formData.email}
                 onChange={handleInputChange}
@@ -188,6 +224,7 @@ export default function SignInForm() {
                 }`}
                 required
                 disabled={isLoading}
+                data-lpignore="true"
               />
               {errors.password && (
                 <p className="text-red-500 text-sm mt-1">{errors.password}</p>

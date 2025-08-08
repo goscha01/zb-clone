@@ -31,7 +31,8 @@ const ZenbookerJobs = () => {
     search: "",
     invoiceStatus: "",
     sortBy: "scheduled_date",
-    sortOrder: "ASC"
+    sortOrder: "ASC",
+    territoryId: ""
   })
 
   // Debounced search to prevent too many API calls
@@ -99,7 +100,9 @@ const ZenbookerJobs = () => {
         filters.sortBy,
         filters.sortOrder,
         filters.teamMember,
-        filters.invoiceStatus
+        filters.invoiceStatus,
+        undefined, // customerId
+        filters.territoryId // pass territoryId to API
       )
       
       setJobs(response.jobs || [])
@@ -280,7 +283,7 @@ const ZenbookerJobs = () => {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         {/* Mobile Header */}
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 

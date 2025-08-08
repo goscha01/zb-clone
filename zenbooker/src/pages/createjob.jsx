@@ -31,15 +31,38 @@ import {
   Trash2,
   MessageSquare,
   Paperclip,
-  Award
+  Award,
+  Tag,
+  Star,
+  Zap,
+  Shield,
+  Target,
+  Navigation,
+  Package,
+  Tool,
+  Wrench,
+  Paintbrush,
+  Leaf,
+  Sparkles,
+  MoreVertical,
+  ExternalLink,
+  Printer,
+  Send,
+  Edit3,
+  Copy,
+  Menu,
+  Building,
+  Truck,
+  Clipboard
 } from 'lucide-react';
 import Sidebar from '../components/sidebar';
 import MobileHeader from '../components/mobile-header';
 import CustomerModal from "../components/customer-modal";
 import ServiceModal from "../components/service-modal";
-import EditJobDetailsModal from "../components/edit-job-details-modal";
 import ServiceAddressModal from "../components/service-address-modal";
 import PaymentMethodModal from "../components/payment-method-modal";
+import TerritorySelectionModal from "../components/territory-selection-modal";
+import AddressAutocomplete from "../components/address-autocomplete";
 import { useNavigate } from 'react-router-dom';
 import { jobsAPI, customersAPI, servicesAPI, teamAPI, territoriesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -54,9 +77,6 @@ export default function CreateJobPage() {
   const [error, setError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
-  const [showDurationModal, setShowDurationModal] = useState(false);
-  const [showWorkersModal, setShowWorkersModal] = useState(false);
-  const [showSkillsModal, setShowSkillsModal] = useState(false);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showTerritoryModal, setShowTerritoryModal] = useState(false);
@@ -97,7 +117,27 @@ export default function CreateJobPage() {
       email: "",
       emailNotifications: true,
       textNotifications: false
-    }
+    },
+    // Additional fields for comprehensive job creation
+    bathroomCount: "",
+    serviceName: "",
+    invoiceStatus: "draft",
+    paymentStatus: "pending",
+    priority: "normal",
+    estimatedDuration: 0,
+    skills: [],
+    specialInstructions: "",
+    customerNotes: "",
+    internalNotes: "",
+    tags: [],
+    attachments: [],
+    recurringFrequency: "weekly",
+    recurringEndDate: "",
+    autoInvoice: true,
+    autoReminders: true,
+    customerSignature: false,
+    photosRequired: false,
+    qualityCheck: true
   });
 
   // Data lists
@@ -118,16 +158,50 @@ export default function CreateJobPage() {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedService, setSelectedService] = useState(null);
   const [selectedTeamMember, setSelectedTeamMember] = useState(null);
+  const [selectedTeamMembers, setSelectedTeamMembers] = useState([]); // Multiple team members
   const [detectedTerritory, setDetectedTerritory] = useState(null);
   const [territories, setTerritories] = useState([]);
   const [territoriesLoading, setTerritoriesLoading] = useState(false);
 
   // Expandable sections
   const [expandedSections, setExpandedSections] = useState({
-    contactInfo: false,
+    basicInfo: true,
+    serviceDetails: true,
+    scheduling: true,
+    pricing: true,
+    team: false,
+    contact: false,
+    address: false,
     notes: false,
-    notifications: true
+    advanced: false,
+    notifications: false
   });
+
+  // Status options
+  const statusOptions = [
+    { key: 'pending', label: 'Pending', color: 'bg-yellow-400' },
+    { key: 'confirmed', label: 'Confirmed', color: 'bg-blue-400' },
+    { key: 'in-progress', label: 'In Progress', color: 'bg-orange-400' },
+    { key: 'completed', label: 'Completed', color: 'bg-green-400' },
+    { key: 'cancelled', label: 'Cancelled', color: 'bg-red-400' }
+  ];
+
+  // Priority options
+  const priorityOptions = [
+    { key: 'low', label: 'Low', color: 'bg-gray-400' },
+    { key: 'normal', label: 'Normal', color: 'bg-blue-400' },
+    { key: 'high', label: 'High', color: 'bg-orange-400' },
+    { key: 'urgent', label: 'Urgent', color: 'bg-red-400' }
+  ];
+
+  // Recurring frequency options
+  const recurringOptions = [
+    { key: 'weekly', label: 'Weekly' },
+    { key: 'bi-weekly', label: 'Bi-weekly' },
+    { key: 'monthly', label: 'Monthly' },
+    { key: 'quarterly', label: 'Quarterly' },
+    { key: 'yearly', label: 'Yearly' }
+  ];
 
   useEffect(() => {
     if (user?.id) {
@@ -175,28 +249,20 @@ export default function CreateJobPage() {
       setFormData(prev => ({ 
         ...prev, 
         price: basePrice,
-        total: total
+        total: total,
+        serviceName: selectedService.name,
+        estimatedDuration: selectedService.duration || 0
       }));
     }
   }, [selectedService, formData.discount, formData.additionalFees, formData.taxes]);
 
-  // Show loading if user is not available
-  if (!user) {
-    return (
-      <div className="flex h-screen bg-gradient-to-br from-blue-50 to-indigo-100 items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // Monitor scheduledTime changes
+  useEffect(() => {
+    console.log('scheduledTime changed to:', formData.scheduledTime);
+  }, [formData.scheduledTime]);
 
   const loadData = async () => {
-    if (!user?.id) {
-      console.error('User not available');
-      return;
-    }
+    if (!user?.id) return;
     
     try {
       setDataLoading(true);
@@ -206,32 +272,16 @@ export default function CreateJobPage() {
         teamAPI.getAll(user.id),
         territoriesAPI.getAll(user.id)
       ]);
-
-      console.log('Team data received:', teamData);
-
-      // Ensure we have arrays, even if API returns unexpected format
-      const customersArray = Array.isArray(customersData) ? customersData : [];
-      const servicesArray = Array.isArray(servicesData) ? servicesData : [];
-      const teamArray = Array.isArray(teamData) ? teamData : (teamData?.teamMembers || teamData || []);
-      const territoriesArray = territoriesData?.territories || [];
-
-      setCustomers(customersArray);
-      setServices(servicesArray);
-      setTeamMembers(teamArray);
-      setTerritories(territoriesArray);
-      setFilteredCustomers(customersArray);
-      setFilteredServices(servicesArray);
       
-      console.log('Team members set:', teamArray);
+      setCustomers(customersData.customers || customersData);
+      setServices(servicesData.services || servicesData);
+      setTeamMembers(teamData.teamMembers || teamData);
+      setTerritories(territoriesData.territories || territoriesData);
+      setFilteredCustomers(customersData.customers || customersData);
+      setFilteredServices(servicesData.services || servicesData);
     } catch (error) {
       console.error('Error loading data:', error);
-      setError('Failed to load data. Please try again.');
-      // Set empty arrays as fallback
-      setCustomers([]);
-      setServices([]);
-      setTeamMembers([]);
-      setFilteredCustomers([]);
-      setFilteredServices([]);
+      setError('Failed to load data. Please refresh the page.');
     } finally {
       setDataLoading(false);
     }
@@ -239,89 +289,124 @@ export default function CreateJobPage() {
 
   const handleCustomerSelect = async (customer) => {
     setSelectedCustomer(customer);
-    setFormData(prev => ({ 
-      ...prev, 
+    setFormData(prev => ({
+      ...prev,
       customerId: customer.id,
       contactInfo: {
-        ...prev.contactInfo,
         phone: customer.phone || "",
-        email: customer.email || ""
+        email: customer.email || "",
+        emailNotifications: true,
+        textNotifications: false
       }
     }));
-    setCustomerSearch(`${customer.first_name} ${customer.last_name}`);
     setShowCustomerDropdown(false);
-    
-    // Detect territory based on customer location
-    if (customer.zip_code || customer.address) {
-      try {
-        const territoryResponse = await territoriesAPI.detectTerritory(
-          user.id,
-          customer.address,
-          customer.zip_code
-        );
-        
-        if (territoryResponse.available && territoryResponse.territory) {
-          setDetectedTerritory(territoryResponse.territory);
-          setFormData(prev => ({ ...prev, territory: territoryResponse.territory.name }));
-          console.log('Detected territory:', territoryResponse.territory);
-        } else {
-          setDetectedTerritory(null);
-        }
-      } catch (error) {
-        console.error('Error detecting territory:', error);
-        setDetectedTerritory(null);
-      }
-    }
+    setCustomerSearch("");
   };
 
   const handleServiceSelect = (service) => {
     setSelectedService(service);
-    const durationInHours = Math.floor((service.duration || 360) / 60); // Convert minutes to hours
-    const basePrice = service.price || 0;
-    
-    setFormData(prev => {
-      const subtotal = basePrice - (prev.discount || 0) + (prev.additionalFees || 0);
-      const total = subtotal + (prev.taxes || 0);
-      
-      return {
-      ...prev, 
+    setFormData(prev => ({
+      ...prev,
       serviceId: service.id,
-        price: basePrice,
-        duration: durationInHours,
-        total: total
-      };
-    });
-    
-    setServiceSearch(service.name);
+      price: service.price || 0,
+      duration: service.duration ? Math.ceil(service.duration / 60) : 6, // Convert minutes to hours
+      workers: service.workers || 1,
+      skillsRequired: service.skills || 0,
+      serviceName: service.name,
+      estimatedDuration: service.duration || 0,
+      // Calculate time based on service duration - default to 9 AM if no time set
+      scheduledTime: prev.scheduledTime || "09:00"
+    }));
     setShowServiceDropdown(false);
+    setServiceSearch("");
   };
 
   const handleTeamMemberSelect = (member) => {
     setSelectedTeamMember(member);
-    setFormData(prev => ({ ...prev, teamMemberId: member?.id || null }));
+    setFormData(prev => ({ ...prev, teamMemberId: member.id }));
     setShowTeamDropdown(false);
+  };
+
+  const handleMultipleTeamMemberSelect = (member) => {
+    setSelectedTeamMembers(prev => {
+      const isSelected = prev.find(m => m.id === member.id);
+      if (isSelected) {
+        // Remove if already selected
+        return prev.filter(m => m.id !== member.id);
+      } else {
+        // Add if not selected
+        return [...prev, member];
+      }
+    });
+  };
+
+  const removeTeamMember = (memberId) => {
+    setSelectedTeamMembers(prev => prev.filter(m => m.id !== memberId));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    console.log('Form submitted');
+    console.log('Form data:', formData);
+    console.log('User:', user);
+    console.log('Submit button clicked - checking validation...');
     
     if (!user?.id) {
       setError('User not available. Please try logging in again.');
       return;
     }
     
-    if (!formData.customerId || !formData.serviceId || !formData.scheduledDate) {
-      setError('Please fill in all required fields: Customer, Service, and Date.');
+    console.log('Form data before validation:', {
+      customerId: formData.customerId,
+      serviceId: formData.serviceId,
+      scheduledDate: formData.scheduledDate,
+      scheduledTime: formData.scheduledTime,
+      scheduledTimeType: typeof formData.scheduledTime,
+      scheduledTimeLength: formData.scheduledTime ? formData.scheduledTime.length : 'null/undefined'
+    });
+    
+    if (!formData.customerId || !formData.serviceId || !formData.scheduledDate || !formData.scheduledTime) {
+      console.log('Validation failed:', {
+        customerId: formData.customerId,
+        serviceId: formData.serviceId,
+        scheduledDate: formData.scheduledDate,
+        scheduledTime: formData.scheduledTime
+      });
+      
+      const missingFields = [];
+      if (!formData.customerId) missingFields.push('Customer');
+      if (!formData.serviceId) missingFields.push('Service');
+      if (!formData.scheduledDate) missingFields.push('Date');
+      if (!formData.scheduledTime) missingFields.push('Time');
+      
+      setError(`Please fill in the following required fields: ${missingFields.join(', ')}`);
+      // Prevent any input from being focused
+      if (document.activeElement) {
+        document.activeElement.blur();
+      }
+      // Scroll to top to show error message
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (!selectedCustomer) {
       setError('Please select a customer.');
+      // Prevent any input from being focused
+      if (document.activeElement) {
+        document.activeElement.blur();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
     if (!selectedService) {
       setError('Please select a service.');
+      // Prevent any input from being focused
+      if (document.activeElement) {
+        document.activeElement.blur();
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -334,10 +419,11 @@ export default function CreateJobPage() {
         userId: user.id,
         customerId: formData.customerId,
         serviceId: formData.serviceId,
-        teamMemberId: formData.teamMemberId,
+        teamMemberId: selectedTeamMembers.length > 0 ? selectedTeamMembers[0].id : formData.teamMemberId, // Primary team member
+        teamMemberIds: selectedTeamMembers.map(member => member.id), // All selected team members
         scheduledDate: formData.scheduledDate,
         scheduledTime: formData.scheduledTime,
-        notes: formData.notes, // Customer notes
+        notes: formData.notes,
         internalNotes: formData.internalNotes,
         status: formData.status,
         duration: parseInt(formData.duration) * 60 || 360, // Convert hours to minutes
@@ -356,15 +442,44 @@ export default function CreateJobPage() {
         letCustomerSchedule: Boolean(formData.letCustomerSchedule),
         offerToProviders: Boolean(formData.offerToProviders),
         contactInfo: formData.contactInfo,
-        serviceAddress: formData.serviceAddress
+        serviceAddress: formData.serviceAddress,
+        // Additional comprehensive fields
+        bathroomCount: formData.bathroomCount,
+        serviceName: formData.serviceName,
+        invoiceStatus: formData.invoiceStatus,
+        paymentStatus: formData.paymentStatus,
+        priority: formData.priority,
+        estimatedDuration: formData.estimatedDuration,
+        skills: formData.skills,
+        specialInstructions: formData.specialInstructions,
+        customerNotes: formData.customerNotes,
+        tags: formData.tags,
+        recurringFrequency: formData.recurringFrequency,
+        recurringEndDate: formData.recurringEndDate,
+        autoInvoice: formData.autoInvoice,
+        autoReminders: formData.autoReminders,
+        customerSignature: formData.customerSignature,
+        photosRequired: formData.photosRequired,
+        qualityCheck: formData.qualityCheck
       };
 
       console.log('Creating job with data:', jobData);
+      console.log('Time value being sent:', jobData.scheduledTime);
+      console.log('Time value type:', typeof jobData.scheduledTime);
+      console.log('Time value length:', jobData.scheduledTime ? jobData.scheduledTime.length : 'null/undefined');
       const result = await jobsAPI.create(jobData);
+      console.log('Job creation result:', result);
       
       setSuccessMessage('Job created successfully!');
       setTimeout(() => {
-        navigate('/jobs');
+        // Navigate to the specific job details page
+        const jobId = result.id || result.job?.id || result.job_id;
+        console.log('Navigating to job ID:', jobId);
+        if (jobId) {
+          navigate(`/job/${jobId}`);
+        } else {
+          navigate('/jobs');
+        }
       }, 1500);
     } catch (error) {
       console.error('Error creating job:', error);
@@ -400,915 +515,866 @@ export default function CreateJobPage() {
     }));
   };
 
-  // Modal handlers
-  const handleDurationSave = (duration) => {
-    setFormData(prev => ({ ...prev, duration }));
-  };
-
-  const handleWorkersSave = (workers) => {
-    setFormData(prev => ({ ...prev, workers }));
-  };
-
-  const handleSkillsSave = (skillsRequired) => {
-    setFormData(prev => ({ ...prev, skillsRequired }));
-  };
-
   const handleAddressSave = (serviceAddress) => {
     setFormData(prev => ({ ...prev, serviceAddress }));
+    setShowAddressModal(false);
   };
 
   const handlePaymentMethodSave = (paymentMethod) => {
     setFormData(prev => ({ ...prev, paymentMethod }));
+    setShowPaymentModal(false);
   };
 
   const handleTerritorySelect = (territory) => {
-    setFormData(prev => ({ 
-      ...prev, 
-      territory: territory.name,
-      territoryId: territory.id 
-    }));
     setDetectedTerritory(territory);
+    setFormData(prev => ({ ...prev, territory: territory.name, territoryId: territory.id }));
     setShowTerritoryModal(false);
   };
 
+  // Show loading if user is not available
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 overflow-hidden">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
-      <div className="flex-1 flex flex-col min-w-0">
-        <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
-
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <Sidebar />
+      
+      <div className="flex-1 lg:ml-64">
         {/* Header */}
-        <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 px-4 sm:px-6 py-4 sm:py-6 shadow-sm">
+        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4 min-w-0">
+            <div className="flex items-center space-x-4">
               <button
-                onClick={() => navigate("/jobs")}
-                className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 transition-colors duration-200 flex-shrink-0"
+                onClick={() => navigate('/jobs')}
+                className="flex items-center text-blue-600 hover:text-blue-700"
               >
-                <ArrowLeft className="w-5 h-5" />
-                <span className="text-sm font-medium hidden sm:inline">Back to Jobs</span>
+                <ArrowLeft className="w-5 h-5 mr-2" />
+                <span className="hidden sm:inline">Back to Jobs</span>
               </button>
-              <div className="h-6 w-px bg-gray-300 hidden sm:block"></div>
-              <div className="min-w-0">
-                <h1 className="text-xl sm:text-3xl font-bold text-gray-900 truncate">Create New Job</h1>
-                <p className="text-gray-600 mt-1 text-sm hidden sm:block">Schedule a new service appointment</p>
-              </div>
+              <h1 className="text-xl sm:text-2xl font-semibold text-gray-900">Create New Job</h1>
             </div>
-            <div className="flex space-x-2 sm:space-x-3 flex-shrink-0">
+          </div>
+        </div>
+
+        {/* Success/Error Messages */}
+        {successMessage && (
+          <div className="mx-4 sm:mx-6 mt-4 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-3">
+            <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+            <p className="text-green-700 font-medium">{successMessage}</p>
+          </div>
+        )}
+
+        {error && (
+          <div className="mx-4 sm:mx-6 mt-4 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <p className="text-red-700 font-medium">{error}</p>
+          </div>
+        )}
+
+        {/* Main Content */}
+        <div className="p-4 sm:p-6">
+          <form onSubmit={handleSubmit} className="max-w-6xl mx-auto space-y-6" noValidate>
+            
+            {/* Basic Information Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div 
+                className="p-6 cursor-pointer"
+                onClick={() => toggleSection('basicInfo')}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <User className="w-5 h-5 text-blue-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Basic Information</h2>
+                  </div>
+                  {expandedSections.basicInfo ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
+              </div>
+              
+              {expandedSections.basicInfo && (
+                <div className="px-6 pb-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Customer Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Customer *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Search customers..."
+                          value={customerSearch}
+                          onChange={(e) => setCustomerSearch(e.target.value)}
+                          onFocus={() => setShowCustomerDropdown(true)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        {selectedCustomer && (
+                          <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+                            <p className="font-medium text-blue-900">
+                              {selectedCustomer.first_name} {selectedCustomer.last_name}
+                            </p>
+                            <p className="text-sm text-blue-700">{selectedCustomer.email}</p>
+                          </div>
+                        )}
+                        {showCustomerDropdown && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {filteredCustomers.map(customer => (
+                              <button
+                                key={customer.id}
+                                type="button"
+                                onClick={() => handleCustomerSelect(customer)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
+                              >
+                                <p className="font-medium">{customer.first_name} {customer.last_name}</p>
+                                <p className="text-sm text-gray-600">{customer.email}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsCustomerModalOpen(true)}
+                        className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                      >
+                        + Add New Customer
+                      </button>
+                    </div>
+
+                    {/* Service Selection */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Service *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Search services..."
+                          value={serviceSearch}
+                          onChange={(e) => setServiceSearch(e.target.value)}
+                          onFocus={() => setShowServiceDropdown(true)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                        {selectedService && (
+                          <div className="mt-2 p-3 bg-green-50 rounded-lg">
+                            <p className="font-medium text-green-900">{selectedService.name}</p>
+                            <p className="text-sm text-green-700">${selectedService.price}</p>
+                          </div>
+                        )}
+                        {showServiceDropdown && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {filteredServices.map(service => (
+                              <button
+                                key={service.id}
+                                type="button"
+                                onClick={() => handleServiceSelect(service)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
+                              >
+                                <p className="font-medium">{service.name}</p>
+                                <p className="text-sm text-gray-600">${service.price}</p>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsServiceModalOpen(true)}
+                        className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                      >
+                        + Add New Service
+                      </button>
+                    </div>
+
+                    {/* Status */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                      <select
+                        value={formData.status}
+                        onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {statusOptions.map(status => (
+                          <option key={status.key} value={status.key}>
+                            {status.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Priority */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Priority</label>
+                      <select
+                        value={formData.priority}
+                        onChange={(e) => setFormData(prev => ({ ...prev, priority: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {priorityOptions.map(priority => (
+                          <option key={priority.key} value={priority.key}>
+                            {priority.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Scheduling Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div 
+                className="p-6 cursor-pointer"
+                onClick={() => toggleSection('scheduling')}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Calendar className="w-5 h-5 text-green-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Scheduling</h2>
+                  </div>
+                  {expandedSections.scheduling ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
+              </div>
+              
+              {expandedSections.scheduling && (
+                <div className="px-6 pb-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Date */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Date *
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.scheduledDate}
+                        onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    {/* Time */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Time *
+                      </label>
+                      <input
+                        type="time"
+                        value={formData.scheduledTime}
+                        onChange={(e) => {
+                          console.log('Time input changed:', e.target.value);
+                          console.log('Previous scheduledTime:', formData.scheduledTime);
+                          setFormData(prev => {
+                            console.log('Setting scheduledTime to:', e.target.value);
+                            return { ...prev, scheduledTime: e.target.value };
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        step="1800"
+                      />
+                    </div>
+
+                    {/* Recurring Job */}
+                    <div>
+                      <label className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          checked={formData.recurringJob}
+                          onChange={(e) => setFormData(prev => ({ ...prev, recurringJob: e.target.checked }))}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-medium text-gray-700">Recurring Job</span>
+                      </label>
+                    </div>
+
+                    {/* Recurring Frequency */}
+                    {formData.recurringJob && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Frequency</label>
+                        <select
+                          value={formData.recurringFrequency}
+                          onChange={(e) => setFormData(prev => ({ ...prev, recurringFrequency: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          {recurringOptions.map(option => (
+                            <option key={option.key} value={option.key}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Recurring End Date */}
+                    {formData.recurringJob && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">End Date</label>
+                        <input
+                          type="date"
+                          value={formData.recurringEndDate}
+                          onChange={(e) => setFormData(prev => ({ ...prev, recurringEndDate: e.target.value }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Service Details Section */}
+            {selectedService && (
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+                <div 
+                  className="p-6 cursor-pointer"
+                  onClick={() => toggleSection('serviceDetails')}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <Clipboard className="w-5 h-5 text-purple-600" />
+                      <h2 className="text-lg font-semibold text-gray-900">Service Details</h2>
+                    </div>
+                    {expandedSections.serviceDetails ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                  </div>
+                </div>
+                
+                {expandedSections.serviceDetails && (
+                  <div className="px-6 pb-6 space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Duration (hours)</label>
+                        <input
+                          type="number"
+                          value={formData.duration}
+                          onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Workers Needed</label>
+                        <select
+                          value={formData.workers}
+                          onChange={(e) => setFormData(prev => ({ ...prev, workers: parseInt(e.target.value) || 1 }))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value={1}>1 Worker</option>
+                          <option value={2}>2 Workers</option>
+                          <option value={3}>3 Workers</option>
+                          <option value={4}>4 Workers</option>
+                          <option value={5}>5 Workers</option>
+                          <option value={6}>6+ Workers</option>
+                        </select>
+                      </div>
+                      
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Bathroom Count</label>
+                        <input
+                          type="number"
+                          value={formData.bathroomCount}
+                          onChange={(e) => setFormData(prev => ({ ...prev, bathroomCount: e.target.value }))}
+                          placeholder="e.g., 2"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Special Instructions</label>
+                      <textarea
+                        rows={3}
+                        value={formData.specialInstructions}
+                        onChange={(e) => setFormData(prev => ({ ...prev, specialInstructions: e.target.value }))}
+                        placeholder="Any special instructions for this job..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Notes Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div 
+                className="p-6 cursor-pointer"
+                onClick={() => toggleSection('notes')}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <FileText className="w-5 h-5 text-blue-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Notes & Communication</h2>
+                  </div>
+                  {expandedSections.notes ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
+              </div>
+              
+              {expandedSections.notes && (
+                <div className="px-6 pb-6 space-y-6">
+                  <div className="grid grid-cols-1 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Job Notes (Customer Visible)</label>
+                      <textarea
+                        rows={4}
+                        value={formData.notes}
+                        onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Add notes that will be visible to the customer..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Internal Notes (Team Only)</label>
+                      <textarea
+                        rows={4}
+                        value={formData.internalNotes}
+                        onChange={(e) => setFormData(prev => ({ ...prev, internalNotes: e.target.value }))}
+                        placeholder="Add internal notes for your team..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Team Assignment Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div 
+                className="p-6 cursor-pointer"
+                onClick={() => toggleSection('team')}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Users className="w-5 h-5 text-purple-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Team Assignment</h2>
+                  </div>
+                  {expandedSections.team ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
+              </div>
+              
+              {expandedSections.team && (
+                <div className="px-6 pb-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Assign Team Members</label>
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setShowTeamDropdown(!showTeamDropdown)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-left focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          {selectedTeamMembers.length > 0 
+                            ? `${selectedTeamMembers.length} member(s) selected` 
+                            : "Select team members..."}
+                        </button>
+                        {showTeamDropdown && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                            {teamMembers.map(member => {
+                              const isSelected = selectedTeamMembers.find(m => m.id === member.id);
+                              return (
+                                <button
+                                  key={member.id}
+                                  type="button"
+                                  onClick={() => handleMultipleTeamMemberSelect(member)}
+                                  className={`w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0 ${
+                                    isSelected ? 'bg-blue-50 text-blue-700' : ''
+                                  }`}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="font-medium">{member.first_name} {member.last_name}</p>
+                                      <p className="text-sm text-gray-600">{member.role || 'Team Member'}</p>
+                                    </div>
+                                    {isSelected && (
+                                      <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                      </svg>
+                                    )}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* Show selected team members */}
+                      {selectedTeamMembers.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          <p className="text-sm font-medium text-gray-700">Selected Team Members:</p>
+                          <div className="space-y-2">
+                            {selectedTeamMembers.map(member => (
+                              <div key={member.id} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
+                                <span className="text-sm">{member.first_name} {member.last_name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeTeamMember(member.id)}
+                                  className="text-red-500 hover:text-red-700 text-sm"
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Territory</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowTerritoryModal(true)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-left focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        {detectedTerritory ? detectedTerritory.name : "Select territory..."}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Scheduling Options Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div 
+                className="p-6 cursor-pointer"
+                onClick={() => toggleSection('scheduling')}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Calendar className="w-5 h-5 text-orange-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Scheduling Options</h2>
+                  </div>
+                  {expandedSections.scheduling ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
+              </div>
+              
+              {expandedSections.scheduling && (
+                <div className="px-6 pb-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Schedule Type</label>
+                      <select
+                        value={formData.scheduleType}
+                        onChange={(e) => setFormData(prev => ({ ...prev, scheduleType: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="one-time">One-time</option>
+                        <option value="recurring">Recurring</option>
+                        <option value="on-demand">On-demand</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Recurring Frequency</label>
+                      <select
+                        value={formData.recurringFrequency || "weekly"}
+                        onChange={(e) => setFormData(prev => ({ ...prev, recurringFrequency: e.target.value }))}
+                        disabled={formData.scheduleType !== 'recurring'}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
+                      >
+                        <option value="weekly">Weekly</option>
+                        <option value="bi-weekly">Bi-weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        id="letCustomerSchedule"
+                        checked={formData.letCustomerSchedule}
+                        onChange={(e) => setFormData(prev => ({ ...prev, letCustomerSchedule: e.target.checked }))}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <label htmlFor="letCustomerSchedule" className="text-sm font-medium text-gray-700">
+                        Let customer schedule this job
+                      </label>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        id="offerToProviders"
+                        checked={formData.offerToProviders}
+                        onChange={(e) => setFormData(prev => ({ ...prev, offerToProviders: e.target.checked }))}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <label htmlFor="offerToProviders" className="text-sm font-medium text-gray-700">
+                        Offer to providers for bidding
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Contact Information Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div 
+                className="p-6 cursor-pointer"
+                onClick={() => toggleSection('contact')}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <Phone className="w-5 h-5 text-green-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Contact Information</h2>
+                  </div>
+                  {expandedSections.contact ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
+              </div>
+              
+              {expandedSections.contact && (
+                <div className="px-6 pb-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
+                      <input
+                        type="tel"
+                        value={formData.contactInfo.phone}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          contactInfo: { ...prev.contactInfo, phone: e.target.value }
+                        }))}
+                        placeholder="(555) 123-4567"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                      <input
+                        type="email"
+                        value={formData.contactInfo.email}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          contactInfo: { ...prev.contactInfo, email: e.target.value }
+                        }))}
+                        placeholder="customer@example.com"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="text-sm font-medium text-gray-700">Notification Preferences</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          id="emailNotifications"
+                          checked={formData.contactInfo.emailNotifications}
+                          onChange={(e) => setFormData(prev => ({ 
+                            ...prev, 
+                            contactInfo: { ...prev.contactInfo, emailNotifications: e.target.checked }
+                          }))}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="emailNotifications" className="text-sm text-gray-700">
+                          Email notifications
+                        </label>
+                      </div>
+
+                      <div className="flex items-center space-x-3">
+                        <input
+                          type="checkbox"
+                          id="textNotifications"
+                          checked={formData.contactInfo.textNotifications}
+                          onChange={(e) => setFormData(prev => ({ 
+                            ...prev, 
+                            contactInfo: { ...prev.contactInfo, textNotifications: e.target.checked }
+                          }))}
+                          className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        <label htmlFor="textNotifications" className="text-sm text-gray-700">
+                          SMS notifications
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Service Address Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+              <div 
+                className="p-6 cursor-pointer"
+                onClick={() => toggleSection('address')}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <MapPin className="w-5 h-5 text-red-600" />
+                    <h2 className="text-lg font-semibold text-gray-900">Service Address</h2>
+                  </div>
+                  {expandedSections.address ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                </div>
+              </div>
+              
+              {expandedSections.address && (
+                <div className="px-6 pb-6 space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Street Address</label>
+                      <AddressAutocomplete
+                        value={formData.serviceAddress.street}
+                        onChange={(value) => setFormData(prev => ({ 
+                          ...prev, 
+                          serviceAddress: { ...prev.serviceAddress, street: value }
+                        }))}
+                        onAddressSelect={(addressComponents) => {
+                          console.log('Address selected:', addressComponents);
+                          setFormData(prev => ({
+                            ...prev,
+                            serviceAddress: {
+                              ...prev.serviceAddress,
+                              ...addressComponents
+                            }
+                          }));
+                        }}
+                        placeholder="123 Main Street"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">City</label>
+                      <input
+                        type="text"
+                        value={formData.serviceAddress.city}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          serviceAddress: { ...prev.serviceAddress, city: e.target.value }
+                        }))}
+                        placeholder="New York"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">State</label>
+                      <input
+                        type="text"
+                        value={formData.serviceAddress.state}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          serviceAddress: { ...prev.serviceAddress, state: e.target.value }
+                        }))}
+                        placeholder="NY"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">ZIP Code</label>
+                      <input
+                        type="text"
+                        value={formData.serviceAddress.zipCode}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          serviceAddress: { ...prev.serviceAddress, zipCode: e.target.value }
+                        }))}
+                        placeholder="10001"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
+                      <input
+                        type="text"
+                        value={formData.serviceAddress.country}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          serviceAddress: { ...prev.serviceAddress, country: e.target.value }
+                        }))}
+                        placeholder="United States"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAddressModal(true)}
+                    className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  >
+                    + Use Address Modal
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Submit Button */}
+            <div className="flex justify-end space-x-4">
               <button
                 type="button"
-                onClick={() => navigate("/jobs")}
-                className="px-3 sm:px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-all duration-200 font-medium text-sm sm:text-base whitespace-nowrap"
+                onClick={() => navigate('/jobs')}
+                className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
-                onClick={handleSubmit}
+                type="submit"
                 disabled={loading}
-                className="px-3 sm:px-6 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 font-medium shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 text-sm sm:text-base whitespace-nowrap"
+                onClick={() => console.log('Submit button clicked')}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? (
-                  <div className="flex items-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span className="hidden sm:inline">Creating...</span>
-                  </div>
-                ) : (
-                  <span>Schedule Job</span>
-                )}
+                {loading ? 'Creating...' : 'Create Job'}
               </button>
             </div>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-auto">
-          {/* Messages */}
-          {error && (
-            <div className="mx-4 sm:mx-6 lg:mx-8 mt-6">
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-center space-x-3">
-                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                <p className="text-red-700 font-medium text-sm">{error}</p>
-              </div>
-            </div>
-          )}
-
-          {successMessage && (
-            <div className="mx-4 sm:mx-6 lg:mx-8 mt-6">
-              <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center space-x-3">
-                <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-                <p className="text-green-700 font-medium text-sm">{successMessage}</p>
-              </div>
-            </div>
-          )}
-
-          {dataLoading ? (
-            <div className="flex h-64 items-center justify-center">
-              <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-gray-600 font-medium">Loading form data...</p>
-              </div>
-            </div>
-          ) : (
-          <div className="px-4 sm:px-6 lg:px-8 py-6">
-            <div className="flex flex-col xl:flex-row gap-6">
-              {/* Left Column */}
-              <div className="flex-1 space-y-6 min-w-0">
-                {/* Customer Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold">Customer</h2>
-                    <button 
-                      onClick={() => setIsCustomerModalOpen(true)}
-                      className="text-blue-600 hover:text-blue-700 flex-shrink-0"
-                    >
-                      <Plus className="w-5 h-5" />
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Search for a customer..."
-                        value={customerSearch}
-                        onChange={(e) => setCustomerSearch(e.target.value)}
-                        onFocus={() => setShowCustomerDropdown(true)}
-                        className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-gray-900 placeholder-gray-500 transition-all duration-200 text-sm sm:text-base"
-                      />
-                      <Search className="absolute right-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-
-                      {showCustomerDropdown && (
-                        <div className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
-                          {(filteredCustomers || []).map((customer) => (
-                            <button
-                              key={customer.id}
-                              type="button"
-                              onClick={() => handleCustomerSelect(customer)}
-                              className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors duration-200"
-                            >
-                              <div className="font-medium text-gray-900">{customer.first_name} {customer.last_name}</div>
-                              <div className="text-sm text-gray-500">{customer.email}</div>
-                            </button>
-                          ))}
-                          {(filteredCustomers || []).length === 0 && (
-                            <div className="px-4 py-3 text-gray-500">
-                              {customerSearch ? 'No customers found matching your search' : 'No customers available'}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {selectedCustomer && (
-                      <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                        <div className="flex items-center space-x-3">
-                          <User className="w-5 h-5 text-green-600 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-green-900">
-                              {selectedCustomer.first_name} {selectedCustomer.last_name}
-                            </p>
-                            <p className="text-xs text-green-700">
-                              {selectedCustomer.email} • {selectedCustomer.phone || 'No phone'}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Territory Detection */}
-                    {detectedTerritory && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                        <div className="flex items-center space-x-3">
-                          <MapPin className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-blue-900">
-                              Detected Territory: {detectedTerritory.name}
-                            </p>
-                            <p className="text-xs text-blue-700">
-                              {detectedTerritory.location} • {detectedTerritory.radius_miles} mile radius
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Service Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold">SERVICE</h2>
-                    <h2 className="text-lg font-semibold">PRICE</h2>
-                  </div>
-                  
-                  <div className="space-y-4">
-                    <div className="relative">
-                      <input
-                        type="text"
-                        placeholder="Search for a service..."
-                        value={serviceSearch}
-                        onChange={(e) => setServiceSearch(e.target.value)}
-                        onFocus={() => setShowServiceDropdown(true)}
-                        className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none text-gray-900 placeholder-gray-500 transition-all duration-200 pr-12 text-sm sm:text-base"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setIsServiceModalOpen(true)}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 text-green-600 hover:text-green-700 transition-colors duration-200"
-                        title="Create Service"
-                      >
-                        <Plus className="w-5 h-5" />
-                      </button>
-
-                      {showServiceDropdown && (
-                        <div className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
-                          {(filteredServices || []).map((service) => (
-                            <button
-                              key={service.id}
-                              type="button"
-                              onClick={() => handleServiceSelect(service)}
-                              className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors duration-200"
-                            >
-                              <div className="font-medium text-gray-900">{service.name}</div>
-                              <div className="text-sm text-gray-500">
-                                ${service.price} • {Math.floor((service.duration || 0) / 60)}h {(service.duration || 0) % 60}m
-                              </div>
-                            </button>
-                          ))}
-                          {(filteredServices || []).length === 0 && (
-                            <div className="px-4 py-3 text-gray-500">
-                              {serviceSearch ? 'No services found matching your search' : 'No services available'}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Selected Service Display */}
-                    {selectedService && (
-                      <div className="border border-gray-200 rounded-xl p-4">
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
-                          <div className="min-w-0">
-                            <h3 className="font-medium text-blue-600 break-words">{selectedService.name}</h3>
-                            <button className="text-sm text-gray-500 hover:text-gray-700 whitespace-nowrap">
-                              Show details <ChevronDown className="w-3 h-3 inline ml-1" />
-                            </button>
-                          </div>
-                          <div className="flex items-center space-x-2 flex-shrink-0">
-                            <span className="text-lg font-medium">
-                              ${Number(selectedService.price || 0).toFixed(2)}
-                            </span>
-                            <button className="text-gray-400 hover:text-gray-600">
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button 
-                              onClick={() => {
-                                setSelectedService(null);
-                                setServiceSearch("");
-                                setFormData(prev => ({ ...prev, serviceId: "", price: 0 }));
-                              }}
-                              className="text-gray-400 hover:text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Pricing Breakdown */}
-                    {selectedService && (
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-sm sm:text-base">
-                          <span>Subtotal</span>
-                          <span>${(formData.price - formData.discount + formData.additionalFees).toFixed(2)}</span>
-                        </div>
-                        <div className="flex flex-col sm:flex-row sm:justify-between gap-2">
-                          <button className="text-blue-600 text-sm hover:text-blue-700 text-left">Add Discount</button>
-                          <button className="text-blue-600 text-sm hover:text-blue-700 text-left sm:text-right">Add Fee</button>
-                        </div>
-                        
-                        <div className="flex justify-between items-center text-sm sm:text-base">
-                          <div className="flex items-center space-x-1">
-                            <span>Taxes</span>
-                            <Info className="w-4 h-4 text-gray-400" />
-                          </div>
-                          <span>${formData.taxes.toFixed(2)}</span>
-                        </div>
-                        
-                        <div className="flex justify-between font-semibold pt-2 border-t text-sm sm:text-base">
-                          <span>Total</span>
-                          <span>${formData.total.toFixed(2)}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Schedule Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <div className="flex flex-wrap items-center gap-2 mb-4">
-                    <div className="flex items-center space-x-2 px-3 py-1 bg-gray-100 rounded-full cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => setShowDurationModal(true)}>
-                      <Clock className="w-4 h-4" />
-                      <span className="text-sm whitespace-nowrap">{formData.duration} hr</span>
-                      <Edit className="w-3 h-3 text-gray-500" />
-                    </div>
-                    <div className="flex items-center space-x-2 px-3 py-1 bg-gray-100 rounded-full cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => setShowWorkersModal(true)}>
-                      <Users className="w-4 h-4" />
-                      <span className="text-sm whitespace-nowrap">{formData.workers} worker{formData.workers !== 1 ? 's' : ''}</span>
-                      <Edit className="w-3 h-3 text-gray-500" />
-                    </div>
-                    <div className="flex items-center space-x-2 px-3 py-1 bg-gray-100 rounded-full cursor-pointer hover:bg-gray-200 transition-colors" onClick={() => setShowSkillsModal(true)}>
-                      <span className="text-sm whitespace-nowrap">{formData.skillsRequired} skills required</span>
-                      <Edit className="w-3 h-3 text-gray-500" />
-                    </div>
-                  </div>
-
-                  <h2 className="text-lg font-semibold mb-4">Schedule</h2>
-                  
-                  <div className="flex flex-col sm:flex-row gap-2 mb-4">
-                    <button 
-                      className={`px-4 py-2 rounded-lg text-sm sm:text-base whitespace-nowrap ${
-                        formData.scheduleType === 'one-time' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                      }`}
-                      onClick={() => setFormData(prev => ({ ...prev, scheduleType: 'one-time' }))}
-                    >
-                      One Time
-                    </button>
-                    <button 
-                      className={`px-4 py-2 rounded-lg text-sm sm:text-base whitespace-nowrap ${
-                        formData.scheduleType === 'recurring' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700'
-                      }`}
-                      onClick={() => setFormData(prev => ({ ...prev, scheduleType: 'recurring' }))}
-                    >
-                      Recurring Job
-                    </button>
-                  </div>
-
-                  <div className="mb-4">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <div className="w-3 h-3 bg-blue-600 rounded-full flex-shrink-0"></div>
-                      <span className="font-medium">Schedule Now</span>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Date *</label>
-                        <input
-                          type="date"
-                          value={formData.scheduledDate}
-                          onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none text-gray-900 transition-all duration-200"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Time</label>
-                        <input
-                          type="time"
-                          value={formData.scheduledTime}
-                          onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
-                          className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none text-gray-900 transition-all duration-200"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="mb-4 p-3 border border-gray-200 rounded-xl">
-                    <div className="flex items-start space-x-2 mb-2">
-                      <input 
-                        type="checkbox" 
-                        checked={formData.letCustomerSchedule}
-                        onChange={(e) => setFormData(prev => ({ ...prev, letCustomerSchedule: e.target.checked }))}
-                        className="rounded border-gray-300 mt-0.5 flex-shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm sm:text-base">Let Customer Schedule</span>
-                          <button className="text-purple-600 text-sm whitespace-nowrap">Upgrade</button>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-500 ml-6">
-                      Send a bookable estimate to your customer, allowing them to choose a convenient time for the service.
-                    </p>
-                  </div>
-
-                  <div className="mb-4">
-                    <h3 className="font-medium mb-2 text-sm text-gray-600">ASSIGNED</h3>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowTeamDropdown(!showTeamDropdown)}
-                        className="w-full border border-gray-300 rounded-xl px-4 py-3 text-left focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none flex items-center justify-between transition-all duration-200"
-                      >
-                        <span className={selectedTeamMember ? "text-gray-900" : "text-gray-500"}>
-                          {selectedTeamMember ? `${selectedTeamMember.first_name} ${selectedTeamMember.last_name}` : "Select team member..."}
-                        </span>
-                        {showTeamDropdown ? <ChevronUp className="w-5 h-5 text-gray-400" /> : <ChevronDown className="w-5 h-5 text-gray-400" />}
-                      </button>
-
-                      {showTeamDropdown && (
-                        <div className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-60 overflow-y-auto">
-                          <button
-                            type="button"
-                            onClick={() => handleTeamMemberSelect(null)}
-                            className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 transition-colors duration-200"
-                          >
-                            <div className="text-gray-500">Unassigned</div>
-                          </button>
-                          {(teamMembers || []).map((member) => (
-                            <button
-                              key={member.id}
-                              type="button"
-                              onClick={() => handleTeamMemberSelect(member)}
-                              className="w-full px-4 py-3 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0 transition-colors duration-200"
-                            >
-                              <div className="font-medium text-gray-900">
-                                {member.first_name} {member.last_name}
-                              </div>
-                              <div className="text-sm text-gray-500">{member.role || 'Team Member'}</div>
-                            </button>
-                          ))}
-                          {(teamMembers || []).length === 0 && (
-                            <div className="px-4 py-3 text-gray-500">No team members found</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="p-3 border border-gray-200 rounded-xl">
-                    <div className="flex items-start space-x-2 mb-2">
-                      <input 
-                        type="checkbox" 
-                        checked={formData.offerToProviders}
-                        onChange={(e) => setFormData(prev => ({ ...prev, offerToProviders: e.target.checked }))}
-                        className="rounded border-gray-300 mt-0.5 flex-shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm sm:text-base">Offer to Service Providers</span>
-                          <button className="text-purple-600 text-sm whitespace-nowrap">Upgrade</button>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-sm text-gray-500 ml-6">
-                      Allow qualified service providers in your network to accept this job.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column */}
-              <div className="w-full xl:w-80 space-y-6 flex-shrink-0">
-                {/* Contact Information */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <button
-                    onClick={() => toggleSection('contactInfo')}
-                    className="flex items-center justify-between w-full mb-4"
-                  >
-                    <h2 className="text-lg font-semibold">Contact Information</h2>
-                    {expandedSections.contactInfo ? 
-                      <ChevronUp className="w-5 h-5 text-gray-400" /> : 
-                      <ChevronDown className="w-5 h-5 text-gray-400" />
-                    }
-                  </button>
-                  
-                  {expandedSections.contactInfo && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
-                        <div className="relative">
-                          <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                          <input
-                            type="tel"
-                            value={formData.contactInfo.phone}
-                            onChange={(e) => setFormData(prev => ({
-                              ...prev,
-                              contactInfo: { ...prev.contactInfo, phone: e.target.value }
-                            }))}
-                            className="w-full border border-gray-300 rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            placeholder="(555) 123-4567"
-                          />
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                        <div className="relative">
-                          <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                          <input
-                            type="email"
-                            value={formData.contactInfo.email}
-                            onChange={(e) => setFormData(prev => ({
-                              ...prev,
-                              contactInfo: { ...prev.contactInfo, email: e.target.value }
-                            }))}
-                            className="w-full border border-gray-300 rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                            placeholder="customer@example.com"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Notifications */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <button
-                    onClick={() => toggleSection('notifications')}
-                    className="flex items-center justify-between w-full mb-4"
-                  >
-                    <h2 className="text-lg font-semibold">Notifications</h2>
-                    {expandedSections.notifications ? 
-                      <ChevronUp className="w-5 h-5 text-gray-400" /> : 
-                      <ChevronDown className="w-5 h-5 text-gray-400" />
-                    }
-                  </button>
-                  
-                  {expandedSections.notifications && (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <Bell className="w-5 h-5 text-gray-400" />
-                          <span className="text-sm font-medium">Email Notifications</span>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={formData.contactInfo.emailNotifications}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            contactInfo: { ...prev.contactInfo, emailNotifications: e.target.checked }
-                          }))}
-                          className="rounded border-gray-300"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <MessageSquare className="w-5 h-5 text-gray-400" />
-                          <span className="text-sm font-medium">Text Notifications</span>
-                        </div>
-                        <input
-                          type="checkbox"
-                          checked={formData.contactInfo.textNotifications}
-                          onChange={(e) => setFormData(prev => ({
-                            ...prev,
-                            contactInfo: { ...prev.contactInfo, textNotifications: e.target.checked }
-                          }))}
-                          className="rounded border-gray-300"
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Service Address */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold">Service Address</h2>
-                    <button 
-                      onClick={() => setShowAddressModal(true)}
-                      className="text-blue-600 hover:text-blue-700 text-sm"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {formData.serviceAddress.street ? (
-                      <div className="p-3 bg-gray-50 rounded-xl">
-                        <div className="flex items-center space-x-2">
-                          <MapPin className="w-4 h-4 text-gray-500" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900">{formData.serviceAddress.street}</p>
-                            <p className="text-xs text-gray-500">
-                              {formData.serviceAddress.city}, {formData.serviceAddress.state} {formData.serviceAddress.zipCode}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-3 border border-dashed border-gray-300 rounded-xl text-center">
-                        <MapPin className="w-5 h-5 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">No service address set</p>
-                        <button 
-                          onClick={() => setShowAddressModal(true)}
-                          className="text-blue-600 hover:text-blue-700 text-sm mt-1"
-                        >
-                          Add address
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Territory Selection */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold">Territory</h2>
-                    <button 
-                      onClick={() => setShowTerritoryModal(true)}
-                      className="text-blue-600 hover:text-blue-700 text-sm"
-                    >
-                      {formData.territory ? 'Change' : 'Select'}
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {formData.territory ? (
-                      <div className="p-3 bg-gray-50 rounded-xl">
-                        <div className="flex items-center space-x-2">
-                          <MapPin className="w-4 h-4 text-gray-500" />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900">{formData.territory}</p>
-                            {detectedTerritory && (
-                              <p className="text-xs text-gray-500">
-                                {detectedTerritory.location} • {detectedTerritory.radius_miles} mile radius
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-3 border border-dashed border-gray-300 rounded-xl text-center">
-                        <MapPin className="w-5 h-5 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">No territory selected</p>
-                        <button 
-                          onClick={() => setShowTerritoryModal(true)}
-                          className="text-blue-600 hover:text-blue-700 text-sm mt-1"
-                        >
-                          Select territory
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Notes */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <button
-                    onClick={() => toggleSection('notes')}
-                    className="flex items-center justify-between w-full mb-4"
-                  >
-                    <h2 className="text-lg font-semibold">Notes</h2>
-                    {expandedSections.notes ? 
-                      <ChevronUp className="w-5 h-5 text-gray-400" /> : 
-                      <ChevronDown className="w-5 h-5 text-gray-400" />
-                    }
-                  </button>
-                  
-                  {expandedSections.notes && (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Internal Notes</label>
-                        <textarea
-                          value={formData.internalNotes}
-                          onChange={(e) => setFormData(prev => ({ ...prev, internalNotes: e.target.value }))}
-                          rows={4}
-                          className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                          placeholder="Add any internal notes about this job..."
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Customer Notes</label>
-                        <textarea
-                          value={formData.notes}
-                          onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                          rows={3}
-                          className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                          placeholder="Notes visible to customer..."
-                        />
-                      </div>
-
-                      <div className="flex items-center space-x-2 text-sm text-gray-500">
-                        <Paperclip className="w-4 h-4" />
-                        <span>Attach files (coming soon)</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Payment Method */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold">Payment Method</h2>
-                    <button 
-                      onClick={() => setShowPaymentModal(true)}
-                      className="text-blue-600 hover:text-blue-700 text-sm"
-                    >
-                      {formData.paymentMethod ? 'Edit' : 'Add'}
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    {formData.paymentMethod ? (
-                      <div className="p-3 bg-gray-50 rounded-xl">
-                        <div className="flex items-center space-x-3">
-                          {formData.paymentMethod === 'cash' && <DollarSign className="w-5 h-5 text-gray-500" />}
-                          {formData.paymentMethod === 'card' && <CreditCard className="w-5 h-5 text-gray-500" />}
-                          {formData.paymentMethod === 'check' && <FileText className="w-5 h-5 text-gray-500" />}
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-gray-900 capitalize">{formData.paymentMethod}</p>
-                            <p className="text-xs text-gray-500">Payment method selected</p>
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-3 border border-dashed border-gray-300 rounded-xl text-center">
-                        <CreditCard className="w-5 h-5 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">No payment method selected</p>
-                        <button 
-                          onClick={() => setShowPaymentModal(true)}
-                          className="text-blue-600 hover:text-blue-700 text-sm mt-1"
-                        >
-                          Add payment method
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Job Status */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200/50 p-4 sm:p-6">
-                  <h2 className="text-lg font-semibold mb-4">Job Status</h2>
-                  
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="in-progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+          </form>
         </div>
       </div>
-
-      {/* Click outside handlers */}
-      {showCustomerDropdown && (
-        <div 
-          className="fixed inset-0 z-10" 
-          onClick={() => setShowCustomerDropdown(false)}
-        />
-      )}
-      {showServiceDropdown && (
-        <div 
-          className="fixed inset-0 z-10" 
-          onClick={() => setShowServiceDropdown(false)}
-        />
-      )}
-      {showTeamDropdown && (
-        <div 
-          className="fixed inset-0 z-10" 
-          onClick={() => setShowTeamDropdown(false)}
-        />
-      )}
 
       {/* Modals */}
       <CustomerModal
         isOpen={isCustomerModalOpen}
         onClose={() => setIsCustomerModalOpen(false)}
         onSave={handleCustomerSave}
+        user={user}
       />
-
+      
       <ServiceModal
         isOpen={isServiceModalOpen}
         onClose={() => setIsServiceModalOpen(false)}
-        onSave={async (serviceData) => {
-          if (!user?.id) return;
-          
-          try {
-            const response = await servicesAPI.create(serviceData);
-            const newService = response.service || response;
-            setServices(prev => [...prev, newService]);
-            handleServiceSelect(newService);
-            return newService;
-          } catch (error) {
-            console.error('Error creating service:', error);
-            throw error;
-          }
-        }}
+        onSave={handleServiceSelect}
+        user={user}
       />
-
-      {/* Job Details Modals */}
-      <EditJobDetailsModal
-        isOpen={showDurationModal}
-        onClose={() => setShowDurationModal(false)}
-        onSave={handleDurationSave}
-        type="duration"
-        currentValue={formData.duration}
-        title="Job Duration"
-        icon={Clock}
-      />
-
-      <EditJobDetailsModal
-        isOpen={showWorkersModal}
-        onClose={() => setShowWorkersModal(false)}
-        onSave={handleWorkersSave}
-        type="workers"
-        currentValue={formData.workers}
-        title="Number of Workers"
-        icon={Users}
-      />
-
-      <EditJobDetailsModal
-        isOpen={showSkillsModal}
-        onClose={() => setShowSkillsModal(false)}
-        onSave={handleSkillsSave}
-        type="skills"
-        currentValue={formData.skillsRequired}
-        title="Skills Required"
-        icon={Award}
-      />
-
-      {/* Service Address Modal */}
+      
       <ServiceAddressModal
         isOpen={showAddressModal}
         onClose={() => setShowAddressModal(false)}
         onSave={handleAddressSave}
-        currentAddress={formData.serviceAddress}
+        address={formData.serviceAddress}
       />
-
-      {/* Payment Method Modal */}
+      
       <PaymentMethodModal
         isOpen={showPaymentModal}
         onClose={() => setShowPaymentModal(false)}
         onSave={handlePaymentMethodSave}
-        currentMethod={formData.paymentMethod}
+        paymentMethod={formData.paymentMethod}
       />
-
-      {/* Territory Selection Modal */}
-      {showTerritoryModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <MapPin className="w-6 h-6 text-blue-600" />
-                <h2 className="text-xl font-semibold text-gray-900">Select Territory</h2>
-              </div>
-              <button
-                onClick={() => setShowTerritoryModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {territoriesLoading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                  <p className="text-gray-600">Loading territories...</p>
-                </div>
-              ) : territories.length > 0 ? (
-                <div className="max-h-60 overflow-y-auto space-y-2">
-                  {territories.map((territory) => (
-                    <button
-                      key={territory.id}
-                      type="button"
-                      onClick={() => handleTerritorySelect(territory)}
-                      className="w-full p-4 text-left border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors duration-200"
-                    >
-                      <div className="font-medium text-gray-900">{territory.name}</div>
-                      {territory.location && (
-                        <div className="text-sm text-gray-500 mt-1">{territory.location}</div>
-                      )}
-                      {territory.description && (
-                        <div className="text-sm text-gray-500 mt-1">{territory.description}</div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <MapPin className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-500 font-medium">No territories available</p>
-                  <p className="text-sm text-gray-400 mt-1">Create territories first in the Territories section</p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end mt-6">
-              <button
-                onClick={() => setShowTerritoryModal(false)}
-                className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      
+      <TerritorySelectionModal
+        isOpen={showTerritoryModal}
+        onClose={() => setShowTerritoryModal(false)}
+        onSelect={handleTerritorySelect}
+        territories={territories}
+        user={user}
+      />
     </div>
   );
 }

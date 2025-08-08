@@ -142,7 +142,7 @@ const ZenbookerTerritories = () => {
     <div className="flex h-screen bg-gray-50">
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden lg:ml-64">
         <MobileHeader setSidebarOpen={setSidebarOpen} />
         
         <main className="flex-1 overflow-y-auto">

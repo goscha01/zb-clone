@@ -81,7 +81,7 @@ const ZenbookerSchedule = () => {
       
       console.log('📅 Date range:', { startDate, endDate, currentView })
       
-      const response = await jobsAPI.getAll(currentUser.id, "", "", 1, 1000, "future", "", "scheduled_date", "ASC")
+      const response = await jobsAPI.getAll(currentUser.id, "", "", 1, 1000, "future", "", "scheduled_date", "ASC", undefined, undefined, undefined, undefined)
       
       // Filter jobs by date range
       const filteredJobs = (response.jobs || response || []).filter(job => {
@@ -455,7 +455,7 @@ const ZenbookerSchedule = () => {
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
         
         <div className="flex-1 flex flex-col">

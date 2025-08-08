@@ -40,10 +40,13 @@ export default function ServiceModal({ isOpen, onClose, onSave }) {
         price: parseFloat(formData.price),
         duration: parseInt(formData.duration, 10),
       };
+      console.log('Service creation payload:', payload);
       const response = await servicesAPI.create(payload);
       onSave(response);
       onClose();
     } catch (err) {
+      console.error('Service creation error:', err);
+      console.error('Error response:', err?.response?.data);
       setError(
         err?.response?.data?.error || "Failed to create service. Please try again."
       );
