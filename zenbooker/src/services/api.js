@@ -146,6 +146,42 @@ export const servicesAPI = {
     } catch (error) {
       throw error;
     }
+  },
+
+  getServiceSettings: async () => {
+    try {
+      const response = await api.get('/services/settings');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  updateServiceSettings: async (settings) => {
+    try {
+      const response = await api.put('/services/settings', settings);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  getServiceCategories: async () => {
+    try {
+      const response = await api.get('/services/categories');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  getServices: async () => {
+    try {
+      const response = await api.get('/services');
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 

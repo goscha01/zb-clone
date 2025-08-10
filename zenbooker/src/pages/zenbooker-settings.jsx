@@ -23,6 +23,7 @@ import {
   Code,
   Smartphone,
   ChevronRight,
+  Settings,
 } from "lucide-react"
 
 const ZenbookerSettings = () => {
@@ -78,6 +79,9 @@ const ZenbookerSettings = () => {
       case "field-app":
         navigate("/settings/field-app")
         break
+      case "services":
+        navigate("/settings/services")
+        break
       default:
         console.log(`Navigate to ${settingId}`)
     }
@@ -98,6 +102,12 @@ const ZenbookerSettings = () => {
           icon: Palette,
           title: "Branding",
           description: "Customize your branding for emails, invoices, and your rescheduling page",
+        },
+        {
+          id: "services",
+          icon: Settings,
+          title: "Services",
+          description: "Configure default service settings and manage service categories",
         },
       ],
     },

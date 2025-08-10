@@ -58,6 +58,7 @@ import {
 import { jobsAPI, notificationAPI, territoriesAPI, teamAPI, invoicesAPI } from "../services/api"
 import Sidebar from "../components/sidebar"
 import AddressAutocomplete from "../components/address-autocomplete"
+import IntakeAnswersDisplay from "../components/intake-answers-display"
 import { formatPhoneNumber } from "../utils/phoneFormatter"
 
 const JobDetails = () => {
@@ -726,10 +727,6 @@ const JobDetails = () => {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900">{job.service_name}</p>
                   <p className="text-gray-600 text-sm mb-2">Default service category</p>
-                  <div className="space-y-1">
-                    <p className="text-sm"><strong>Bathroom:</strong></p>
-                    <p className="text-sm text-gray-600">{job.bathroom_count || 'Not specified'}</p>
-                  </div>
                   <p className="text-sm text-gray-600 mt-2">{job.duration || 0} minutes</p>
                 </div>
               </div>
@@ -792,7 +789,7 @@ const JobDetails = () => {
                     <span>${job.service_price || 0}</span>
                   </div>
                   <div className="text-sm text-gray-600">
-                    {job.bathroom_count || 'Service'} (${job.service_price || 0})
+                    Service (${job.service_price || 0})
                   </div>
                 </div>
 
@@ -1004,6 +1001,9 @@ const JobDetails = () => {
                 </div>
               </div>
             </div>
+
+            {/* Intake Questions & Answers */}
+            <IntakeAnswersDisplay intakeAnswers={job.intake_answers || []} />
 
             {/* Notes & Files */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -1291,6 +1291,9 @@ const JobDetails = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* Intake Questions & Answers */}
+                  <IntakeAnswersDisplay intakeAnswers={job.intake_answers || []} />
 
                   {/* Notes & Files */}
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">

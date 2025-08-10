@@ -119,7 +119,6 @@ export default function CreateJobPage() {
       textNotifications: false
     },
     // Additional fields for comprehensive job creation
-    bathroomCount: "",
     serviceName: "",
     invoiceStatus: "draft",
     paymentStatus: "pending",
@@ -162,6 +161,10 @@ export default function CreateJobPage() {
   const [detectedTerritory, setDetectedTerritory] = useState(null);
   const [territories, setTerritories] = useState([]);
   const [territoriesLoading, setTerritoriesLoading] = useState(false);
+  
+  // Service modifiers and intake questions state
+  const [selectedModifiers, setSelectedModifiers] = useState({}); // { modifierId: selectedOptions[] }
+  const [intakeQuestionAnswers, setIntakeQuestionAnswers] = useState({}); // { questionId: answer }
 
   // Expandable sections
   const [expandedSections, setExpandedSections] = useState({
@@ -305,15 +308,57 @@ export default function CreateJobPage() {
 
   const handleServiceSelect = (service) => {
     setSelectedService(service);
+    
+    // Handle duration properly - services use { hours: X, minutes: Y } format
+    let durationInHours = 1; // Default
+    if (service.duration) {
+      if (typeof service.duration === 'object' && service.duration.hours !== undefined) {
+        // New format: { hours: X, minutes: Y }
+        durationInHours = service.duration.hours + (service.duration.minutes / 60);
+      } else if (typeof service.duration === 'number') {
+        // Old format: minutes as number
+        durationInHours = Math.ceil(service.duration / 60);
+      }
+    }
+    
+    // Parse modifiers and intake questions if they exist
+    let serviceModifiers = [];
+    let serviceIntakeQuestions = [];
+    
+    if (service.modifiers) {
+      try {
+        serviceModifiers = typeof service.modifiers === 'string' 
+          ? JSON.parse(service.modifiers) 
+          : service.modifiers;
+      } catch (error) {
+        console.error('Error parsing service modifiers:', error);
+        serviceModifiers = [];
+      }
+    }
+    
+    if (service.intake_questions) {
+      try {
+        serviceIntakeQuestions = typeof service.intake_questions === 'string' 
+          ? JSON.parse(service.intake_questions) 
+          : service.intake_questions;
+      } catch (error) {
+        console.error('Error parsing service intake questions:', error);
+        serviceIntakeQuestions = [];
+      }
+    }
+    
     setFormData(prev => ({
       ...prev,
       serviceId: service.id,
       price: service.price || 0,
-      duration: service.duration ? Math.ceil(service.duration / 60) : 6, // Convert minutes to hours
+      duration: durationInHours,
       workers: service.workers || 1,
       skillsRequired: service.skills || 0,
       serviceName: service.name,
       estimatedDuration: service.duration || 0,
+      // Store service modifiers and intake questions for job creation
+      serviceModifiers: serviceModifiers,
+      serviceIntakeQuestions: serviceIntakeQuestions,
       // Calculate time based on service duration - default to 9 AM if no time set
       scheduledTime: prev.scheduledTime || "09:00"
     }));
@@ -330,18 +375,38 @@ export default function CreateJobPage() {
   const handleMultipleTeamMemberSelect = (member) => {
     setSelectedTeamMembers(prev => {
       const isSelected = prev.find(m => m.id === member.id);
+      let newSelectedMembers;
+      
       if (isSelected) {
         // Remove if already selected
-        return prev.filter(m => m.id !== member.id);
+        newSelectedMembers = prev.filter(m => m.id !== member.id);
       } else {
         // Add if not selected
-        return [...prev, member];
+        newSelectedMembers = [...prev, member];
       }
+      
+      // Update workers field based on number of selected team members
+      setFormData(formData => ({
+        ...formData,
+        workers: newSelectedMembers.length
+      }));
+      
+      return newSelectedMembers;
     });
   };
 
   const removeTeamMember = (memberId) => {
-    setSelectedTeamMembers(prev => prev.filter(m => m.id !== memberId));
+    setSelectedTeamMembers(prev => {
+      const newSelectedMembers = prev.filter(m => m.id !== memberId);
+      
+      // Update workers field based on number of selected team members
+      setFormData(formData => ({
+        ...formData,
+        workers: newSelectedMembers.length
+      }));
+      
+      return newSelectedMembers;
+    });
   };
 
   const handleSubmit = async (e) => {
@@ -444,7 +509,6 @@ export default function CreateJobPage() {
         contactInfo: formData.contactInfo,
         serviceAddress: formData.serviceAddress,
         // Additional comprehensive fields
-        bathroomCount: formData.bathroomCount,
         serviceName: formData.serviceName,
         invoiceStatus: formData.invoiceStatus,
         paymentStatus: formData.paymentStatus,
@@ -460,7 +524,11 @@ export default function CreateJobPage() {
         autoReminders: formData.autoReminders,
         customerSignature: formData.customerSignature,
         photosRequired: formData.photosRequired,
-        qualityCheck: formData.qualityCheck
+        qualityCheck: formData.qualityCheck,
+        // Service modifiers and intake questions
+        selectedModifiers: selectedModifiers,
+        intakeQuestionAnswers: intakeQuestionAnswers,
+        totalPrice: calculateTotalPrice()
       };
 
       console.log('Creating job with data:', jobData);
@@ -529,6 +597,56 @@ export default function CreateJobPage() {
     setDetectedTerritory(territory);
     setFormData(prev => ({ ...prev, territory: territory.name, territoryId: territory.id }));
     setShowTerritoryModal(false);
+  };
+
+  // Handle modifier selections
+  const handleModifierSelection = (modifierId, optionId, isSelected) => {
+    setSelectedModifiers(prev => {
+      const currentSelections = prev[modifierId] || [];
+      let newSelections;
+      
+      if (isSelected) {
+        // Add option
+        newSelections = [...currentSelections, optionId];
+      } else {
+        // Remove option
+        newSelections = currentSelections.filter(id => id !== optionId);
+      }
+      
+      return {
+        ...prev,
+        [modifierId]: newSelections
+      };
+    });
+  };
+
+  // Handle intake question answers
+  const handleIntakeQuestionAnswer = (questionId, answer) => {
+    setIntakeQuestionAnswers(prev => ({
+      ...prev,
+      [questionId]: answer
+    }));
+  };
+
+  // Calculate total price including modifiers
+  const calculateTotalPrice = () => {
+    let basePrice = formData.price || 0;
+    let modifierPrice = 0;
+    
+    // Add prices from selected modifiers
+    Object.entries(selectedModifiers).forEach(([modifierId, selectedOptionIds]) => {
+      const modifier = formData.serviceModifiers?.find(m => m.id == modifierId);
+      if (modifier) {
+        selectedOptionIds.forEach(optionId => {
+          const option = modifier.options?.find(o => o.id == optionId);
+          if (option && option.price) {
+            modifierPrice += option.price;
+          }
+        });
+      }
+    });
+    
+    return basePrice + modifierPrice;
   };
 
   // Show loading if user is not available
@@ -601,98 +719,110 @@ export default function CreateJobPage() {
               
               {expandedSections.basicInfo && (
                 <div className="px-6 pb-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Customer Selection */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Customer *
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          placeholder="Search customers..."
-                          value={customerSearch}
-                          onChange={(e) => setCustomerSearch(e.target.value)}
-                          onFocus={() => setShowCustomerDropdown(true)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                        {selectedCustomer && (
-                          <div className="mt-2 p-3 bg-blue-50 rounded-lg">
-                            <p className="font-medium text-blue-900">
-                              {selectedCustomer.first_name} {selectedCustomer.last_name}
-                            </p>
-                            <p className="text-sm text-blue-700">{selectedCustomer.email}</p>
-                          </div>
-                        )}
-                        {showCustomerDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {filteredCustomers.map(customer => (
-                              <button
-                                key={customer.id}
-                                type="button"
-                                onClick={() => handleCustomerSelect(customer)}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
-                              >
-                                <p className="font-medium">{customer.first_name} {customer.last_name}</p>
-                                <p className="text-sm text-gray-600">{customer.email}</p>
-                              </button>
-                            ))}
-                          </div>
-                        )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Customer Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Customer *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search customers..."
+                      value={customerSearch}
+                      onChange={(e) => setCustomerSearch(e.target.value)}
+                      onFocus={() => setShowCustomerDropdown(true)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    {selectedCustomer && (
+                      <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+                        <p className="font-medium text-blue-900">
+                          {selectedCustomer.first_name} {selectedCustomer.last_name}
+                        </p>
+                        <p className="text-sm text-blue-700">{selectedCustomer.email}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsCustomerModalOpen(true)}
-                        className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
-                      >
-                        + Add New Customer
-                      </button>
-                    </div>
+                    )}
+                    {showCustomerDropdown && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-40" 
+                          onClick={() => setShowCustomerDropdown(false)}
+                        />
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredCustomers.map(customer => (
+                          <button
+                            key={customer.id}
+                            type="button"
+                            onClick={() => handleCustomerSelect(customer)}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
+                          >
+                            <p className="font-medium">{customer.first_name} {customer.last_name}</p>
+                            <p className="text-sm text-gray-600">{customer.email}</p>
+                          </button>
+                        ))}
+                      </div>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomerModalOpen(true)}
+                    className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  >
+                    + Add New Customer
+                  </button>
+                </div>
 
-                    {/* Service Selection */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Service *
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          placeholder="Search services..."
-                          value={serviceSearch}
-                          onChange={(e) => setServiceSearch(e.target.value)}
-                          onFocus={() => setShowServiceDropdown(true)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                        {selectedService && (
-                          <div className="mt-2 p-3 bg-green-50 rounded-lg">
-                            <p className="font-medium text-green-900">{selectedService.name}</p>
-                            <p className="text-sm text-green-700">${selectedService.price}</p>
-                          </div>
-                        )}
-                        {showServiceDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {filteredServices.map(service => (
-                              <button
-                                key={service.id}
-                                type="button"
-                                onClick={() => handleServiceSelect(service)}
-                                className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
-                              >
-                                <p className="font-medium">{service.name}</p>
-                                <p className="text-sm text-gray-600">${service.price}</p>
-                              </button>
-                            ))}
-                          </div>
-                        )}
+                {/* Service Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Service *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search services..."
+                      value={serviceSearch}
+                      onChange={(e) => setServiceSearch(e.target.value)}
+                      onFocus={() => setShowServiceDropdown(true)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                    {selectedService && (
+                      <div className="mt-2 p-3 bg-green-50 rounded-lg">
+                        <p className="font-medium text-green-900">{selectedService.name}</p>
+                        <p className="text-sm text-green-700">${selectedService.price}</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setIsServiceModalOpen(true)}
-                        className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
-                      >
-                        + Add New Service
-                      </button>
-                    </div>
+                    )}
+                    {showServiceDropdown && (
+                      <>
+                        <div 
+                          className="fixed inset-0 z-40" 
+                          onClick={() => setShowServiceDropdown(false)}
+                        />
+                      <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                        {filteredServices.map(service => (
+                          <button
+                            key={service.id}
+                            type="button"
+                            onClick={() => handleServiceSelect(service)}
+                            className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
+                          >
+                            <p className="font-medium">{service.name}</p>
+                            <p className="text-sm text-gray-600">${service.price}</p>
+                          </button>
+                        ))}
+                      </div>
+                      </>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsServiceModalOpen(true)}
+                    className="mt-2 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  >
+                    + Add New Service
+                  </button>
+                </div>
 
                     {/* Status */}
                     <div>
@@ -748,27 +878,27 @@ export default function CreateJobPage() {
               {expandedSections.scheduling && (
                 <div className="px-6 pb-6 space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Date */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Date *
-                      </label>
-                      <input
-                        type="date"
-                        value={formData.scheduledDate}
-                        onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
+                {/* Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.scheduledDate}
+                    onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
 
-                    {/* Time */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Time *
-                      </label>
-                      <input
-                        type="time"
-                        value={formData.scheduledTime}
+                {/* Time */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Time *
+                  </label>
+                  <input
+                    type="time"
+                    value={formData.scheduledTime}
                         onChange={(e) => {
                           console.log('Time input changed:', e.target.value);
                           console.log('Previous scheduledTime:', formData.scheduledTime);
@@ -777,7 +907,7 @@ export default function CreateJobPage() {
                             return { ...prev, scheduledTime: e.target.value };
                           });
                         }}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         step="1800"
                       />
                     </div>
@@ -823,9 +953,9 @@ export default function CreateJobPage() {
                           onChange={(e) => setFormData(prev => ({ ...prev, recurringEndDate: e.target.value }))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
-                      </div>
+                </div>
                     )}
-                  </div>
+              </div>
                 </div>
               )}
             </div>
@@ -839,7 +969,7 @@ export default function CreateJobPage() {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <Clipboard className="w-5 h-5 text-purple-600" />
+                      <Briefcase className="w-5 h-5 text-green-600" />
                       <h2 className="text-lg font-semibold text-gray-900">Service Details</h2>
                     </div>
                     {expandedSections.serviceDetails ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
@@ -848,45 +978,220 @@ export default function CreateJobPage() {
                 
                 {expandedSections.serviceDetails && (
                   <div className="px-6 pb-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Duration (hours)</label>
-                        <input
-                          type="number"
-                          value={formData.duration}
-                          onChange={(e) => setFormData(prev => ({ ...prev, duration: parseInt(e.target.value) || 0 }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
-                      </div>
-                      
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Workers Needed</label>
-                        <select
-                          value={formData.workers}
-                          onChange={(e) => setFormData(prev => ({ ...prev, workers: parseInt(e.target.value) || 1 }))}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    {/* Service Info Chips */}
+                    <div className="flex flex-wrap gap-3 mb-6">
+                      <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
+                        <Clock className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-700">{formData.duration} hr</span>
+                        <button
+                          onClick={() => setFormData(prev => ({ ...prev, duration: prev.duration + 0.5 }))}
+                          className="ml-1 text-gray-400 hover:text-gray-600"
                         >
-                          <option value={1}>1 Worker</option>
-                          <option value={2}>2 Workers</option>
-                          <option value={3}>3 Workers</option>
-                          <option value={4}>4 Workers</option>
-                          <option value={5}>5 Workers</option>
-                          <option value={6}>6+ Workers</option>
-                        </select>
+                          <Edit className="w-3 h-3" />
+                        </button>
                       </div>
                       
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Bathroom Count</label>
-                        <input
-                          type="number"
-                          value={formData.bathroomCount}
-                          onChange={(e) => setFormData(prev => ({ ...prev, bathroomCount: e.target.value }))}
-                          placeholder="e.g., 2"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+                      <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
+                        <Users className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-700">{formData.workers} worker{formData.workers !== 1 ? 's' : ''}</span>
+                        <button
+                          onClick={() => setFormData(prev => ({ ...prev, workers: prev.workers + 1 }))}
+                          className="ml-1 text-gray-400 hover:text-gray-600"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </button>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
+                        <Tag className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-700">{formData.skillsRequired || 0} skills required</span>
+                        <button
+                          onClick={() => setFormData(prev => ({ ...prev, skillsRequired: (prev.skillsRequired || 0) + 1 }))}
+                          className="ml-1 text-gray-400 hover:text-gray-600"
+                        >
+                          <Edit className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
 
+                    {/* Service Modifiers */}
+                    {formData.serviceModifiers && formData.serviceModifiers.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="text-md font-medium text-gray-900">Service Options</h3>
+                        {formData.serviceModifiers.map((modifier) => {
+                          console.log('Modifier data:', modifier);
+                          return (
+                            <div key={modifier.id} className="border border-gray-200 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="font-medium text-gray-900">{modifier.title}</h4>
+                                {modifier.required && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                    Required
+                                  </span>
+                                )}
+                              </div>
+                              {modifier.description && (
+                                <p className="text-sm text-gray-600 mb-3">{modifier.description}</p>
+                              )}
+                              
+                              {modifier.selectionType === 'single' && (
+                                <div className="space-y-2">
+                                  {modifier.options?.map((option) => {
+                                    console.log('Option data:', option);
+                                    return (
+                                      <label key={option.id} className="flex items-center space-x-3">
+                                        <input
+                                          type="radio"
+                                          name={`modifier-${modifier.id}`}
+                                          value={option.id}
+                                          checked={selectedModifiers[modifier.id]?.includes(option.id)}
+                                          onChange={(e) => {
+                                            if (e.target.checked) {
+                                              handleModifierSelection(modifier.id, option.id, true);
+                                            }
+                                          }}
+                                          className="text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span className="text-sm text-gray-900">
+                                          {option.label || option.name || `Option ${option.id}`}
+                                        </span>
+                                        {option.price > 0 && (
+                                          <span className="text-sm text-green-600">+${option.price}</span>
+                                        )}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                              
+                              {modifier.selectionType === 'multi' && (
+                                <div className="space-y-2">
+                                  {modifier.options?.map((option) => {
+                                    console.log('Option data:', option);
+                                    return (
+                                      <label key={option.id} className="flex items-center space-x-3">
+                                        <input
+                                          type="checkbox"
+                                          checked={selectedModifiers[modifier.id]?.includes(option.id)}
+                                          onChange={(e) => handleModifierSelection(modifier.id, option.id, e.target.checked)}
+                                          className="text-blue-600 focus:ring-blue-500"
+                                        />
+                                        <span className="text-sm text-gray-900">
+                                          {option.label || option.name || `Option ${option.id}`}
+                                        </span>
+                                        {option.price > 0 && (
+                                          <span className="text-sm text-green-600">+${option.price}</span>
+                                        )}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Intake Questions */}
+                    {formData.serviceIntakeQuestions && formData.serviceIntakeQuestions.length > 0 && (
+                      <div className="space-y-4">
+                        <h3 className="text-md font-medium text-gray-900">Customer Questions</h3>
+                        {formData.serviceIntakeQuestions.map((question) => (
+                          <div key={question.id} className="border border-gray-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="font-medium text-gray-900">{question.question}</h4>
+                              {question.required && (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                  Required
+                                </span>
+                              )}
+                            </div>
+                            {question.description && (
+                              <p className="text-sm text-gray-600 mb-3">{question.description}</p>
+                            )}
+                            
+                            {question.questionType === 'multiple_choice' && question.selectionType === 'single' && (
+                              <div className="space-y-2">
+                                {question.options?.map((option) => (
+                                  <label key={option.id} className="flex items-center space-x-3">
+                                    <input
+                                      type="radio"
+                                      name={`question-${question.id}`}
+                                      value={option.text}
+                                      checked={intakeQuestionAnswers[question.id] === option.text}
+                                      onChange={(e) => handleIntakeQuestionAnswer(question.id, e.target.value)}
+                                      className="text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-900">{option.text}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {question.questionType === 'multiple_choice' && question.selectionType === 'multi' && (
+                              <div className="space-y-2">
+                                {question.options?.map((option) => (
+                                  <label key={option.id} className="flex items-center space-x-3">
+                                    <input
+                                      type="checkbox"
+                                      checked={intakeQuestionAnswers[question.id]?.includes(option.text)}
+                                      onChange={(e) => {
+                                        const currentAnswers = intakeQuestionAnswers[question.id] || [];
+                                        if (e.target.checked) {
+                                          handleIntakeQuestionAnswer(question.id, [...currentAnswers, option.text]);
+                                        } else {
+                                          handleIntakeQuestionAnswer(question.id, currentAnswers.filter(a => a !== option.text));
+                                        }
+                                      }}
+                                      className="text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-900">{option.text}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            )}
+                            
+                            {question.questionType === 'dropdown' && (
+                              <select
+                                value={intakeQuestionAnswers[question.id] || ''}
+                                onChange={(e) => handleIntakeQuestionAnswer(question.id, e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              >
+                                <option value="">Select an option...</option>
+                                {question.options?.map((option) => (
+                                  <option key={option.id} value={option.text}>
+                                    {option.text}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                            
+                            {question.questionType === 'short_text' && (
+                              <input
+                                type="text"
+                                value={intakeQuestionAnswers[question.id] || ''}
+                                onChange={(e) => handleIntakeQuestionAnswer(question.id, e.target.value)}
+                                placeholder="Enter your answer..."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            )}
+                            
+                            {question.questionType === 'long_text' && (
+                              <textarea
+                                rows={3}
+                                value={intakeQuestionAnswers[question.id] || ''}
+                                onChange={(e) => handleIntakeQuestionAnswer(question.id, e.target.value)}
+                                placeholder="Enter your answer..."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Special Instructions */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Special Instructions</label>
                       <textarea
@@ -920,7 +1225,7 @@ export default function CreateJobPage() {
               {expandedSections.notes && (
                 <div className="px-6 pb-6 space-y-6">
                   <div className="grid grid-cols-1 gap-6">
-                    <div>
+                  <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Job Notes (Customer Visible)</label>
                       <textarea
                         rows={4}
@@ -944,8 +1249,8 @@ export default function CreateJobPage() {
                   </div>
                 </div>
               )}
-            </div>
-
+                  </div>
+                  
             {/* Team Assignment Section */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
               <div 
@@ -964,7 +1269,7 @@ export default function CreateJobPage() {
               {expandedSections.team && (
                 <div className="px-6 pb-6 space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
+                  <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Assign Team Members</label>
                       <div className="relative">
                         <button
@@ -977,33 +1282,39 @@ export default function CreateJobPage() {
                             : "Select team members..."}
                         </button>
                         {showTeamDropdown && (
-                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {teamMembers.map(member => {
-                              const isSelected = selectedTeamMembers.find(m => m.id === member.id);
-                              return (
-                                <button
-                                  key={member.id}
-                                  type="button"
-                                  onClick={() => handleMultipleTeamMemberSelect(member)}
-                                  className={`w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0 ${
-                                    isSelected ? 'bg-blue-50 text-blue-700' : ''
-                                  }`}
-                                >
-                                  <div className="flex items-center justify-between">
-                                    <div>
-                                      <p className="font-medium">{member.first_name} {member.last_name}</p>
-                                      <p className="text-sm text-gray-600">{member.role || 'Team Member'}</p>
-                                    </div>
-                                    {isSelected && (
-                                      <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
-                                      </svg>
-                                    )}
-                                  </div>
-                                </button>
-                              );
-                            })}
-                          </div>
+                          <>
+                            <div 
+                              className="fixed inset-0 z-40" 
+                              onClick={() => setShowTeamDropdown(false)}
+                            />
+                            <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                              {teamMembers.map(member => {
+                                const isSelected = selectedTeamMembers.find(m => m.id === member.id);
+                                return (
+                                  <button
+                                    key={member.id}
+                                    type="button"
+                                    onClick={() => handleMultipleTeamMemberSelect(member)}
+                                    className={`w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0 ${
+                                      isSelected ? 'bg-blue-50 text-blue-700' : ''
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="font-medium">{member.first_name} {member.last_name}</p>
+                                        <p className="text-sm text-gray-600">{member.role || 'Team Member'}</p>
+                    </div>
+                                      {isSelected && (
+                                        <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                        </svg>
+                                      )}
+                  </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </>
                         )}
                       </div>
                       
@@ -1024,9 +1335,9 @@ export default function CreateJobPage() {
                                 </button>
                               </div>
                             ))}
-                          </div>
-                        </div>
-                      )}
+                </div>
+              </div>
+            )}
                     </div>
 
                     <div>
@@ -1044,80 +1355,91 @@ export default function CreateJobPage() {
               )}
             </div>
 
-            {/* Scheduling Options Section */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-              <div 
-                className="p-6 cursor-pointer"
-                onClick={() => toggleSection('scheduling')}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <Calendar className="w-5 h-5 text-orange-600" />
-                    <h2 className="text-lg font-semibold text-gray-900">Scheduling Options</h2>
-                  </div>
-                  {expandedSections.scheduling ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                </div>
-              </div>
+            {/* Schedule Section */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">Schedule</h2>
               
-              {expandedSections.scheduling && (
-                <div className="px-6 pb-6 space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Schedule Type</label>
-                      <select
-                        value={formData.scheduleType}
-                        onChange={(e) => setFormData(prev => ({ ...prev, scheduleType: e.target.value }))}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="one-time">One-time</option>
-                        <option value="recurring">Recurring</option>
-                        <option value="on-demand">On-demand</option>
-                      </select>
-                    </div>
+              {/* Schedule Type Buttons */}
+              <div className="flex space-x-2 mb-6">
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, scheduleType: 'one-time' }))}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    formData.scheduleType === 'one-time'
+                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                      : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                  }`}
+                >
+                  One Time
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFormData(prev => ({ ...prev, scheduleType: 'recurring' }))}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    formData.scheduleType === 'recurring'
+                      ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                      : 'bg-gray-100 text-gray-600 border border-gray-200 hover:bg-gray-200'
+                  }`}
+                >
+                  Recurring Job
+                </button>
+              </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Recurring Frequency</label>
-                      <select
-                        value={formData.recurringFrequency || "weekly"}
-                        onChange={(e) => setFormData(prev => ({ ...prev, recurringFrequency: e.target.value }))}
-                        disabled={formData.scheduleType !== 'recurring'}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
-                      >
-                        <option value="weekly">Weekly</option>
-                        <option value="bi-weekly">Bi-weekly</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="quarterly">Quarterly</option>
-                      </select>
+              {/* Schedule Now Section */}
+              <div className="mb-6">
+                <div className="flex items-center space-x-2 mb-4">
+                  <div className="w-3 h-3 bg-blue-600 rounded-full"></div>
+                  <h3 className="text-sm font-medium text-gray-900">Schedule Now</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
+                    <div className="relative">
+                  <input
+                        type="date"
+                        required
+                        value={formData.scheduledDate}
+                        onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                      <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+                </div>
+                
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
+                    <div className="relative">
+                  <input
+                        type="time"
+                        required
+                        value={formData.scheduledTime}
+                        onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        step="900"
+                        min="00:00"
+                        max="23:59"
+                  />
+                      <Clock className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     </div>
                   </div>
-
-                  <div className="space-y-4">
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="checkbox"
-                        id="letCustomerSchedule"
-                        checked={formData.letCustomerSchedule}
-                        onChange={(e) => setFormData(prev => ({ ...prev, letCustomerSchedule: e.target.checked }))}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <label htmlFor="letCustomerSchedule" className="text-sm font-medium text-gray-700">
-                        Let customer schedule this job
-                      </label>
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      <input
-                        type="checkbox"
-                        id="offerToProviders"
-                        checked={formData.offerToProviders}
-                        onChange={(e) => setFormData(prev => ({ ...prev, offerToProviders: e.target.checked }))}
-                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                      />
-                      <label htmlFor="offerToProviders" className="text-sm font-medium text-gray-700">
-                        Offer to providers for bidding
-                      </label>
-                    </div>
-                  </div>
+                </div>
+                </div>
+                
+              {/* Recurring Options */}
+              {formData.scheduleType === 'recurring' && (
+                <div className="border-t border-gray-200 pt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Recurring Frequency</label>
+                  <select
+                    value={formData.recurringFrequency || "weekly"}
+                    onChange={(e) => setFormData(prev => ({ ...prev, recurringFrequency: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="weekly">Weekly</option>
+                    <option value="bi-weekly">Bi-weekly</option>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                  </select>
                 </div>
               )}
             </div>
@@ -1140,9 +1462,9 @@ export default function CreateJobPage() {
               {expandedSections.contact && (
                 <div className="px-6 pb-6 space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
+                <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Phone Number</label>
-                      <input
+                  <input
                         type="tel"
                         value={formData.contactInfo.phone}
                         onChange={(e) => setFormData(prev => ({ 
@@ -1150,13 +1472,13 @@ export default function CreateJobPage() {
                           contactInfo: { ...prev.contactInfo, phone: e.target.value }
                         }))}
                         placeholder="(555) 123-4567"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-
-                    <div>
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
-                      <input
+                  <input
                         type="email"
                         value={formData.contactInfo.email}
                         onChange={(e) => setFormData(prev => ({ 
@@ -1164,11 +1486,11 @@ export default function CreateJobPage() {
                           contactInfo: { ...prev.contactInfo, email: e.target.value }
                         }))}
                         placeholder="customer@example.com"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              
                   <div className="space-y-4">
                     <h3 className="text-sm font-medium text-gray-700">Notification Preferences</h3>
                     <div className="space-y-3">
@@ -1186,7 +1508,7 @@ export default function CreateJobPage() {
                         <label htmlFor="emailNotifications" className="text-sm text-gray-700">
                           Email notifications
                         </label>
-                      </div>
+                </div>
 
                       <div className="flex items-center space-x-3">
                         <input
@@ -1202,7 +1524,7 @@ export default function CreateJobPage() {
                         <label htmlFor="textNotifications" className="text-sm text-gray-700">
                           SMS notifications
                         </label>
-                      </div>
+              </div>
                     </div>
                   </div>
                 </div>
@@ -1227,7 +1549,7 @@ export default function CreateJobPage() {
               {expandedSections.address && (
                 <div className="px-6 pb-6 space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
+              <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Street Address</label>
                       <AddressAutocomplete
                         value={formData.serviceAddress.street}
@@ -1259,9 +1581,9 @@ export default function CreateJobPage() {
                           serviceAddress: { ...prev.serviceAddress, city: e.target.value }
                         }))}
                         placeholder="New York"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
 
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">State</label>

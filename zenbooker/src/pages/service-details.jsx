@@ -7,6 +7,7 @@ import MobileHeader from "../components/mobile-header"
 import CreateRecurringOptionModal from "../components/create-recurring-option-modal"
 import TerritoryAdjustmentModal from "../components/territory-adjustment-modal"
 import ModifierModal from "../components/modifier-modal"
+import CreateModifierGroupModal from "../components/create-modifier-group-modal"
 import IntakeQuestionModal from "../components/intake-question-modal"
 import { servicesAPI, serviceAvailabilityAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
@@ -41,6 +42,7 @@ const ServiceDetails = () => {
   const [expandedSection, setExpandedSection] = useState(null)
   const [editingModifier, setEditingModifier] = useState(null)
   const [isModifierModalOpen, setIsModifierModalOpen] = useState(false)
+  const [isCreateModifierGroupModalOpen, setIsCreateModifierGroupModalOpen] = useState(false)
   const [isIntakeDropdownOpen, setIsIntakeDropdownOpen] = useState(false)
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false)
   const [selectedQuestionType, setSelectedQuestionType] = useState(null)
@@ -82,6 +84,7 @@ const ServiceDetails = () => {
     isTaxable: false,
     hidePrice: false,
     modifiers: [],
+    intakeQuestions: [],
     require_payment_method: false
   })
 
@@ -166,7 +169,8 @@ const ServiceDetails = () => {
         displayPrefix: "Estimated Total",
         isTaxable: false,
         hidePrice: false,
-        modifiers: service.modifiers ? JSON.parse(service.modifiers) : [],
+        modifiers: service.modifiers ? (typeof service.modifiers === 'string' ? JSON.parse(service.modifiers) : service.modifiers) : [],
+        intakeQuestions: service.intake_questions ? (typeof service.intake_questions === 'string' ? JSON.parse(service.intake_questions) : service.intake_questions) : [],
         require_payment_method: !!service.require_payment_method
       })
       
@@ -241,6 +245,7 @@ const ServiceDetails = () => {
         duration: serviceData.duration,
         category: serviceData.category,
         modifiers: JSON.stringify(serviceData.modifiers),
+        intake_questions: JSON.stringify(serviceData.intakeQuestions || []),
         require_payment_method: !!serviceData.require_payment_method
       }
       
@@ -297,6 +302,50 @@ const ServiceDetails = () => {
     }
   }
 
+  const handleSaveModifierGroup = async (modifierGroupData) => {
+    try {
+      let updatedModifiers
+      const currentModifiers = serviceData.modifiers || []
+      
+      // Convert the new format to the existing format for compatibility
+      const convertedModifier = {
+        id: Date.now(),
+        title: modifierGroupData.groupName,
+        description: modifierGroupData.groupDescription,
+        selectionType: modifierGroupData.selectionType,
+        required: modifierGroupData.required,
+        options: modifierGroupData.options.map(option => ({
+          label: option.name,
+          price: option.price,
+          duration: option.durationHours * 60 + option.durationMinutes, // Convert to minutes
+          description: option.description,
+          allowCustomerNotes: option.allowCustomerNotes,
+          convertToServiceRequest: option.convertToServiceRequest
+        }))
+      }
+      
+      updatedModifiers = [...currentModifiers, convertedModifier]
+      
+      setServiceData(prev => ({
+        ...prev,
+        modifiers: updatedModifiers
+      }))
+      
+      // Save to backend
+      await handleSaveService()
+      
+      setIsCreateModifierGroupModalOpen(false)
+      setSuccessMessage("Modifier group created successfully!")
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(""), 3000)
+      
+    } catch (error) {
+      console.error('Error creating modifier group:', error)
+      setError("Failed to create modifier group. Please try again.")
+    }
+  }
+
   const handleDeleteModifier = async (modifierId) => {
     if (window.confirm("Are you sure you want to delete this modifier?")) {
       try {
@@ -316,11 +365,91 @@ const ServiceDetails = () => {
     }
   }
 
-  const handleSaveIntakeQuestion = (questionData) => {
-    // Handle saving the intake question
-    console.log("Saving intake question:", questionData)
-    setIsIntakeModalOpen(false)
-    setSelectedQuestionType(null)
+  const handleSaveIntakeQuestion = async (questionData) => {
+    try {
+      // Create a new intake question with proper structure
+      const newIntakeQuestion = {
+        id: Date.now(),
+        questionType: questionData.questionType,
+        question: questionData.question,
+        description: questionData.description,
+        selectionType: questionData.selectionType,
+        required: questionData.required,
+        options: questionData.options || []
+      }
+      
+      // Update service data with the new question
+      const updatedServiceData = {
+        ...serviceData,
+        intakeQuestions: [...(serviceData.intakeQuestions || []), newIntakeQuestion]
+      }
+      
+      // Update state
+      setServiceData(updatedServiceData)
+      
+      // Save to backend with the updated data
+      const updateData = {
+        name: updatedServiceData.name,
+        description: updatedServiceData.description,
+        price: updatedServiceData.isFree ? 0 : updatedServiceData.price,
+        duration: updatedServiceData.duration,
+        category: updatedServiceData.category,
+        modifiers: JSON.stringify(updatedServiceData.modifiers),
+        intake_questions: JSON.stringify(updatedServiceData.intakeQuestions),
+        require_payment_method: !!updatedServiceData.require_payment_method
+      }
+      
+      await servicesAPI.update(updatedServiceData.id, updateData)
+      
+      setIsIntakeModalOpen(false)
+      setSelectedQuestionType(null)
+      setSuccessMessage("Intake question created successfully!")
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccessMessage(""), 3000)
+      
+    } catch (error) {
+      console.error('Error saving intake question:', error)
+      setError("Failed to save intake question. Please try again.")
+    }
+  }
+
+  const handleDeleteIntakeQuestion = async (questionId) => {
+    if (window.confirm("Are you sure you want to delete this intake question?")) {
+      try {
+        const currentQuestions = serviceData.intakeQuestions || []
+        const updatedQuestions = currentQuestions.filter(q => q.id !== questionId)
+        
+        // Update service data
+        const updatedServiceData = {
+          ...serviceData,
+          intakeQuestions: updatedQuestions
+        }
+        
+        // Update state
+        setServiceData(updatedServiceData)
+        
+        // Save to backend with the updated data
+        const updateData = {
+          name: updatedServiceData.name,
+          description: updatedServiceData.description,
+          price: updatedServiceData.isFree ? 0 : updatedServiceData.price,
+          duration: updatedServiceData.duration,
+          category: updatedServiceData.category,
+          modifiers: JSON.stringify(updatedServiceData.modifiers),
+          intake_questions: JSON.stringify(updatedServiceData.intakeQuestions),
+          require_payment_method: !!updatedServiceData.require_payment_method
+        }
+        
+        await servicesAPI.update(updatedServiceData.id, updateData)
+        
+        setSuccessMessage("Intake question deleted successfully!")
+        setTimeout(() => setSuccessMessage(""), 3000)
+      } catch (error) {
+        console.error('Error deleting intake question:', error)
+        setError("Failed to delete intake question. Please try again.")
+      }
+    }
   }
 
   const IntakeQuestionDropdown = () => {
@@ -443,18 +572,64 @@ const ServiceDetails = () => {
               </a>
             </div>
 
-            <div className="bg-gray-50 rounded-lg p-8 flex flex-col items-center justify-center text-center">
+            <div className="space-y-4">
+              {serviceData.intakeQuestions && serviceData.intakeQuestions.length > 0 ? (
+                serviceData.intakeQuestions.map((question, index) => (
+                  <div key={question.id} className="border border-gray-200 rounded-lg">
+                    <div className="flex items-center justify-between p-4">
+                      <div className="flex items-center space-x-3">
+                        <span className="text-gray-400">{index + 1}.</span>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium">{question.question}</span>
+                            {question.required && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                Required
+                              </span>
+                            )}
+                          </div>
+                          {question.description && (
+                            <p className="text-sm text-gray-500 mt-1">{question.description}</p>
+                          )}
+                          {question.selectionType && (
+                            <p className="text-sm text-gray-500">
+                              {question.selectionType === 'single' ? 'Single Select' : 'Multi-Select'}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={() => handleDeleteIntakeQuestion(question.id)}
+                          className="text-sm text-red-600 hover:text-red-800"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                    {question.options && question.options.length > 0 && (
+                      <div className="px-4 pb-4">
+                        <div className="flex flex-wrap gap-2">
+                          {question.options.map((option, optionIndex) => (
+                            <div key={optionIndex} className="bg-gray-100 rounded-full px-3 py-1 text-sm">
+                              {option.text}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <p>No intake questions added yet.</p>
+                  <p className="text-sm mt-1">Click "New Intake Question" to add your first question.</p>
+                </div>
+              )}
+            </div>
+
+            <div className="bg-gray-50 rounded-lg p-6 flex flex-col items-center justify-center text-center">
               <IntakeQuestionDropdown />
-              <div className="grid grid-cols-2 gap-6 mt-4">
-                <div className="bg-white rounded-lg p-4 shadow-sm">
-                  <img src="/images/intake-questions.svg" alt="Example question" className="w-full h-auto mb-2" />
-                  <p className="text-sm text-gray-500">Add custom fields to collect information</p>
-                </div>
-                <div className="bg-white rounded-lg p-4 shadow-sm">
-                  <img src="/images/feedback-and-reviews-6.svg" alt="Example review" className="w-full h-auto mb-2" />
-                  <p className="text-sm text-gray-500">Collect feedback after service completion</p>
-                </div>
-              </div>
             </div>
           </div>
         )
@@ -1222,9 +1397,25 @@ const ServiceDetails = () => {
                 serviceData.modifiers.map((modifier, index) => (
                 <div key={modifier.id} className="border border-gray-200 rounded-lg">
                   <div className="flex items-center justify-between p-4">
-                    <div className="flex items-center">
-                      <span className="text-gray-400 mr-3">⋮⋮</span>
-                      <span className="font-medium">{modifier.title}</span>
+                    <div className="flex items-center space-x-3">
+                      <span className="text-gray-400">⋮⋮</span>
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-medium">{modifier.title}</span>
+                          {modifier.required && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                              Required
+                            </span>
+                          )}
+                        </div>
+                        {modifier.selectionType && (
+                          <p className="text-sm text-gray-500 mt-1">
+                            {modifier.selectionType === 'single' ? 'Single Select' : 
+                             modifier.selectionType === 'multi' ? 'Multi-Select' : 
+                             modifier.selectionType === 'quantity' ? 'Quantity Select' : 'Select'}
+                          </p>
+                        )}
+                      </div>
                     </div>
                     <div className="flex items-center space-x-2">
                       <button 
@@ -1246,7 +1437,7 @@ const ServiceDetails = () => {
                         {modifier.options && modifier.options.map((option, optionIndex) => (
                         <div key={optionIndex} className="bg-gray-100 rounded-full px-3 py-1 text-sm">
                           {option.label}
-                          {option.price && <span className="text-gray-500 ml-1">{option.price}</span>}
+                          {option.price && <span className="text-gray-500 ml-1">${option.price}</span>}
                         </div>
                       ))}
                     </div>
@@ -1264,7 +1455,7 @@ const ServiceDetails = () => {
             <button 
               onClick={() => {
                 setEditingModifier(null)
-                setIsModifierModalOpen(true)
+                setIsCreateModifierGroupModalOpen(true)
               }}
               className="w-full border border-gray-300 rounded-lg p-3 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
             >
@@ -1488,6 +1679,11 @@ const ServiceDetails = () => {
         }}
         editingModifier={editingModifier}
         onSave={handleSaveModifier}
+      />
+      <CreateModifierGroupModal
+        isOpen={isCreateModifierGroupModalOpen}
+        onClose={() => setIsCreateModifierGroupModalOpen(false)}
+        onSave={handleSaveModifierGroup}
       />
       <IntakeQuestionModal
         isOpen={isIntakeModalOpen}

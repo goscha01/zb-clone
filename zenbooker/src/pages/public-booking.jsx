@@ -16,6 +16,7 @@ import {
   Star
 } from "lucide-react"
 import axios from "axios"
+import IntakeQuestionsForm from "../components/intake-questions-form"
 
 // Create axios instance for public API calls
 const publicApi = axios.create({
@@ -53,6 +54,8 @@ const PublicBooking = () => {
   const [availableSlots, setAvailableSlots] = useState([])
   const [addressSuggestions, setAddressSuggestions] = useState([])
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false)
+  const [intakeAnswers, setIntakeAnswers] = useState({})
+  const [selectedServiceQuestions, setSelectedServiceQuestions] = useState([])
 
   // Get business slug from URL parameters
   const { userSlug } = useParams()
@@ -90,6 +93,24 @@ const PublicBooking = () => {
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
+    
+    // If service is selected, load intake questions
+    if (field === 'service') {
+      const selectedService = availableServices.find(s => s.id === value)
+      if (selectedService && selectedService.intake_questions) {
+        try {
+          const questions = JSON.parse(selectedService.intake_questions)
+          setSelectedServiceQuestions(questions)
+        } catch (error) {
+          console.error('Error parsing intake questions:', error)
+          setSelectedServiceQuestions([])
+        }
+      } else {
+        setSelectedServiceQuestions([])
+      }
+      // Clear previous answers when service changes
+      setIntakeAnswers({})
+    }
   }
 
   const handleAddressChange = async (e) => {
@@ -161,8 +182,12 @@ const PublicBooking = () => {
     setShowAddressSuggestions(false)
   }
 
+  const handleIntakeAnswersChange = (answers) => {
+    setIntakeAnswers(answers)
+  }
+
   const handleNextStep = () => {
-    if (currentStep < 5) {
+    if (currentStep < 6) {
       setCurrentStep(currentStep + 1)
     }
   }
@@ -175,8 +200,12 @@ const PublicBooking = () => {
 
   const handleSubmit = async () => {
     try {
-      const response = await publicApi.post(`/public/business/${businessSlug}/book`, formData)
-      setCurrentStep(6) // Success step
+      const bookingData = {
+        ...formData,
+        intakeAnswers: intakeAnswers
+      }
+      const response = await publicApi.post(`/public/business/${businessSlug}/book`, bookingData)
+      setCurrentStep(7) // Success step
     } catch (error) {
       setError('Failed to submit booking. Please try again.')
     }
@@ -321,7 +350,7 @@ const PublicBooking = () => {
             <div className="bg-white rounded-lg shadow-lg p-6">
               {/* Progress Steps */}
               <div className="flex items-center justify-between mb-8">
-                {[1, 2, 3, 4, 5].map((step) => (
+                {[1, 2, 3, 4, 5, 6].map((step) => (
                   <div key={step} className="flex items-center">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                       step <= currentStep 
@@ -332,7 +361,7 @@ const PublicBooking = () => {
                     }}>
                       {step < currentStep ? <CheckCircle className="w-4 h-4" /> : step}
                     </div>
-                    {step < 5 && (
+                    {step < 6 && (
                       <div className={`w-12 h-1 mx-2 ${
                         step < currentStep ? 'bg-green-500' : 'bg-gray-200'
                       }`}></div>
@@ -380,7 +409,22 @@ const PublicBooking = () => {
                         key={service.id}
                         onClick={() => {
                           handleInputChange('service', service.id)
-                          handleNextStep()
+                          // Check if this service has intake questions
+                          if (service.intake_questions) {
+                            try {
+                              const questions = JSON.parse(service.intake_questions)
+                              if (questions && questions.length > 0) {
+                                setSelectedServiceQuestions(questions)
+                                handleNextStep() // Go to intake questions
+                                return
+                              }
+                            } catch (error) {
+                              console.error('Error parsing intake questions:', error)
+                            }
+                          }
+                          // No questions or error parsing, skip to date/time
+                          setSelectedServiceQuestions([])
+                          setCurrentStep(4) // Skip to date/time
                         }}
                         className="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-gray-300 transition-colors"
                       >
@@ -402,8 +446,62 @@ const PublicBooking = () => {
                 </div>
               )}
 
-              {/* Step 3: Date & Time */}
+              {/* Step 3: Intake Questions */}
               {currentStep === 3 && (
+                <div>
+                  {selectedServiceQuestions.length > 0 ? (
+                    <>
+                      <h3 className="text-xl font-semibold mb-4">Additional Questions</h3>
+                      <IntakeQuestionsForm 
+                        questions={selectedServiceQuestions}
+                        onAnswersChange={handleIntakeAnswersChange}
+                      />
+                      <div className="flex space-x-4 mt-6">
+                        <button
+                          onClick={handlePrevStep}
+                          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                        >
+                          <ArrowLeft className="w-4 h-4 inline mr-2" />
+                          Back
+                        </button>
+                        <button
+                          onClick={handleNextStep}
+                          className="px-4 py-2 rounded-lg text-white font-medium"
+                          style={{ backgroundColor: settings?.branding?.primaryColor || '#4CAF50' }}
+                        >
+                          Continue
+                          <ChevronRight className="w-4 h-4 inline ml-2" />
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <h3 className="text-xl font-semibold mb-4">No Additional Questions</h3>
+                      <p className="text-gray-600 mb-6">This service doesn't require any additional information.</p>
+                      <div className="flex space-x-4 justify-center">
+                        <button
+                          onClick={handlePrevStep}
+                          className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                        >
+                          <ArrowLeft className="w-4 h-4 inline mr-2" />
+                          Back
+                        </button>
+                        <button
+                          onClick={handleNextStep}
+                          className="px-4 py-2 rounded-lg text-white font-medium"
+                          style={{ backgroundColor: settings?.branding?.primaryColor || '#4CAF50' }}
+                        >
+                          Continue
+                          <ChevronRight className="w-4 h-4 inline ml-2" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Step 4: Date & Time */}
+              {currentStep === 4 && (
                 <div>
                   <h3 className="text-xl font-semibold mb-4">Select Date & Time</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -458,8 +556,8 @@ const PublicBooking = () => {
                 </div>
               )}
 
-              {/* Step 4: Contact Information */}
-              {currentStep === 4 && (
+              {/* Step 5: Contact Information */}
+              {currentStep === 5 && (
                 <div>
                   <h3 className="text-xl font-semibold mb-4">Contact Information</h3>
                   <div className="space-y-4">
@@ -545,8 +643,8 @@ const PublicBooking = () => {
                 </div>
               )}
 
-              {/* Step 5: Review & Confirm */}
-              {currentStep === 5 && (
+              {/* Step 6: Review & Confirm */}
+              {currentStep === 6 && (
                 <div>
                   <h3 className="text-xl font-semibold mb-4">Review & Confirm</h3>
                   
