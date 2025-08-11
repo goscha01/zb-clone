@@ -6,6 +6,7 @@ import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
 import { ChevronLeft, Camera, Eye, EyeOff, Check, X } from "lucide-react"
 import { userProfileAPI, authAPI } from "../../services/api"
+import { useAuth } from "../../context/AuthContext"
 
 const AccountDetails = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -46,6 +47,7 @@ const AccountDetails = () => {
 
   // Get current user
   const currentUser = authAPI.getCurrentUser()
+  const { updateUserProfile } = useAuth()
 
   useEffect(() => {
     let isMounted = true;
@@ -287,6 +289,7 @@ const AccountDetails = () => {
         return;
       }
 
+      console.log('🔍 Uploading profile picture for user:', user.id);
       const result = await userProfileAPI.updateProfilePicture(user.id, file);
       
       setFormData(prev => ({
@@ -294,11 +297,18 @@ const AccountDetails = () => {
         profilePicture: result.profilePicture
       }));
       
+      // Update the user profile in AuthContext
+      const updatedProfile = {
+        ...currentUser,
+        profilePicture: result.profilePicture
+      };
+      updateUserProfile(updatedProfile);
+      
       setMessage({ type: 'success', text: 'Profile picture updated successfully!' });
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
       console.error('Error uploading profile picture:', error);
-      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to upload profile picture' });
+      setMessage({ type: 'error', text: error.message || 'Failed to upload profile picture' });
     } finally {
       setSaving(false);
     }
@@ -348,7 +358,7 @@ const AccountDetails = () => {
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Header */}
@@ -393,6 +403,10 @@ const AccountDetails = () => {
                       src={formData.profilePicture} 
                       alt="Profile" 
                       className="w-20 h-20 rounded-lg object-cover"
+                      onError={(e) => {
+                        console.error('Failed to load profile picture:', formData.profilePicture);
+                        e.target.style.display = 'none';
+                      }}
                     />
                   ) : (
                     <div className="w-20 h-20 bg-blue-500 rounded-lg flex items-center justify-center">
@@ -421,10 +435,28 @@ const AccountDetails = () => {
                   </label>
                   {formData.profilePicture && (
                     <button 
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, profilePicture: null }));
-                        setMessage({ type: 'success', text: 'Profile picture removed' });
-                        setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+                      onClick={async () => {
+                        try {
+                          setSaving(true);
+                          await userProfileAPI.removeProfilePicture(currentUser.id);
+                          
+                          setFormData(prev => ({ ...prev, profilePicture: null }));
+                          
+                          // Update the user profile in AuthContext
+                          const updatedProfile = {
+                            ...currentUser,
+                            profilePicture: null
+                          };
+                          updateUserProfile(updatedProfile);
+                          
+                          setMessage({ type: 'success', text: 'Profile picture removed' });
+                          setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+                        } catch (error) {
+                          console.error('Error removing profile picture:', error);
+                          setMessage({ type: 'error', text: 'Failed to remove profile picture' });
+                        } finally {
+                          setSaving(false);
+                        }
                       }}
                       className="text-red-600 hover:text-red-700 text-sm"
                       disabled={saving}

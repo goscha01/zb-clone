@@ -6,7 +6,8 @@ import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
 import { ChevronLeft, MapPin, ChevronRight, Check, X } from "lucide-react"
 import TimeslotTemplateModal from "../../components/timeslot-template-modal"
-import { availabilityAPI, authAPI } from "../../services/api"
+import { availabilityAPI } from "../../services/api"
+import { useAuth } from "../../context/AuthContext"
 
 const Availability = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -40,7 +41,7 @@ const Availability = () => {
   const [hasLoaded, setHasLoaded] = useState(false)
 
   // Get current user with useMemo to prevent infinite re-renders
-  const currentUser = useMemo(() => authAPI.getCurrentUser(), [])
+  const { user } = useAuth()
 
   // Stabilize navigate function
   const handleNavigate = useCallback(() => {
@@ -48,15 +49,15 @@ const Availability = () => {
   }, [navigate])
 
   useEffect(() => {
-    console.log('🔄 Availability useEffect triggered:', { currentUser: !!currentUser, hasLoaded })
+    console.log('🔄 Availability useEffect triggered:', { user: !!user, hasLoaded })
     
     let isMounted = true
     
-    if (currentUser && !hasLoaded) {
+    if (user?.id && !hasLoaded) {
       console.log('✅ Loading availability data...')
       setHasLoaded(true)
       loadAvailabilityData()
-    } else if (!currentUser) {
+    } else if (user === null) {
       console.log('❌ No current user, redirecting to signin')
       handleNavigate()
     } else {
@@ -66,15 +67,15 @@ const Availability = () => {
     return () => {
       isMounted = false
     }
-  }, [currentUser, hasLoaded, handleNavigate])
+  }, [user?.id, hasLoaded, handleNavigate])
 
   const loadAvailabilityData = async () => {
     try {
       setLoading(true)
       setMessage({ type: '', text: '' })
       
-      console.log('🔄 Loading availability data for user:', currentUser.id)
-      const availability = await availabilityAPI.getAvailability(currentUser.id)
+      console.log('🔄 Loading availability data for user:', user.id)
+      const availability = await availabilityAPI.getAvailability(user.id)
       console.log('✅ Availability data loaded:', availability)
       
       // Set default data if none exists
@@ -128,7 +129,7 @@ const Availability = () => {
       setSaving(true)
       const updatedTemplates = [...availabilityData.timeslotTemplates, template]
       await availabilityAPI.updateAvailability({
-        userId: currentUser.id,
+        userId: user.id,
         businessHours: availabilityData.businessHours,
         timeslotTemplates: updatedTemplates
       })
@@ -153,7 +154,7 @@ const Availability = () => {
     try {
       setSaving(true)
       await availabilityAPI.updateAvailability({
-        userId: currentUser.id,
+        userId: user.id,
         businessHours: availabilityData.businessHours,
         timeslotTemplates: availabilityData.timeslotTemplates
       })
@@ -186,7 +187,7 @@ const Availability = () => {
     return (
       <div className="flex h-screen bg-gray-50 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
           <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -203,7 +204,7 @@ const Availability = () => {
     <div className="min-h-screen bg-gray-50 flex">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Header */}

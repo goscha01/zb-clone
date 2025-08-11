@@ -1,28 +1,159 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
-import { ChevronLeft, Mail, MessageSquare } from "lucide-react"
+import { ChevronLeft, Mail, MessageSquare, Check, X } from "lucide-react"
+import { notificationTemplatesAPI, notificationSettingsAPI } from "../../services/api"
+import { useAuth } from "../../context/AuthContext"
 
 const AppointmentReminder = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState({ type: '', text: '' })
   const [enableEmail, setEnableEmail] = useState(true)
   const [enableSMS, setEnableSMS] = useState(true)
   const [showLogo, setShowLogo] = useState(false)
   const [activeTab, setActiveTab] = useState("email")
+  const [emailTemplate, setEmailTemplate] = useState({
+    subject: '',
+    content: ''
+  })
+  const [smsTemplate, setSmsTemplate] = useState({
+    content: ''
+  })
   const navigate = useNavigate()
+  const { user } = useAuth()
+
+  // Load templates and settings on component mount
+  useEffect(() => {
+    if (user?.id) {
+      loadTemplatesAndSettings();
+    }
+  }, [user?.id]);
+
+  const loadTemplatesAndSettings = async () => {
+    try {
+      setLoading(true);
+      
+      // Load email template
+      const emailTemplates = await notificationTemplatesAPI.getTemplates(
+        user.id, 
+        'email', 
+        'appointment_reminder'
+      );
+      
+      if (emailTemplates.length > 0) {
+        const template = emailTemplates[0];
+        setEmailTemplate({
+          subject: template.subject || '',
+          content: template.content || ''
+        });
+        setEnableEmail(template.is_enabled === 1);
+      }
+
+      // Load SMS template
+      const smsTemplates = await notificationTemplatesAPI.getTemplates(
+        user.id, 
+        'sms', 
+        'appointment_reminder'
+      );
+      
+      if (smsTemplates.length > 0) {
+        const template = smsTemplates[0];
+        setSmsTemplate({
+          content: template.content || ''
+        });
+        setEnableSMS(template.is_enabled === 1);
+      }
+
+      // Load notification settings
+      const settings = await notificationSettingsAPI.getSettings(user.id);
+      const reminderSetting = settings.find(s => s.notification_type === 'appointment_reminder');
+      
+      if (reminderSetting) {
+        setEnableEmail(reminderSetting.email_enabled === 1);
+        setEnableSMS(reminderSetting.sms_enabled === 1);
+      }
+
+    } catch (error) {
+      console.error('Error loading templates:', error);
+      setMessage({ type: 'error', text: 'Failed to load notification templates' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setMessage({ type: '', text: '' });
+
+      // Save email template
+      await notificationTemplatesAPI.updateTemplate({
+        userId: user.id,
+        templateType: 'email',
+        notificationName: 'appointment_reminder',
+        subject: emailTemplate.subject,
+        content: emailTemplate.content,
+        isEnabled: enableEmail
+      });
+
+      // Save SMS template
+      await notificationTemplatesAPI.updateTemplate({
+        userId: user.id,
+        templateType: 'sms',
+        notificationName: 'appointment_reminder',
+        subject: null,
+        content: smsTemplate.content,
+        isEnabled: enableSMS
+      });
+
+      // Save notification settings
+      await notificationSettingsAPI.updateSetting({
+        userId: user.id,
+        notificationType: 'appointment_reminder',
+        emailEnabled: enableEmail,
+        smsEnabled: enableSMS,
+        pushEnabled: false
+      });
+
+      setMessage({ type: 'success', text: 'Notification settings saved successfully!' });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      console.error('Error saving templates:', error);
+      setMessage({ type: 'error', text: 'Failed to save notification settings' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Header */}
         <div className="bg-white border-b border-gray-200 px-6 py-4">
+          {/* Message */}
+          {message.text && (
+            <div className={`px-6 py-3 ${message.type === 'success' ? 'bg-green-50 border-l-4 border-green-400' : 'bg-red-50 border-l-4 border-red-400'}`}>
+              <div className="flex items-center">
+                {message.type === 'success' ? (
+                  <Check className="w-5 h-5 text-green-400 mr-2" />
+                ) : (
+                  <X className="w-5 h-5 text-red-400 mr-2" />
+                )}
+                <span className={`text-sm ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
+                  {message.text}
+                </span>
+              </div>
+            </div>
+          )}
           <div className="flex items-center space-x-4">
             <button
               onClick={() => navigate("/settings/client-team-notifications")}
@@ -349,6 +480,17 @@ const AppointmentReminder = () => {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Save Button */}
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={handleSave}
+                disabled={saving || loading}
+                className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
             </div>
           </div>
         </div>

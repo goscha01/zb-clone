@@ -5,7 +5,8 @@ import { useNavigate } from "react-router-dom"
 import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
 import { ChevronLeft, MapPin, Check, X } from "lucide-react"
-import { serviceAreasAPI, authAPI } from "../../services/api"
+import { serviceAreasAPI } from "../../services/api"
+import { useAuth } from "../../context/AuthContext"
 
 const ServiceAreas = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -20,20 +21,34 @@ const ServiceAreas = () => {
   })
 
   // Get current user
-  const currentUser = authAPI.getCurrentUser()
+  const { user } = useAuth()
+
+  // Function to generate Google Maps URL for territory
+  const getTerritoryMapUrl = (territory) => {
+    if (!territory.location) {
+      return "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d12097.433213460975!2d-73.99728968144034!3d40.69531900080547!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x89c25a47c1654a45%3A0xc49e101c2fd62ba2!2sBrooklyn%20Heights%2C%20Brooklyn%2C%20NY!5e0!3m2!1sen!2sus!4v1709665144705!5m2!1sen!2sus"
+    }
+    
+    // Encode the location for URL
+    const encodedLocation = encodeURIComponent(territory.location)
+    const radius = territory.radius_miles || 25
+    
+    // Create a Google Maps embed URL with the territory location
+    return `https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodedLocation}&zoom=10`
+  }
 
   useEffect(() => {
-    if (currentUser) {
+    if (user?.id) {
       loadServiceAreasData()
-    } else {
+    } else if (user === null) {
       navigate('/signin')
     }
-  }, [currentUser])
+  }, [user?.id, navigate])
 
   const loadServiceAreasData = async () => {
     try {
       setLoading(true)
-      const serviceAreas = await serviceAreasAPI.getServiceAreas(currentUser.id)
+      const serviceAreas = await serviceAreasAPI.getServiceAreas(user.id)
       setServiceAreasData(serviceAreas)
     } catch (error) {
       console.error('Error loading service areas data:', error)
@@ -52,7 +67,7 @@ const ServiceAreas = () => {
       }
       
       await serviceAreasAPI.updateServiceAreas({
-        userId: currentUser.id,
+        userId: user.id,
         enforceServiceArea: updatedData.enforceServiceArea,
         territories: updatedData.territories
       })
@@ -72,7 +87,7 @@ const ServiceAreas = () => {
     return (
       <div className="flex h-screen bg-gray-50 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
           <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -89,7 +104,7 @@ const ServiceAreas = () => {
     <div className="min-h-screen bg-gray-50 flex">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Header */}
@@ -172,44 +187,57 @@ const ServiceAreas = () => {
                   </button>
                 </div>
               ) : (
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-                {/* Map */}
-                <div className="h-96 bg-green-50 relative">
-                  <iframe
-                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d12097.433213460975!2d-73.99728968144034!3d40.69531900080547!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x89c25a47c1654a45%3A0xc49e101c2fd62ba2!2sBrooklyn%20Heights%2C%20Brooklyn%2C%20NY!5e0!3m2!1sen!2sus!4v1709665144705!5m2!1sen!2sus"
-                    width="100%"
-                    height="100%"
-                    style={{ border: 0 }}
-                    allowFullScreen=""
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  ></iframe>
-                  <button className="absolute right-4 top-4 p-2 bg-white rounded-lg shadow-md hover:bg-gray-50">
-                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M15 3L21 3M21 3V9M21 3L13 11M10 5H7C4.79086 5 3 6.79086 3 9V17C3 19.2091 4.79086 21 7 21H15C17.2091 21 19 19.2091 19 17V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                </div>
+                <div className="space-y-4">
+                  {serviceAreasData.territories.map((territory) => (
+                    <div key={territory.id} className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                      {/* Map */}
+                      <div className="h-96 bg-green-50 relative">
+                        <iframe
+                          src={getTerritoryMapUrl(territory)}
+                          width="100%"
+                          height="100%"
+                          style={{ border: 0 }}
+                          allowFullScreen=""
+                          loading="lazy"
+                          referrerPolicy="no-referrer-when-downgrade"
+                        ></iframe>
+                        <button className="absolute right-4 top-4 p-2 bg-white rounded-lg shadow-md hover:bg-gray-50">
+                          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M15 3L21 3M21 3V9M21 3L13 11M10 5H7C4.79086 5 3 6.79086 3 9V17C3 19.2091 4.79086 21 7 21H15C17.2091 21 19 19.2091 19 17V14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </button>
+                        {/* Radius indicator */}
+                        <div className="absolute left-4 top-4 bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-medium">
+                          {territory.radius_miles || 25} mile radius
+                        </div>
+                      </div>
 
-                {/* Territory Details */}
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">Brooklyn Heights</h3>
-                    <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">Edit</button>
-                  </div>
-                  <p className="text-sm text-gray-600 mb-4">157 Montague Street, Brooklyn Heights, New York 11201...</p>
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center space-x-2">
-                      <MapPin className="w-4 h-4 text-gray-400" />
-                      <span className="text-gray-600">SERVICE AREA</span>
+                      {/* Territory Details */}
+                      <div className="p-4">
+                        <div className="flex items-center justify-between mb-4">
+                          <h3 className="text-lg font-medium text-gray-900">{territory.name}</h3>
+                          <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">Edit</button>
+                        </div>
+                        {territory.description && (
+                          <p className="text-sm text-gray-600 mb-4">{territory.description}</p>
+                        )}
+                        {territory.location && (
+                          <p className="text-sm text-gray-600 mb-4">{territory.location}</p>
+                        )}
+                        <div className="flex items-center justify-between text-sm">
+                          <div className="flex items-center space-x-2">
+                            <MapPin className="w-4 h-4 text-gray-400" />
+                            <span className="text-gray-600">SERVICE AREA</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-gray-900">{territory.radius_miles} mile radius</span>
+                            <button className="text-blue-600 hover:text-blue-700 font-medium">Edit</button>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-gray-900">30 mile radius</span>
-                      <button className="text-blue-600 hover:text-blue-700 font-medium">Edit</button>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-              </div>
               )}
             </div>
           </div>

@@ -215,7 +215,11 @@ const PublicQuote = () => {
           <div className="flex items-center justify-between">
             {settings?.branding?.logo ? (
               <img 
-                src={settings.branding.logo} 
+                src={settings.branding.logo}
+                onError={(e) => {
+                  console.error('Failed to load logo:', settings.branding.logo);
+                  e.target.style.display = 'none';
+                }} 
                 alt="Logo" 
                 className="h-8 object-contain"
               />

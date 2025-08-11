@@ -5,7 +5,8 @@ import { useNavigate } from "react-router-dom"
 import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
 import { ChevronLeft, Plus, Edit, Trash2, Settings, Tag, Clock, DollarSign } from "lucide-react"
-import { servicesAPI, authAPI } from "../../services/api"
+import { servicesAPI } from "../../services/api"
+import { useAuth } from "../../context/AuthContext"
 
 const ServicesSettings = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -26,16 +27,15 @@ const ServicesSettings = () => {
   const [serviceCategories, setServiceCategories] = useState([])
   const [services, setServices] = useState([])
 
-  // Get current user
-  const currentUser = authAPI.getCurrentUser()
+  const { user } = useAuth()
 
   useEffect(() => {
-    if (currentUser) {
+    if (user?.id) {
       loadServicesData()
-    } else {
+    } else if (user === null) {
       navigate('/signin')
     }
-  }, [currentUser])
+  }, [user?.id, navigate])
 
   const loadServicesData = async () => {
     try {
@@ -89,7 +89,7 @@ const ServicesSettings = () => {
     return (
       <div className="flex h-screen bg-gray-50 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
           <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -106,7 +106,7 @@ const ServicesSettings = () => {
     <div className="min-h-screen bg-gray-50 flex">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Header */}

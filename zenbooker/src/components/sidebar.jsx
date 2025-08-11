@@ -112,13 +112,25 @@ const Sidebar = ({ isOpen, onClose }) => {
             onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
             className="w-full flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 transition-colors"
           >
-            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-medium text-sm">
-                {user?.firstName && user?.lastName 
-                  ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`
-                  : user?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'
-                }
-              </span>
+            <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {user?.profilePicture ? (
+                <img 
+                  src={user.profilePicture} 
+                  alt="Profile" 
+                  className="w-full h-full object-cover"
+                  onError={(e) => {
+                    console.error('Failed to load profile picture in sidebar:', user.profilePicture);
+                    e.target.style.display = 'none';
+                  }}
+                />
+              ) : (
+                <span className="text-white font-medium text-sm">
+                  {user?.firstName && user?.lastName 
+                    ? `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`
+                    : user?.firstName?.charAt(0) || user?.email?.charAt(0) || 'U'
+                  }
+                </span>
+              )}
             </div>
             <div className="flex-1 min-w-0 text-left">
               <p className="text-sm font-medium text-gray-900 truncate">

@@ -1,24 +1,91 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { X, ChevronDown } from "lucide-react"
+import { businessDetailsAPI } from "../services/api"
+import { useAuth } from "../context/AuthContext"
 
 const BusinessDetailsModal = ({ isOpen, onClose }) => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+  
   const [formData, setFormData] = useState({
-    businessName: "Zenbooker Agency",
+    businessName: "",
+    businessEmail: "",
+    phone: "",
+    email: "",
+    firstName: "",
+    lastName: "",
     location: "123 Main Street, New York, NY 10001",
     timezone: "America/New_York",
     currency: "US Dollar - USD",
     countryCode: "+1",
-    businessEmail: "contact@zenbooker.com",
-    notificationEmail: "notifications@zenbooker.com",
+    notificationEmail: "",
     phoneNumber: "",
     website: "",
   })
 
+  // Load business details when modal opens
+  useEffect(() => {
+    if (isOpen && user?.id) {
+      loadBusinessDetails();
+    }
+  }, [isOpen, user]);
+
+  const loadBusinessDetails = async () => {
+    try {
+      setLoading(true);
+      const businessData = await businessDetailsAPI.getBusinessDetails(user.id);
+      setFormData(prev => ({
+        ...prev,
+        businessName: businessData.businessName || "",
+        businessEmail: businessData.businessEmail || "",
+        phone: businessData.phone || "",
+        email: businessData.email || "",
+        firstName: businessData.firstName || "",
+        lastName: businessData.lastName || "",
+      }));
+    } catch (error) {
+      console.error('Error loading business details:', error);
+      setMessage({ type: 'error', text: 'Failed to load business details' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
+
+  const handleSave = async () => {
+    try {
+      setSaving(true);
+      setMessage({ type: '', text: '' });
+      
+      await businessDetailsAPI.updateBusinessDetails({
+        userId: user.id,
+        businessName: formData.businessName,
+        businessEmail: formData.businessEmail,
+        phone: formData.phone,
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName
+      });
+      
+      setMessage({ type: 'success', text: 'Business details saved successfully!' });
+      setTimeout(() => {
+        setMessage({ type: '', text: '' });
+        onClose();
+      }, 2000);
+    } catch (error) {
+      console.error('Error saving business details:', error);
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to save business details' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (!isOpen) return null
 
@@ -29,8 +96,17 @@ const BusinessDetailsModal = ({ isOpen, onClose }) => {
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">Business Details</h2>
           <div className="flex items-center space-x-3">
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700">
-              Save
+            {message.text && (
+              <span className={`text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                {message.text}
+              </span>
+            )}
+            <button 
+              onClick={handleSave}
+              disabled={saving || loading}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Saving...' : 'Save'}
             </button>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
               <X className="w-5 h-5 text-gray-400" />
@@ -40,6 +116,12 @@ const BusinessDetailsModal = ({ isOpen, onClose }) => {
 
         {/* Form Content */}
         <div className="p-6 space-y-6">
+          {loading && (
+            <div className="text-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+              <p className="mt-2 text-gray-600">Loading business details...</p>
+            </div>
+          )}
           {/* Business Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Business Name</label>
@@ -48,8 +130,71 @@ const BusinessDetailsModal = ({ isOpen, onClose }) => {
               value={formData.businessName}
               onChange={(e) => handleInputChange("businessName", e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              disabled={loading}
             />
             <p className="text-xs text-gray-500 mt-1">This will appear in your dashboard, booking page and emails.</p>
+          </div>
+
+          {/* First Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">First Name</label>
+            <input
+              type="text"
+              value={formData.firstName}
+              onChange={(e) => handleInputChange("firstName", e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              disabled={loading}
+            />
+          </div>
+
+          {/* Last Name */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Last Name</label>
+            <input
+              type="text"
+              value={formData.lastName}
+              onChange={(e) => handleInputChange("lastName", e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              disabled={loading}
+            />
+          </div>
+
+          {/* Email */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => handleInputChange("email", e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              disabled={loading}
+            />
+          </div>
+
+          {/* Business Email */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Business Email</label>
+            <input
+              type="email"
+              value={formData.businessEmail}
+              onChange={(e) => handleInputChange("businessEmail", e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              disabled={loading}
+              placeholder="contact@yourbusiness.com"
+            />
+            <p className="text-xs text-gray-500 mt-1">This email will be used for business communications and customer inquiries.</p>
+          </div>
+
+          {/* Phone */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+            <input
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => handleInputChange("phone", e.target.value)}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              disabled={loading}
+            />
           </div>
 
           {/* Location */}

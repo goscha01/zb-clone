@@ -6,7 +6,8 @@ import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
 import PlanSelectionModal from "../../components/plan-selection-modal"
 import { ChevronLeft, Lock, Check, X } from "lucide-react"
-import { billingAPI, authAPI } from "../../services/api"
+import { billingAPI } from "../../services/api"
+import { useAuth } from "../../context/AuthContext"
 
 const BillingSettings = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -32,21 +33,20 @@ const BillingSettings = () => {
     cvc: ""
   })
 
-  // Get current user
-  const currentUser = authAPI.getCurrentUser()
+  const { user } = useAuth()
 
   useEffect(() => {
-    if (currentUser) {
+    if (user?.id) {
       loadBillingData()
-    } else {
+    } else if (user === null) {
       navigate('/signin')
     }
-  }, [currentUser])
+  }, [user?.id, navigate])
 
   const loadBillingData = async () => {
     try {
       setLoading(true)
-      const billing = await billingAPI.getBilling(currentUser.id)
+      const billing = await billingAPI.getBilling(user.id)
       setBillingDetails(billing)
     } catch (error) {
       console.error('Error loading billing data:', error)
@@ -70,7 +70,7 @@ const BillingSettings = () => {
     try {
       setSaving(true)
       await billingAPI.createSubscription({
-        userId: currentUser.id,
+        userId: user.id,
         plan: billingDetails.currentPlan,
         cardNumber: cardData.cardNumber,
         expiryMonth: cardData.expiryMonth,
@@ -113,7 +113,7 @@ const BillingSettings = () => {
     return (
       <div className="flex h-screen bg-gray-50 overflow-hidden">
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-        <div className="flex-1 flex flex-col min-w-0">
+        <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
           <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
@@ -130,7 +130,7 @@ const BillingSettings = () => {
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Header */}

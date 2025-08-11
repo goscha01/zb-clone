@@ -29,13 +29,26 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     // Check if user is already logged in on app start
-    const checkAuthStatus = () => {
+    const checkAuthStatus = async () => {
       const token = localStorage.getItem('authToken');
       const userData = localStorage.getItem('user');
       
       if (token && userData && !isTokenExpired(token)) {
         try {
-          setUser(JSON.parse(userData));
+          const basicUserData = JSON.parse(userData);
+          setUser(basicUserData);
+          
+          // Load full user profile including profile picture
+          try {
+            const { userProfileAPI } = await import('../services/api');
+            const fullProfile = await userProfileAPI.getProfile(basicUserData.id);
+            setUser(fullProfile);
+            // Update localStorage with full profile data
+            localStorage.setItem('user', JSON.stringify(fullProfile));
+          } catch (profileError) {
+            console.error('Error loading full user profile:', profileError);
+            // Keep using basic user data if profile loading fails
+          }
         } catch (error) {
           console.error('Error parsing user data:', error);
           authAPI.signout();
@@ -89,6 +102,11 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  const updateUserProfile = (updatedProfile) => {
+    setUser(updatedProfile);
+    localStorage.setItem('user', JSON.stringify(updatedProfile));
+  };
+
   // Listen for token expiration on every page load and API error
   useEffect(() => {
     const interval = setInterval(() => {
@@ -111,6 +129,7 @@ export const AuthProvider = ({ children }) => {
     login,
     signup,
     logout,
+    updateUserProfile,
     isAuthenticated
   };
 

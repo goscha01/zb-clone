@@ -401,7 +401,11 @@ const ZenbookerOnlineBooking = () => {
             {brandingSettings.logo ? (
               <div className="relative">
                 <img 
-                  src={brandingSettings.logo} 
+                  src={brandingSettings.logo}
+                onError={(e) => {
+                  console.error('Failed to load logo:', brandingSettings.logo);
+                  e.target.style.display = 'none';
+                }} 
                   alt="Logo" 
                   className="w-32 h-16 object-contain border border-gray-300 rounded"
                 />

@@ -5,14 +5,18 @@ import { useNavigate } from "react-router-dom"
 import Sidebar from "../../components/sidebar"
 import MobileHeader from "../../components/mobile-header"
 import { ChevronLeft, Check, X } from "lucide-react"
-import { brandingAPI, authAPI } from "../../services/api"
+import { brandingAPI } from "../../services/api"
+import { useAuth } from "../../context/AuthContext"
 
 const BrandingSettings = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // Start with false, not true
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState({ type: '', text: '' })
   const navigate = useNavigate()
+  const { user } = useAuth()
+  
+  console.log('🔍 BrandingSettings: Component rendered, user:', user);
   
   const [settings, setSettings] = useState({
     logo: null,
@@ -29,37 +33,77 @@ const BrandingSettings = () => {
     "#795548", "#607D8B"
   ]
 
-  // Get current user
-  const currentUser = authAPI.getCurrentUser()
-
   useEffect(() => {
-    if (currentUser) {
+    console.log('🔍 useEffect: User changed, user:', user);
+    if (user?.id) {
+      console.log('🔍 useEffect: User has ID, calling loadBrandingData');
       loadBrandingData()
-    } else {
+    } else if (user === null) {
+      console.log('🔍 useEffect: User is null, navigating to signin');
       navigate('/signin')
+    } else {
+      console.log('🔍 useEffect: User is undefined or has no ID');
     }
-  }, [currentUser])
+  }, [user?.id, navigate]) // Only depend on the user ID and navigate function
 
   const loadBrandingData = async () => {
+    // Prevent multiple simultaneous calls
+    if (loading) {
+      console.log('🔍 loadBrandingData: Already loading, skipping...');
+      return;
+    }
+    
     try {
       setLoading(true)
-      const branding = await brandingAPI.getBranding(currentUser.id)
+      console.log('🔍 loadBrandingData: Calling brandingAPI.getBranding...');
+      const branding = await brandingAPI.getBranding(user.id)
+      console.log('🔍 loadBrandingData: Received branding data:', branding);
       setSettings(branding)
+      console.log('🔍 loadBrandingData: Settings updated successfully');
     } catch (error) {
-      console.error('Error loading branding data:', error)
+      console.error('🔍 loadBrandingData: Error loading branding data:', error)
       setMessage({ type: 'error', text: 'Failed to load branding settings' })
     } finally {
+      console.log('🔍 loadBrandingData: Setting loading to false');
       setLoading(false)
     }
   }
 
-  const handleLogoUpload = (event) => {
+  const handleLogoUpload = async (event) => {
     const file = event.target.files[0]
     if (file) {
-      // In a real application, you would upload the file to a server
-      // For now, we'll create a local URL and store it
-      const logoUrl = URL.createObjectURL(file)
-      setSettings({ ...settings, logo: logoUrl })
+      try {
+        console.log('🔍 Uploading logo file:', file.name, file.size);
+        
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append('logo', file);
+        formData.append('userId', user.id);
+        
+        // Upload to server
+        const apiUrl = process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online/api';
+        console.log('🔍 Uploading to:', `${apiUrl}/upload/logo`);
+        
+        const response = await fetch(`${apiUrl}/upload/logo`, {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          }
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          console.log('🔍 Logo uploaded successfully:', result.logoUrl);
+          setSettings({ ...settings, logo: result.logoUrl });
+        } else {
+          console.error('🔍 Logo upload failed:', response.status);
+          setMessage({ type: 'error', text: 'Failed to upload logo' });
+        }
+      } catch (error) {
+        console.error('🔍 Logo upload error:', error);
+        setMessage({ type: 'error', text: 'Failed to upload logo' });
+      }
     }
   }
 
@@ -67,11 +111,14 @@ const BrandingSettings = () => {
     try {
       setSaving(true)
       await brandingAPI.updateBranding({
-        userId: currentUser.id,
+        userId: user.id,
         logo: settings.logo,
         showLogoInAdmin: settings.showLogoInAdmin,
         primaryColor: settings.primaryColor
       })
+      
+      // Also save to localStorage for backward compatibility
+      localStorage.setItem('branding', JSON.stringify(settings));
       
       setMessage({ type: 'success', text: 'Branding settings saved successfully!' })
       setTimeout(() => setMessage({ type: '', text: '' }), 3000)
@@ -104,7 +151,7 @@ const BrandingSettings = () => {
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 
         {/* Header */}
@@ -179,15 +226,19 @@ const BrandingSettings = () => {
                     </label>
                   </div>
                 </div>
-                {settings.logo && (
-                  <div className="mt-4">
-                    <img 
-                      src={settings.logo} 
-                      alt="Logo preview" 
-                      className="h-16 w-auto object-contain"
-                    />
-                  </div>
-                )}
+                                 {settings.logo && (
+                   <div className="mt-4">
+                     <img 
+                       src={settings.logo} 
+                       alt="Logo preview" 
+                       className="h-16 w-auto object-contain"
+                       onError={(e) => {
+                         console.error('Failed to load logo:', settings.logo);
+                         e.target.style.display = 'none';
+                       }}
+                     />
+                   </div>
+                 )}
                 <div className="mt-4 flex items-center justify-between">
                   <span className="text-sm text-gray-600">Show logo in Zenbooker admin</span>
                   <button

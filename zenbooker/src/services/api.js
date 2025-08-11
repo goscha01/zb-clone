@@ -409,6 +409,134 @@ export const userProfileAPI = {
     } catch (error) {
       throw error;
     }
+  },
+
+  updateProfilePicture: async (userId, file) => {
+    try {
+      console.log('🔍 Uploading profile picture for user:', userId);
+      
+      // Create FormData for file upload
+      const formData = new FormData();
+      formData.append('profilePicture', file);
+      formData.append('userId', userId);
+      
+      // Upload to server
+      const apiUrl = process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online/api';
+      console.log('🔍 Uploading to:', `${apiUrl}/upload/profile-picture`);
+      
+      const response = await fetch(`${apiUrl}/upload/profile-picture`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        console.log('🔍 Profile picture uploaded successfully:', result.profilePictureUrl);
+        return { profilePicture: result.profilePictureUrl };
+      } else {
+        console.error('🔍 Profile picture upload failed:', response.status);
+        throw new Error('Failed to upload profile picture');
+      }
+    } catch (error) {
+      console.error('🔍 Profile picture upload error:', error);
+      throw error;
+    }
+  },
+
+  removeProfilePicture: async (userId) => {
+    try {
+      console.log('🔍 Removing profile picture for user:', userId);
+      
+      const apiUrl = process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online/api';
+      console.log('🔍 Removing from:', `${apiUrl}/user/profile-picture`);
+      
+      const response = await fetch(`${apiUrl}/user/profile-picture`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        },
+        body: JSON.stringify({ userId })
+      });
+      
+      if (response.ok) {
+        console.log('🔍 Profile picture removed successfully');
+        return { success: true };
+      } else {
+        console.error('🔍 Profile picture removal failed:', response.status);
+        throw new Error('Failed to remove profile picture');
+      }
+    } catch (error) {
+      console.error('🔍 Profile picture removal error:', error);
+      throw error;
+    }
+  },
+
+  updatePassword: async (passwordData) => {
+    try {
+      const response = await api.put('/user/password', passwordData);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  updateEmail: async (emailData) => {
+    try {
+      const response = await api.put('/user/email', emailData);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+};
+
+// Notification Templates API functions
+export const notificationTemplatesAPI = {
+  getTemplates: async (userId, templateType = null, notificationName = null) => {
+    try {
+      const params = new URLSearchParams({ userId });
+      if (templateType) params.append('templateType', templateType);
+      if (notificationName) params.append('notificationName', notificationName);
+      
+      const response = await api.get(`/user/notification-templates?${params}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  updateTemplate: async (templateData) => {
+    try {
+      const response = await api.put('/user/notification-templates', templateData);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  }
+};
+
+// Notification Settings API functions
+export const notificationSettingsAPI = {
+  getSettings: async (userId) => {
+    try {
+      const response = await api.get(`/user/notification-settings?userId=${userId}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  updateSetting: async (settingData) => {
+    try {
+      const response = await api.put('/user/notification-settings', settingData);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 
@@ -881,16 +1009,51 @@ export const paymentMethodsAPI = {
 export const brandingAPI = {
   getBranding: async (userId) => {
     try {
-      const response = await api.get(`/user/branding?userId=${userId}`);
+      console.log('🔍 Frontend: Calling getBranding with userId:', userId);
+      
+      // Add a timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 10000)
+      );
+      
+      const apiPromise = api.get(`/user/branding?userId=${userId}`);
+      const response = await Promise.race([apiPromise, timeoutPromise]);
+      
+      console.log('🔍 Frontend: getBranding response:', response.data);
       return response.data;
     } catch (error) {
+      console.error('🔍 Frontend: getBranding error:', error);
       throw error;
     }
   },
 
   updateBranding: async (brandingData) => {
     try {
+      console.log('🔍 Frontend: Calling updateBranding with data:', brandingData);
       const response = await api.put('/user/branding', brandingData);
+      console.log('🔍 Frontend: updateBranding response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('🔍 Frontend: updateBranding error:', error);
+      throw error;
+    }
+  }
+};
+
+// Business Details API functions
+export const businessDetailsAPI = {
+  getBusinessDetails: async (userId) => {
+    try {
+      const response = await api.get(`/user/business-details?userId=${userId}`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  updateBusinessDetails: async (businessData) => {
+    try {
+      const response = await api.put('/user/business-details', businessData);
       return response.data;
     } catch (error) {
       throw error;

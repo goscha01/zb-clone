@@ -40,6 +40,36 @@ const CreateTerritoryModal = ({ isOpen, onClose, onSuccess, territory = null, is
 
   useEffect(() => {
     if (isOpen && territory && isEditing) {
+      // Default business hours structure
+      const defaultBusinessHours = {
+        monday: { start: "09:00", end: "17:00", enabled: true },
+        tuesday: { start: "09:00", end: "17:00", enabled: true },
+        wednesday: { start: "09:00", end: "17:00", enabled: true },
+        thursday: { start: "09:00", end: "17:00", enabled: true },
+        friday: { start: "09:00", end: "17:00", enabled: true },
+        saturday: { start: "09:00", end: "15:00", enabled: false },
+        sunday: { start: "09:00", end: "12:00", enabled: false }
+      }
+
+      // Parse business hours from territory, ensuring complete structure
+      let businessHours = defaultBusinessHours
+      if (territory.business_hours) {
+        try {
+          const parsedHours = typeof territory.business_hours === 'string' 
+            ? JSON.parse(territory.business_hours) 
+            : territory.business_hours
+          
+          // Merge with defaults to ensure all days have complete structure
+          businessHours = {
+            ...defaultBusinessHours,
+            ...parsedHours
+          }
+        } catch (error) {
+          console.error('Error parsing business hours:', error)
+          businessHours = defaultBusinessHours
+        }
+      }
+
       setFormData({
         name: territory.name || "",
         description: territory.description || "",
@@ -48,15 +78,7 @@ const CreateTerritoryModal = ({ isOpen, onClose, onSuccess, territory = null, is
         radiusMiles: territory.radius_miles || 25,
         timezone: territory.timezone || "America/New_York",
         status: territory.status || "active",
-        businessHours: territory.business_hours || {
-          monday: { start: "09:00", end: "17:00", enabled: true },
-          tuesday: { start: "09:00", end: "17:00", enabled: true },
-          wednesday: { start: "09:00", end: "17:00", enabled: true },
-          thursday: { start: "09:00", end: "17:00", enabled: true },
-          friday: { start: "09:00", end: "17:00", enabled: true },
-          saturday: { start: "09:00", end: "15:00", enabled: false },
-          sunday: { start: "09:00", end: "12:00", enabled: false }
-        },
+        businessHours: businessHours,
         teamMembers: territory.team_members || [],
         services: territory.services || [],
         pricingMultiplier: territory.pricing_multiplier || 1.00

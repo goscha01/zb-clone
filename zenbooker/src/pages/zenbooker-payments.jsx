@@ -1,12 +1,107 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
-import { Search, ChevronDown, DollarSign, ChevronLeft, ChevronRight, Calendar } from "lucide-react"
+import { Search, ChevronDown, DollarSign, ChevronLeft, ChevronRight, Calendar, Check, X, Clock } from "lucide-react"
+import { useAuth } from "../context/AuthContext"
 
 const ZenbookerPayments = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [payments, setPayments] = useState([])
+  const [metrics, setMetrics] = useState({
+    successfulCharges: 0,
+    recordedPayments: 0,
+    grossRevenue: 0
+  })
+  const [filters, setFilters] = useState({
+    dateRange: 'Last 7 days',
+    status: 'Any Status',
+    paymentMethod: 'All Payment Methods',
+    searchQuery: ''
+  })
+  
+  const { user } = useAuth()
+
+  useEffect(() => {
+    if (user?.id) {
+      loadPaymentData()
+    }
+  }, [user?.id])
+
+  const loadPaymentData = async () => {
+    try {
+      setLoading(true)
+      // Load payments from jobs table where payment_status is 'paid'
+      const response = await fetch(`/api/jobs?userId=${user.id}&paymentStatus=paid`)
+      const data = await response.json()
+      
+      if (data.success) {
+        const paidJobs = data.jobs || []
+        setPayments(paidJobs)
+        
+        // Calculate metrics
+        const successfulCharges = paidJobs.length
+        const grossRevenue = paidJobs.reduce((total, job) => total + (parseFloat(job.total) || 0), 0)
+        
+        setMetrics({
+          successfulCharges,
+          recordedPayments: successfulCharges,
+          grossRevenue
+        })
+      }
+    } catch (error) {
+      console.error('Error loading payment data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'paid':
+        return <Check className="w-4 h-4 text-green-500" />
+      case 'pending':
+        return <Clock className="w-4 h-4 text-yellow-500" />
+      case 'failed':
+        return <X className="w-4 h-4 text-red-500" />
+      default:
+        return <Clock className="w-4 h-4 text-gray-400" />
+    }
+  }
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD'
+    }).format(amount || 0)
+  }
+
+  const formatDate = (dateString) => {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gray-50 overflow-hidden">
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activePage="payments" />
+        <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
+          <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+              <p className="mt-4 text-gray-600">Loading payment data...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
@@ -14,7 +109,7 @@ const ZenbookerPayments = () => {
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activePage="payments" />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
         {/* Mobile Header */}
         <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
 
@@ -48,15 +143,15 @@ const ZenbookerPayments = () => {
                 <div className="grid grid-cols-3 gap-4 lg:gap-8">
                   <div className="text-center">
                     <div className="text-sm text-gray-600">Successful charges</div>
-                    <div className="text-2xl font-bold text-gray-900">0</div>
+                    <div className="text-2xl font-bold text-gray-900">{metrics.successfulCharges}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">Recorded payments</div>
-                    <div className="text-2xl font-bold text-gray-900">0</div>
+                    <div className="text-2xl font-bold text-gray-900">{metrics.recordedPayments}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-sm text-gray-600">Gross revenue</div>
-                    <div className="text-2xl font-bold text-gray-900">$0</div>
+                    <div className="text-2xl font-bold text-gray-900">{formatCurrency(metrics.grossRevenue)}</div>
                   </div>
                 </div>
               </div>
@@ -100,16 +195,51 @@ const ZenbookerPayments = () => {
               </div>
             </div>
 
-            {/* Empty State */}
-            <div className="bg-white rounded-lg border border-gray-200 flex-1 flex items-center justify-center p-12">
-              <div className="text-center max-w-md">
-                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <DollarSign className="w-8 h-8 text-gray-400" />
+            {/* Payment List or Empty State */}
+            {payments.length === 0 ? (
+              <div className="bg-white rounded-lg border border-gray-200 flex-1 flex items-center justify-center p-12">
+                <div className="text-center max-w-md">
+                  <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <DollarSign className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No payments to show</h3>
+                  <p className="text-gray-600">There are no completed payments to display for the selected period.</p>
                 </div>
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">No payments to show</h3>
-                <p className="text-gray-600">There are no payments between Jun 17, 2025 - June 24, 2025 to show.</p>
               </div>
-            </div>
+            ) : (
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-200">
+                  <h3 className="text-lg font-medium text-gray-900">Payment History</h3>
+                </div>
+                <div className="divide-y divide-gray-200">
+                  {payments.map((payment) => (
+                    <div key={payment.id} className="px-6 py-4 hover:bg-gray-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-3">
+                          {getStatusIcon(payment.payment_status)}
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">
+                              {payment.customer_name || `Job #${payment.id}`}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              {payment.service_name || 'Service'} • {formatDate(payment.payment_date || payment.created_at)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-medium text-gray-900">
+                            {formatCurrency(payment.total)}
+                          </p>
+                          <p className="text-sm text-gray-500 capitalize">
+                            {payment.payment_method || 'Credit Card'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Pagination */}
             <div className="flex items-center justify-center space-x-4 mt-6">
