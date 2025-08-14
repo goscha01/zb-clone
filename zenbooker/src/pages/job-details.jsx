@@ -343,7 +343,7 @@ const JobDetails = () => {
     }
   }
 
-  const handleTeamAssignment = async (teamMemberId, specificMemberId = null) => {
+  const handleTeamAssignment = async (teamMemberId, specificMemberId = null, makePrimary = false) => {
     if (!job) return
     try {
       setLoading(true)
@@ -357,7 +357,7 @@ const JobDetails = () => {
         }))
         setSuccessMessage('Team member removed!')
       } else if (teamMemberId) {
-        // Add new team member
+        // Add new team member (makePrimary parameter not supported by backend yet)
         await jobsAPI.assignToTeamMember(job.id, teamMemberId)
         // Refresh job data to get updated team assignments
         const updatedJob = await jobsAPI.getById(job.id)
@@ -947,92 +947,153 @@ const JobDetails = () => {
                   </div>
                 </div>
 
-                {/* Assigned Team Members */}
-                <div className="pt-4 border-t border-gray-200">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-gray-700">ASSIGNED</span>
+                                {/* Assigned Team Members */}
+                <div className="pt-6 border-t border-gray-200">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 space-y-2 sm:space-y-0">
+                    <div className="flex items-center space-x-2">
+                      <Users className="w-5 h-5 text-gray-600" />
+                      <span className="text-lg font-semibold text-gray-900">Team Assignment</span>
+                    </div>
                     <button
-                      className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                      className="inline-flex items-center px-3 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200 shadow-sm w-full sm:w-auto justify-center"
                       onClick={() => setAssigning(true)}
-                    >Assign</button>
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Assign Member
+                    </button>
                   </div>
-                  <div className="text-center py-4">
-                    {job.team_assignments && job.team_assignments.length > 0 ? (
-                      <>
-                        <div className="space-y-3">
-                          {job.team_assignments.map((assignment, index) => {
-                            const member = teamMembers.find(m => String(m.id) === String(assignment.team_member_id));
-                            const memberName = member ? (member.name || member.fullName || member.email || member.id) : 'Unknown Member';
-                            return (
-                              <div key={assignment.team_member_id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                                <div className="flex items-center space-x-2">
-                                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                    <Users className="w-4 h-4 text-blue-600" />
+                  
+                  {job.team_assignments && job.team_assignments.length > 0 ? (
+                    <div className="space-y-3">
+                      {job.team_assignments.map((assignment, index) => {
+                        const member = teamMembers.find(m => String(m.id) === String(assignment.team_member_id));
+                        const memberName = member ? (member.name || member.fullName || member.email || member.id) : 'Unknown Member';
+                        const memberEmail = member ? (member.email || '') : '';
+                        return (
+                          <div key={assignment.team_member_id} className="bg-white border border-gray-200 rounded-xl p-3 sm:p-4 shadow-sm hover:shadow-md transition-shadow duration-200">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-3 sm:space-y-0">
+                              <div className="flex items-center space-x-3 min-w-0 flex-1">
+                                <div className="relative flex-shrink-0">
+                                  <div className="w-10 h-10 sm:w-12 sm:h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-sm">
+                                    <User className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
                                   </div>
-                                  <div className="text-left">
-                                    <p className="text-sm font-medium text-gray-700">
-                                      {memberName}
-                                      {assignment.is_primary && (
-                                        <span className="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
-                                          Primary
-                                        </span>
-                                      )}
-                                    </p>
-                                    <p className="text-xs text-gray-500">
-                                      Assigned {new Date(assignment.assigned_at).toLocaleDateString()}
-                                    </p>
-                                  </div>
+                                  {assignment.is_primary && (
+                                    <div className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-yellow-400 rounded-full flex items-center justify-center shadow-sm">
+                                      <Star className="w-2 h-2 sm:w-3 sm:h-3 text-white" />
+                                    </div>
+                                  )}
                                 </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mb-1 space-y-1 sm:space-y-0">
+                                    <h4 className="text-sm font-semibold text-gray-900 truncate">{memberName}</h4>
+                                    {assignment.is_primary && (
+                                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full w-fit">
+                                        Primary
+                                      </span>
+                                    )}
+                                  </div>
+                                  {memberEmail && (
+                                    <p className="text-xs text-gray-500 mb-1 truncate">{memberEmail}</p>
+                                  )}
+                                  <p className="text-xs text-gray-400">
+                                    Assigned {new Date(assignment.assigned_at).toLocaleDateString('en-US', {
+                                      year: 'numeric',
+                                      month: 'short',
+                                      day: 'numeric'
+                                    })}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex justify-end sm:justify-start">
                                 <button
-                                  className="text-xs text-red-600 hover:underline"
+                                  className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-600 bg-red-50 rounded-md hover:bg-red-100 transition-colors duration-200"
                                   onClick={() => handleTeamAssignment(null, assignment.team_member_id)}
+                                  title="Remove assignment"
                                 >
+                                  <X className="w-3 h-3 mr-1" />
                                   Remove
                                 </button>
                               </div>
-                            );
-                          })}
-                        </div>
-                        <p className="text-xs text-gray-500 mt-2">
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-sm text-gray-500 bg-gray-50 rounded-lg px-3 py-2 space-y-1 sm:space-y-0">
+                        <span>
                           {job.team_assignments.length} team member{job.team_assignments.length !== 1 ? 's' : ''} assigned
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                          <Users className="w-6 h-6 text-gray-400" />
-                        </div>
-                        <p className="text-gray-500 font-medium mb-1">Unassigned</p>
-                        <p className="text-xs text-gray-400">No service providers are assigned to this job</p>
-                      </>
-                    )}
-                    {assigning && (
-                      <div className="mt-3">
-                        <select
-                          className="w-full border border-gray-300 rounded p-2"
-                          value={selectedTeamMember || ''}
-                          onChange={e => setSelectedTeamMember(e.target.value)}
+                        </span>
+                        <span className="text-xs">
+                          {job.workers_needed || 1} needed
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 sm:py-8 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                      <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                        <Users className="w-6 h-6 sm:w-8 sm:h-8 text-gray-400" />
+                      </div>
+                      <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No Team Members Assigned</h3>
+                      <p className="text-xs sm:text-sm text-gray-500 mb-3 sm:mb-4 px-2">
+                        Assign team members to this job to ensure it gets completed efficiently.
+                      </p>
+                      <button
+                        className="inline-flex items-center px-3 py-2 sm:px-4 sm:py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors duration-200"
+                        onClick={() => setAssigning(true)}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Assign First Member
+                      </button>
+                    </div>
+                  )}
+                  
+                  {assigning && (
+                    <div className="mt-4 p-3 sm:p-4 bg-blue-50 rounded-xl border border-blue-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-blue-900">Assign Team Member</h4>
+                        <button
+                          className="text-blue-600 hover:text-blue-700"
+                          onClick={() => { setAssigning(false); setSelectedTeamMember(null) }}
                         >
-                          <option value="">Select team member</option>
-                          {teamMembers.map(m => (
-                            <option key={m.id} value={m.id}>
-                              {m.name || m.email || m.id}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="flex justify-end space-x-2 mt-2">
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Select Team Member
+                          </label>
+                          <select
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                            value={selectedTeamMember || ''}
+                            onChange={e => setSelectedTeamMember(e.target.value)}
+                          >
+                            <option value="">Choose a team member...</option>
+                            {teamMembers.map(m => (
+                              <option key={m.id} value={m.id}>
+                                {m.name || m.email || m.id}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        <div className="flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-2 pt-2">
                           <button
-                            className="px-3 py-1 text-gray-600 border border-gray-300 rounded"
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors duration-200 order-2 sm:order-1"
                             onClick={() => { setAssigning(false); setSelectedTeamMember(null) }}
-                          >Cancel</button>
+                          >
+                            Cancel
+                          </button>
                           <button
-                            className="px-3 py-1 bg-blue-600 text-white rounded"
+                            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed order-1 sm:order-2"
                             onClick={() => handleTeamAssignment(selectedTeamMember)}
-                          >Assign</button>
+                            disabled={!selectedTeamMember}
+                          >
+                            Assign Member
+                          </button>
                         </div>
                       </div>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-4 border-t border-gray-200">
@@ -1311,34 +1372,48 @@ const JobDetails = () => {
 
                       {/* Assigned Team Member */}
                       <div className="pt-4 border-t border-gray-200">
-                        <div className="flex justify-between items-center mb-2">
+                        <div className="flex justify-between items-center mb-3">
                           <span className="text-sm font-medium text-gray-700">ASSIGNED</span>
                           <button
                             className="text-blue-600 hover:text-blue-700 text-sm font-medium"
                             onClick={() => setAssigning(true)}
                           >Assign</button>
                         </div>
-                        <div className="text-center py-4">
-                          {job.team_member_id ? (
-                            <>
-                              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                <Users className="w-6 h-6 text-gray-400" />
-                              </div>
-                              <p className="text-gray-500 font-medium mb-1">
-                                {(() => {
-                                  const member = teamMembers.find(m => String(m.id) === String(job.team_member_id));
-                                  return member ? (member.name || member.fullName || member.email || member.id) : 'Assigned (not found)';
-                                })()}
-                              </p>
-                              <button
-                                className="text-xs text-red-600 hover:underline"
-                                onClick={() => handleTeamAssignment(null)}
-                              >Unassign</button>
-                            </>
+                        <div className="text-center py-3">
+                          {job.team_assignments && job.team_assignments.length > 0 ? (
+                            <div className="space-y-2">
+                              {job.team_assignments.map((assignment, index) => {
+                                const member = teamMembers.find(m => String(m.id) === String(assignment.team_member_id));
+                                const memberName = member ? (member.name || member.fullName || member.email || member.id) : 'Unknown Member';
+                                return (
+                                  <div key={assignment.team_member_id} className="bg-gray-50 rounded-lg p-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center space-x-2 min-w-0 flex-1">
+                                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                                          <User className="w-4 h-4 text-blue-600" />
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                          <p className="text-sm font-medium text-gray-700 truncate">{memberName}</p>
+                                          {assignment.is_primary && (
+                                            <span className="text-xs text-blue-600">Primary</span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <button
+                                        className="text-xs text-red-600 hover:underline ml-2"
+                                        onClick={() => handleTeamAssignment(null, assignment.team_member_id)}
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           ) : (
                             <>
-                              <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                                <Users className="w-6 h-6 text-gray-400" />
+                              <div className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
+                                <Users className="w-5 h-5 text-gray-400" />
                               </div>
                               <p className="text-gray-500 font-medium mb-1">Unassigned</p>
                               <p className="text-xs text-gray-400">No service providers are assigned to this job</p>
