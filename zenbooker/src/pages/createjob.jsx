@@ -292,6 +292,63 @@ export default function CreateJobPage() {
 
   const handleCustomerSelect = async (customer) => {
     setSelectedCustomer(customer);
+    
+    console.log('Customer selected:', customer);
+    console.log('Customer address fields:', {
+      address: customer.address,
+      city: customer.city,
+      state: customer.state,
+      zip_code: customer.zip_code
+    });
+    
+    // Use separate address fields if available, otherwise parse the address string
+    let parsedAddress = {
+      street: "",
+      city: "",
+      state: "",
+      zipCode: "",
+      country: "USA"
+    };
+    
+    if (customer.address || customer.city || customer.state || customer.zip_code) {
+      // Use separate fields if available
+      if (customer.city && customer.state && customer.zip_code) {
+        parsedAddress.street = customer.address || "";
+        parsedAddress.city = customer.city;
+        parsedAddress.state = customer.state;
+        parsedAddress.zipCode = customer.zip_code;
+      } else if (customer.address) {
+        // Fallback to parsing address string if separate fields aren't available
+        const addressParts = customer.address.split(',').map(part => part.trim());
+        
+        console.log('Address parts:', addressParts);
+        
+        if (addressParts.length >= 1) {
+          parsedAddress.street = addressParts[0];
+        }
+        
+        if (addressParts.length >= 2) {
+          parsedAddress.city = addressParts[1];
+        }
+        
+        if (addressParts.length >= 3) {
+          // Handle state and zip code which might be together like "State 12345"
+          const stateZipPart = addressParts[2];
+          const stateZipMatch = stateZipPart.match(/^([A-Za-z\s]+)\s+(\d{5}(?:-\d{4})?)$/);
+          
+          if (stateZipMatch) {
+            parsedAddress.state = stateZipMatch[1].trim();
+            parsedAddress.zipCode = stateZipMatch[2];
+          } else {
+            // If no zip code pattern, assume it's just state
+            parsedAddress.state = stateZipPart;
+          }
+        }
+      }
+      
+      console.log('Parsed address:', parsedAddress);
+    }
+    
     setFormData(prev => ({
       ...prev,
       customerId: customer.id,
@@ -300,7 +357,9 @@ export default function CreateJobPage() {
         email: customer.email || "",
         emailNotifications: true,
         textNotifications: false
-      }
+      },
+      // Autopopulate service address from customer address if available
+      serviceAddress: (customer.address || customer.city || customer.state || customer.zip_code) ? parsedAddress : prev.serviceAddress
     }));
     setShowCustomerDropdown(false);
     setCustomerSearch("");
@@ -312,14 +371,31 @@ export default function CreateJobPage() {
     // Handle duration properly - services use { hours: X, minutes: Y } format
     let durationInHours = 1; // Default
     if (service.duration) {
+      console.log('🔄 Service duration before conversion:', {
+        duration: service.duration,
+        type: typeof service.duration,
+        isObject: typeof service.duration === 'object'
+      });
+      
       if (typeof service.duration === 'object' && service.duration.hours !== undefined) {
         // New format: { hours: X, minutes: Y }
         durationInHours = service.duration.hours + (service.duration.minutes / 60);
+        console.log('🔄 Converted object duration to hours:', {
+          hours: service.duration.hours,
+          minutes: service.duration.minutes,
+          totalHours: durationInHours
+        });
       } else if (typeof service.duration === 'number') {
         // Old format: minutes as number
-        durationInHours = Math.ceil(service.duration / 60);
+        durationInHours = service.duration / 60; // Don't use Math.ceil, keep decimal
+        console.log('🔄 Converted number duration to hours:', {
+          originalMinutes: service.duration,
+          convertedHours: durationInHours
+        });
       }
     }
+    
+    console.log('🔄 Final duration in hours for formData:', durationInHours);
     
     // Parse modifiers and intake questions if they exist
     let serviceModifiers = [];
@@ -330,6 +406,20 @@ export default function CreateJobPage() {
         serviceModifiers = typeof service.modifiers === 'string' 
           ? JSON.parse(service.modifiers) 
           : service.modifiers;
+        
+        // Debug modifier durations
+        console.log('🔄 Service modifiers loaded:', serviceModifiers);
+        serviceModifiers.forEach(modifier => {
+          if (modifier.options) {
+            modifier.options.forEach(option => {
+              console.log(`🔄 Modifier option "${option.title}" duration:`, {
+                duration: option.duration,
+                type: typeof option.duration,
+                isObject: typeof option.duration === 'object'
+              });
+            });
+          }
+        });
       } catch (error) {
         console.error('Error parsing service modifiers:', error);
         serviceModifiers = [];
@@ -352,7 +442,7 @@ export default function CreateJobPage() {
       serviceId: service.id,
       price: service.price || 0,
       duration: durationInHours,
-      workers: service.workers || 1,
+      workers: selectedTeamMembers.length > 0 ? selectedTeamMembers.length : (service.workers || 1),
       skillsRequired: service.skills || 0,
       serviceName: service.name,
       estimatedDuration: service.duration || 0,
@@ -362,6 +452,10 @@ export default function CreateJobPage() {
       // Calculate time based on service duration - default to 9 AM if no time set
       scheduledTime: prev.scheduledTime || "09:00"
     }));
+    
+    // Clear previous intake answers when selecting a new service
+    setIntakeQuestionAnswers({});
+    
     setShowServiceDropdown(false);
     setServiceSearch("");
   };
@@ -407,6 +501,12 @@ export default function CreateJobPage() {
       
       return newSelectedMembers;
     });
+  };
+
+  const clearAllTeamMembers = () => {
+    setSelectedTeamMembers([]);
+    // Keep the current worker count when clearing team members
+    // This allows manual adjustment after clearing team members
   };
 
   const handleSubmit = async (e) => {
@@ -491,10 +591,10 @@ export default function CreateJobPage() {
         notes: formData.notes,
         internalNotes: formData.internalNotes,
         status: formData.status,
-        duration: parseInt(formData.duration) * 60 || 360, // Convert hours to minutes
+        duration: parseInt(calculateTotalDuration() || 0) * 60 || 360, // Convert total hours to minutes
         workers: parseInt(formData.workers) || 1,
         skillsRequired: parseInt(formData.skillsRequired) || 0,
-        price: parseFloat(formData.price) || 0,
+        price: parseFloat(calculateTotalPrice() || 0),
         discount: parseFloat(formData.discount) || 0,
         additionalFees: parseFloat(formData.additionalFees) || 0,
         taxes: parseFloat(formData.taxes) || 0,
@@ -546,7 +646,10 @@ export default function CreateJobPage() {
         if (jobId) {
           navigate(`/job/${jobId}`);
         } else {
+          // If no job ID returned, navigate to jobs page and refresh
           navigate('/jobs');
+          // Force a page reload to ensure new job appears
+          window.location.reload();
         }
       }, 1500);
     } catch (error) {
@@ -601,6 +704,8 @@ export default function CreateJobPage() {
 
   // Handle modifier selections
   const handleModifierSelection = (modifierId, optionId, isSelected) => {
+    console.log('🔄 Modifier selection:', { modifierId, optionId, isSelected });
+    
     setSelectedModifiers(prev => {
       const currentSelections = prev[modifierId] || [];
       let newSelections;
@@ -613,10 +718,16 @@ export default function CreateJobPage() {
         newSelections = currentSelections.filter(id => id !== optionId);
       }
       
-      return {
+      const updatedSelections = {
         ...prev,
         [modifierId]: newSelections
       };
+      
+      console.log('🔄 Updated modifier selections:', updatedSelections);
+      console.log('🔄 New total price:', calculateTotalPrice());
+      console.log('🔄 New total duration:', calculateTotalDuration());
+      
+      return updatedSelections;
     });
   };
 
@@ -630,23 +741,78 @@ export default function CreateJobPage() {
 
   // Calculate total price including modifiers
   const calculateTotalPrice = () => {
-    let basePrice = formData.price || 0;
-    let modifierPrice = 0;
-    
-    // Add prices from selected modifiers
-    Object.entries(selectedModifiers).forEach(([modifierId, selectedOptionIds]) => {
-      const modifier = formData.serviceModifiers?.find(m => m.id == modifierId);
-      if (modifier) {
-        selectedOptionIds.forEach(optionId => {
-          const option = modifier.options?.find(o => o.id == optionId);
-          if (option && option.price) {
-            modifierPrice += option.price;
-          }
-        });
-      }
-    });
-    
-    return basePrice + modifierPrice;
+    try {
+      // Ensure basePrice is a number
+      let basePrice = parseFloat(formData.price) || 0;
+      let modifierPrice = 0;
+      
+      // Add prices from selected modifiers
+      Object.entries(selectedModifiers).forEach(([modifierId, selectedOptionIds]) => {
+        const modifier = formData.serviceModifiers?.find(m => m.id == modifierId);
+        if (modifier) {
+          selectedOptionIds.forEach(optionId => {
+            const option = modifier.options?.find(o => o.id == optionId);
+            if (option && option.price) {
+              // Ensure option.price is a number
+              const optionPrice = parseFloat(option.price) || 0;
+              modifierPrice += optionPrice;
+            }
+          });
+        }
+      });
+      
+      const totalPrice = basePrice + modifierPrice;
+      console.log('🔄 Price calculation:', { basePrice, modifierPrice, totalPrice });
+      return totalPrice;
+    } catch (error) {
+      console.error('Error calculating total price:', error);
+      return 0;
+    }
+  };
+
+  // Calculate total duration including modifiers
+  const calculateTotalDuration = () => {
+    try {
+      // Ensure baseDuration is a number (already in hours from service selection)
+      let baseDuration = parseFloat(formData.duration) || 0;
+      let modifierDuration = 0;
+      
+      // Add duration from selected modifiers
+      Object.entries(selectedModifiers).forEach(([modifierId, selectedOptionIds]) => {
+        const modifier = formData.serviceModifiers?.find(m => m.id == modifierId);
+        if (modifier) {
+          selectedOptionIds.forEach(optionId => {
+            const option = modifier.options?.find(o => o.id == optionId);
+            if (option && option.duration) {
+              // Modifier durations are stored in minutes (from service-details.jsx)
+              // Convert minutes to hours to match base duration format
+              const optionDurationInMinutes = parseFloat(option.duration) || 0;
+              const optionDurationInHours = optionDurationInMinutes / 60;
+              
+              modifierDuration += optionDurationInHours;
+              
+              console.log(`🔄 Modifier option "${option.label}" duration:`, {
+                originalMinutes: optionDurationInMinutes,
+                convertedHours: optionDurationInHours
+              });
+            }
+          });
+        }
+      });
+      
+      const totalDuration = baseDuration + modifierDuration;
+      console.log('🔄 Duration calculation:', { 
+        baseDuration, 
+        modifierDuration, 
+        totalDuration,
+        formDataDuration: formData.duration,
+        selectedModifiersCount: Object.keys(selectedModifiers).length
+      });
+      return totalDuration;
+    } catch (error) {
+      console.error('Error calculating total duration:', error);
+      return 0;
+    }
   };
 
   // Show loading if user is not available
@@ -723,7 +889,7 @@ export default function CreateJobPage() {
                 {/* Customer Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Customer *
+                    Customer <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <input
@@ -776,7 +942,7 @@ export default function CreateJobPage() {
                 {/* Service Selection */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Service *
+                    Service <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
                     <input
@@ -789,8 +955,19 @@ export default function CreateJobPage() {
                     />
                     {selectedService && (
                       <div className="mt-2 p-3 bg-green-50 rounded-lg">
-                        <p className="font-medium text-green-900">{selectedService.name}</p>
-                        <p className="text-sm text-green-700">${selectedService.price}</p>
+                        <div className="flex items-center space-x-3">
+                          {selectedService.image && (
+                            <img 
+                              src={selectedService.image} 
+                              alt={selectedService.name}
+                              className="w-12 h-12 object-cover rounded-lg"
+                            />
+                          )}
+                          <div className="flex-1">
+                            <p className="font-medium text-green-900">{selectedService.name}</p>
+                            <p className="text-sm text-green-700">${selectedService.price}</p>
+                          </div>
+                        </div>
                       </div>
                     )}
                     {showServiceDropdown && (
@@ -807,8 +984,19 @@ export default function CreateJobPage() {
                             onClick={() => handleServiceSelect(service)}
                             className="w-full text-left px-4 py-2 hover:bg-gray-100 border-b border-gray-100 last:border-b-0"
                           >
-                            <p className="font-medium">{service.name}</p>
-                            <p className="text-sm text-gray-600">${service.price}</p>
+                            <div className="flex items-center space-x-3">
+                              {service.image && (
+                                <img 
+                                  src={service.image} 
+                                  alt={service.name}
+                                  className="w-8 h-8 object-cover rounded"
+                                />
+                              )}
+                              <div className="flex-1">
+                                <p className="font-medium">{service.name}</p>
+                                <p className="text-sm text-gray-600">${service.price}</p>
+                              </div>
+                            </div>
                           </button>
                         ))}
                       </div>
@@ -823,6 +1011,263 @@ export default function CreateJobPage() {
                     + Add New Service
                   </button>
                 </div>
+
+                {/* Service Modifiers - Right after service selection */}
+                {formData.serviceModifiers && formData.serviceModifiers.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-md font-medium text-gray-900">Service Options</h3>
+                    {formData.serviceModifiers.map((modifier) => {
+                      console.log('Modifier data:', modifier);
+                      return (
+                        <div key={modifier.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="font-medium text-gray-900">{modifier.title}</h4>
+                            {modifier.required && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                                Required
+                              </span>
+                            )}
+                          </div>
+                          {modifier.description && (
+                            <p className="text-sm text-gray-600 mb-3">{modifier.description}</p>
+                          )}
+                          
+                          {/* Single Selection */}
+                          {modifier.selectionType === 'single' && (
+                            <div className="space-y-2">
+                              {modifier.options?.map((option) => {
+                                console.log('Option data:', option);
+                                return (
+                                  <label key={option.id} className="flex items-center space-x-3">
+                                    <input
+                                      type="radio"
+                                      name={`modifier-${modifier.id}`}
+                                      value={option.id}
+                                      checked={selectedModifiers[modifier.id]?.includes(option.id)}
+                                      onChange={(e) => {
+                                        if (e.target.checked) {
+                                          handleModifierSelection(modifier.id, option.id, true);
+                                        }
+                                      }}
+                                      className="text-blue-600 focus:ring-blue-500"
+                                    />
+                                    {option.image && (
+                                      <img
+                                        src={option.image}
+                                        alt={option.label || option.name}
+                                        className="w-8 h-8 object-cover rounded-lg border border-gray-200"
+                                      />
+                                    )}
+                                    <span className="text-sm text-gray-900">
+                                      {option.label || option.name || `Option ${option.id}`}
+                                    </span>
+                                    {option.price > 0 && (
+                                      <span className="text-sm text-green-600">+${option.price}</span>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+                          
+                          {/* Multi Selection */}
+                          {modifier.selectionType === 'multi' && (
+                            <div className="space-y-2">
+                              {modifier.options?.map((option) => {
+                                console.log('Option data:', option);
+                                return (
+                                  <label key={option.id} className="flex items-center space-x-3">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedModifiers[modifier.id]?.includes(option.id)}
+                                      onChange={(e) => handleModifierSelection(modifier.id, option.id, e.target.checked)}
+                                      className="text-blue-600 focus:ring-blue-500"
+                                    />
+                                    {option.image && (
+                                      <img
+                                        src={option.image}
+                                        alt={option.label || option.name}
+                                        className="w-8 h-8 object-cover rounded-lg border border-gray-200"
+                                      />
+                                    )}
+                                    <span className="text-sm text-gray-900">
+                                      {option.label || option.name || `Option ${option.id}`}
+                                    </span>
+                                    {option.price > 0 && (
+                                      <span className="text-sm text-green-600">+${option.price}</span>
+                                    )}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Quantity Selection */}
+                          {modifier.selectionType === 'quantity' && (
+                            <div className="space-y-3">
+                              {modifier.options?.map((option) => {
+                                const currentQuantity = selectedModifiers[modifier.id]?.[option.id] || 0;
+                                return (
+                                  <div key={option.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                                    <div className="flex-1 flex items-center space-x-3">
+                                      {option.image && (
+                                        <img
+                                          src={option.image}
+                                          alt={option.label || option.name}
+                                          className="w-8 h-8 object-cover rounded-lg border border-gray-200"
+                                        />
+                                      )}
+                                      <div>
+                                        <span className="text-sm font-medium text-gray-900">
+                                          {option.label || option.name || `Option ${option.id}`}
+                                        </span>
+                                        {option.price > 0 && (
+                                          <span className="text-sm text-green-600 ml-2">+${option.price} each</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (currentQuantity > 0) {
+                                            handleModifierSelection(modifier.id, option.id, currentQuantity - 1);
+                                          }
+                                        }}
+                                        className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
+                                      >
+                                        -
+                                      </button>
+                                      <span className="w-8 text-center text-sm font-medium">{currentQuantity}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          handleModifierSelection(modifier.id, option.id, currentQuantity + 1);
+                                        }}
+                                        className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Intake Questions - Right after modifiers */}
+                {formData.serviceIntakeQuestions && formData.serviceIntakeQuestions.length > 0 && (
+                  <div className="space-y-4">
+                    <h3 className="text-md font-medium text-gray-900">Customer Questions</h3>
+                    {formData.serviceIntakeQuestions.map((question) => (
+                      <div key={question.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="font-medium text-gray-900">{question.question}</h4>
+                          {question.required && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+                              Required
+                            </span>
+                          )}
+                        </div>
+                        {question.description && (
+                          <p className="text-sm text-gray-600 mb-3">{question.description}</p>
+                        )}
+                        
+                        {/* Multiple Choice */}
+                        {question.questionType === 'multiple_choice' && (
+                          <div className="space-y-2">
+                            {question.options?.map((option) => (
+                              <label key={option.id} className="flex items-center space-x-3">
+                                <input
+                                  type={question.selectionType === 'single' ? 'radio' : 'checkbox'}
+                                  name={question.selectionType === 'single' ? `question-${question.id}` : undefined}
+                                  checked={intakeQuestionAnswers[question.id]?.includes(option.id)}
+                                  onChange={(e) => {
+                                    const currentAnswers = intakeQuestionAnswers[question.id] || [];
+                                    let newAnswers;
+                                    if (question.selectionType === 'single') {
+                                      newAnswers = e.target.checked ? [option.id] : [];
+                                    } else {
+                                      if (e.target.checked) {
+                                        newAnswers = [...currentAnswers, option.id];
+                                      } else {
+                                        newAnswers = currentAnswers.filter(id => id !== option.id);
+                                      }
+                                    }
+                                    setIntakeQuestionAnswers(prev => ({
+                                      ...prev,
+                                      [question.id]: newAnswers
+                                    }));
+                                  }}
+                                  className="text-blue-600 focus:ring-blue-500"
+                                />
+                                <span className="text-sm text-gray-900">{option.text}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Dropdown */}
+                        {question.questionType === 'dropdown' && (
+                          <select
+                            value={intakeQuestionAnswers[question.id] || ''}
+                            onChange={(e) => {
+                              setIntakeQuestionAnswers(prev => ({
+                                ...prev,
+                                [question.id]: e.target.value
+                              }));
+                            }}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select an option</option>
+                            {question.options?.map((option) => (
+                              <option key={option.id} value={option.id}>
+                                {option.text}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+
+                        {/* Short Text */}
+                        {question.questionType === 'short_text' && (
+                          <input
+                            type="text"
+                            value={intakeQuestionAnswers[question.id] || ''}
+                            onChange={(e) => {
+                              setIntakeQuestionAnswers(prev => ({
+                                ...prev,
+                                [question.id]: e.target.value
+                              }));
+                            }}
+                            placeholder="Enter your answer"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        )}
+
+                        {/* Long Text */}
+                        {question.questionType === 'long_text' && (
+                          <textarea
+                            value={intakeQuestionAnswers[question.id] || ''}
+                            onChange={(e) => {
+                              setIntakeQuestionAnswers(prev => ({
+                                ...prev,
+                                [question.id]: e.target.value
+                              }));
+                            }}
+                            placeholder="Enter your answer"
+                            rows={3}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                     {/* Status */}
                     <div>
@@ -881,7 +1326,7 @@ export default function CreateJobPage() {
                 {/* Date */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Date *
+                    Date <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="date"
@@ -894,7 +1339,7 @@ export default function CreateJobPage() {
                 {/* Time */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Time *
+                    Time <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="time"
@@ -953,9 +1398,9 @@ export default function CreateJobPage() {
                           onChange={(e) => setFormData(prev => ({ ...prev, recurringEndDate: e.target.value }))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         />
-                </div>
+                      </div>
                     )}
-              </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -982,7 +1427,14 @@ export default function CreateJobPage() {
                     <div className="flex flex-wrap gap-3 mb-6">
                       <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
                         <Clock className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm font-medium text-gray-700">{formData.duration} hr</span>
+                        <span className="text-sm font-medium text-gray-700">
+                          {(calculateTotalDuration() || 0).toFixed(1)} hr
+                          {(calculateTotalDuration() || 0) !== (parseFloat(formData.duration) || 0) && (
+                            <span className="text-xs text-blue-600 ml-1">
+                              (base: {(parseFloat(formData.duration) || 0).toFixed(1)} + modifiers: {((calculateTotalDuration() || 0) - (parseFloat(formData.duration) || 0)).toFixed(1)})
+                            </span>
+                          )}
+                        </span>
                         <button
                           onClick={() => setFormData(prev => ({ ...prev, duration: prev.duration + 0.5 }))}
                           className="ml-1 text-gray-400 hover:text-gray-600"
@@ -992,14 +1444,38 @@ export default function CreateJobPage() {
                       </div>
                       
                       <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
+                        <DollarSign className="w-4 h-4 text-gray-600" />
+                        <span className="text-sm font-medium text-gray-700">
+                          ${(calculateTotalPrice() || 0).toFixed(2)}
+                          {(calculateTotalPrice() || 0) !== (parseFloat(formData.price) || 0) && (
+                            <span className="text-xs text-blue-600 ml-1">
+                              (base: ${(parseFloat(formData.price) || 0).toFixed(2)} + modifiers: ${((calculateTotalPrice() || 0) - (parseFloat(formData.price) || 0)).toFixed(2)})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                      
+                      <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
                         <Users className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm font-medium text-gray-700">{formData.workers} worker{formData.workers !== 1 ? 's' : ''}</span>
-                        <button
-                          onClick={() => setFormData(prev => ({ ...prev, workers: prev.workers + 1 }))}
-                          className="ml-1 text-gray-400 hover:text-gray-600"
-                        >
-                          <Edit className="w-3 h-3" />
-                        </button>
+                        <span className="text-sm font-medium text-gray-700">
+                          {selectedTeamMembers.length > 0 
+                            ? `${selectedTeamMembers.length} worker${selectedTeamMembers.length !== 1 ? 's' : ''} (from team)`
+                            : `${formData.workers} worker${formData.workers !== 1 ? 's' : ''} (manual)`}
+                        </span>
+                        {selectedTeamMembers.length === 0 && (
+                          <button
+                            onClick={() => setFormData(prev => ({ ...prev, workers: prev.workers + 1 }))}
+                            className="ml-1 text-gray-400 hover:text-gray-600"
+                            title="Add worker manually"
+                          >
+                            <Edit className="w-3 h-3" />
+                          </button>
+                        )}
+                        {selectedTeamMembers.length > 0 && (
+                          <span className="ml-1 text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                            Auto
+                          </span>
+                        )}
                       </div>
                       
                       <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
@@ -1013,183 +1489,6 @@ export default function CreateJobPage() {
                         </button>
                       </div>
                     </div>
-
-                    {/* Service Modifiers */}
-                    {formData.serviceModifiers && formData.serviceModifiers.length > 0 && (
-                      <div className="space-y-4">
-                        <h3 className="text-md font-medium text-gray-900">Service Options</h3>
-                        {formData.serviceModifiers.map((modifier) => {
-                          console.log('Modifier data:', modifier);
-                          return (
-                            <div key={modifier.id} className="border border-gray-200 rounded-lg p-4">
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="font-medium text-gray-900">{modifier.title}</h4>
-                                {modifier.required && (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                                    Required
-                                  </span>
-                                )}
-                              </div>
-                              {modifier.description && (
-                                <p className="text-sm text-gray-600 mb-3">{modifier.description}</p>
-                              )}
-                              
-                              {modifier.selectionType === 'single' && (
-                                <div className="space-y-2">
-                                  {modifier.options?.map((option) => {
-                                    console.log('Option data:', option);
-                                    return (
-                                      <label key={option.id} className="flex items-center space-x-3">
-                                        <input
-                                          type="radio"
-                                          name={`modifier-${modifier.id}`}
-                                          value={option.id}
-                                          checked={selectedModifiers[modifier.id]?.includes(option.id)}
-                                          onChange={(e) => {
-                                            if (e.target.checked) {
-                                              handleModifierSelection(modifier.id, option.id, true);
-                                            }
-                                          }}
-                                          className="text-blue-600 focus:ring-blue-500"
-                                        />
-                                        <span className="text-sm text-gray-900">
-                                          {option.label || option.name || `Option ${option.id}`}
-                                        </span>
-                                        {option.price > 0 && (
-                                          <span className="text-sm text-green-600">+${option.price}</span>
-                                        )}
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                              
-                              {modifier.selectionType === 'multi' && (
-                                <div className="space-y-2">
-                                  {modifier.options?.map((option) => {
-                                    console.log('Option data:', option);
-                                    return (
-                                      <label key={option.id} className="flex items-center space-x-3">
-                                        <input
-                                          type="checkbox"
-                                          checked={selectedModifiers[modifier.id]?.includes(option.id)}
-                                          onChange={(e) => handleModifierSelection(modifier.id, option.id, e.target.checked)}
-                                          className="text-blue-600 focus:ring-blue-500"
-                                        />
-                                        <span className="text-sm text-gray-900">
-                                          {option.label || option.name || `Option ${option.id}`}
-                                        </span>
-                                        {option.price > 0 && (
-                                          <span className="text-sm text-green-600">+${option.price}</span>
-                                        )}
-                                      </label>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Intake Questions */}
-                    {formData.serviceIntakeQuestions && formData.serviceIntakeQuestions.length > 0 && (
-                      <div className="space-y-4">
-                        <h3 className="text-md font-medium text-gray-900">Customer Questions</h3>
-                        {formData.serviceIntakeQuestions.map((question) => (
-                          <div key={question.id} className="border border-gray-200 rounded-lg p-4">
-                            <div className="flex items-center justify-between mb-3">
-                              <h4 className="font-medium text-gray-900">{question.question}</h4>
-                              {question.required && (
-                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                                  Required
-                                </span>
-                              )}
-                            </div>
-                            {question.description && (
-                              <p className="text-sm text-gray-600 mb-3">{question.description}</p>
-                            )}
-                            
-                            {question.questionType === 'multiple_choice' && question.selectionType === 'single' && (
-                              <div className="space-y-2">
-                                {question.options?.map((option) => (
-                                  <label key={option.id} className="flex items-center space-x-3">
-                                    <input
-                                      type="radio"
-                                      name={`question-${question.id}`}
-                                      value={option.text}
-                                      checked={intakeQuestionAnswers[question.id] === option.text}
-                                      onChange={(e) => handleIntakeQuestionAnswer(question.id, e.target.value)}
-                                      className="text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <span className="text-sm text-gray-900">{option.text}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            )}
-                            
-                            {question.questionType === 'multiple_choice' && question.selectionType === 'multi' && (
-                              <div className="space-y-2">
-                                {question.options?.map((option) => (
-                                  <label key={option.id} className="flex items-center space-x-3">
-                                    <input
-                                      type="checkbox"
-                                      checked={intakeQuestionAnswers[question.id]?.includes(option.text)}
-                                      onChange={(e) => {
-                                        const currentAnswers = intakeQuestionAnswers[question.id] || [];
-                                        if (e.target.checked) {
-                                          handleIntakeQuestionAnswer(question.id, [...currentAnswers, option.text]);
-                                        } else {
-                                          handleIntakeQuestionAnswer(question.id, currentAnswers.filter(a => a !== option.text));
-                                        }
-                                      }}
-                                      className="text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <span className="text-sm text-gray-900">{option.text}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            )}
-                            
-                            {question.questionType === 'dropdown' && (
-                              <select
-                                value={intakeQuestionAnswers[question.id] || ''}
-                                onChange={(e) => handleIntakeQuestionAnswer(question.id, e.target.value)}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              >
-                                <option value="">Select an option...</option>
-                                {question.options?.map((option) => (
-                                  <option key={option.id} value={option.text}>
-                                    {option.text}
-                                  </option>
-                                ))}
-                              </select>
-                            )}
-                            
-                            {question.questionType === 'short_text' && (
-                              <input
-                                type="text"
-                                value={intakeQuestionAnswers[question.id] || ''}
-                                onChange={(e) => handleIntakeQuestionAnswer(question.id, e.target.value)}
-                                placeholder="Enter your answer..."
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            )}
-                            
-                            {question.questionType === 'long_text' && (
-                              <textarea
-                                rows={3}
-                                value={intakeQuestionAnswers[question.id] || ''}
-                                onChange={(e) => handleIntakeQuestionAnswer(question.id, e.target.value)}
-                                placeholder="Enter your answer..."
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
 
                     {/* Special Instructions */}
                     <div>
@@ -1249,8 +1548,7 @@ export default function CreateJobPage() {
                   </div>
                 </div>
               )}
-                  </div>
-                  
+            </div>
             {/* Team Assignment Section */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200">
               <div 
@@ -1270,7 +1568,10 @@ export default function CreateJobPage() {
                 <div className="px-6 pb-6 space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Assign Team Members</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Assign Team Members
+                        <span className="text-xs text-gray-500 ml-1">(Worker count will be set automatically)</span>
+                      </label>
                       <div className="relative">
                         <button
                           type="button"
@@ -1321,7 +1622,16 @@ export default function CreateJobPage() {
                       {/* Show selected team members */}
                       {selectedTeamMembers.length > 0 && (
                         <div className="mt-3 space-y-2">
-                          <p className="text-sm font-medium text-gray-700">Selected Team Members:</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-gray-700">Selected Team Members:</p>
+                            <button
+                              type="button"
+                              onClick={clearAllTeamMembers}
+                              className="text-xs text-red-600 hover:text-red-700"
+                            >
+                              Clear All
+                            </button>
+                          </div>
                           <div className="space-y-2">
                             {selectedTeamMembers.map(member => (
                               <div key={member.id} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
@@ -1335,9 +1645,9 @@ export default function CreateJobPage() {
                                 </button>
                               </div>
                             ))}
-                </div>
-              </div>
-            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -1672,7 +1982,14 @@ export default function CreateJobPage() {
       <ServiceModal
         isOpen={isServiceModalOpen}
         onClose={() => setIsServiceModalOpen(false)}
-        onSave={handleServiceSelect}
+        onSave={(newService) => {
+          // Add the new service to the services list
+          setServices(prev => [...prev, newService]);
+          // Select the newly created service
+          handleServiceSelect(newService);
+          // Close the modal
+          setIsServiceModalOpen(false);
+        }}
         user={user}
       />
       

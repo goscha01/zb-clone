@@ -8,7 +8,8 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
   const navigate = useNavigate()
   const modalRef = useRef(null)
   const [customerData, setCustomerData] = useState({
-    name: "",
+    firstName: "",
+    lastName: "",
     address: "",
     suite: "",
     phone: "",
@@ -26,8 +27,8 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
   const [isValidatingEmail, setIsValidatingEmail] = useState(false)
   const [isValidatingPhone, setIsValidatingPhone] = useState(false)
 
-  // API base URL - will use backend proxy for Google Places API
-  const API_BASE_URL = 'https://zenbookapi.now2code.online/api'
+  // API base URL - using backend proxy for Google Places API to avoid CORS issues
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://zenbookapi.now2code.online/api'
 
   // Function to parse combined address into street address and suite
   const parseCombinedAddress = (combinedAddress) => {
@@ -79,8 +80,30 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
   useEffect(() => {
     console.log('CustomerModal useEffect:', { isOpen, isEditing, customer })
     if (!isOpen) {
+      // Clear form data when modal closes
       setCustomerData({
-        name: "",
+        firstName: "",
+        lastName: "",
+        address: "",
+        suite: "",
+        phone: "",
+        email: "",
+        notes: "",
+        city: "",
+        state: "",
+        zipCode: ""
+      })
+      setError("")
+      setValidationErrors({})
+      setAddressSuggestions([])
+      setShowAddressSuggestions(false)
+      setIsValidatingEmail(false)
+      setIsValidatingPhone(false)
+    } else if (isOpen && !isEditing) {
+      // Clear form data when opening for new customer (not editing)
+      setCustomerData({
+        firstName: "",
+        lastName: "",
         address: "",
         suite: "",
         phone: "",
@@ -104,7 +127,8 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
       const parsedAddress = parseCombinedAddress(customer.address)
       
       setCustomerData({
-        name: `${customer.first_name || ""} ${customer.last_name || ""}`.trim(),
+        firstName: customer.first_name || "",
+        lastName: customer.last_name || "",
         address: customer.suite ? customer.address : parsedAddress.address,
         suite: customer.suite || parsedAddress.suite,
         phone: customer.phone || "",
@@ -117,7 +141,22 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
     }
   }, [isOpen, isEditing, customer])
 
-  // Removed backdrop click handler - modal should only close via buttons or successful save
+  // Add click-outside handler to close modal
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        onClose()
+      }
+    }
+
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [isOpen, onClose])
 
   const validateEmail = async (email) => {
     if (!email) return true // Email is optional
@@ -144,8 +183,8 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
     if (!phone) return true // Phone is optional
     // Remove all formatting characters (spaces, dashes, parentheses)
     const cleaned = phone.replace(/[\s\-\(\)]/g, '')
-    // Server validation: must start with + or digit 1-9, then 0-15 more digits
-    const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/
+    // More flexible validation: allow common phone number formats
+    const phoneRegex = /^[\+]?[1-9][\d]{6,15}$/
     return phoneRegex.test(cleaned)
   }
 
@@ -181,11 +220,18 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
           delete errors.phone
         }
         break
-      case 'name':
+      case 'firstName':
         if (!value.trim()) {
-          errors.name = 'Full name is required'
+          errors.firstName = 'First name is required'
         } else {
-          delete errors.name
+          delete errors.firstName
+        }
+        break
+      case 'lastName':
+        if (!value.trim()) {
+          errors.lastName = 'Last name is required'
+        } else {
+          delete errors.lastName
         }
         break
     }
@@ -214,13 +260,33 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
     const value = e.target.value
     const formatted = formatPhone(value)
     setCustomerData({ ...customerData, phone: formatted })
-    await validateField('phone', formatted)
+    // Validate phone in real-time as user types
+    if (formatted) {
+      await validateField('phone', formatted)
+    } else {
+      // Clear phone validation error if field is empty
+      setValidationErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors.phone
+        return newErrors
+      })
+    }
   }
 
   const handleEmailChange = async (e) => {
     const value = e.target.value
     setCustomerData({ ...customerData, email: value })
-    await validateField('email', value)
+    // Validate email in real-time as user types
+    if (value) {
+      await validateField('email', value)
+    } else {
+      // Clear email validation error if field is empty
+      setValidationErrors(prev => {
+        const newErrors = { ...prev }
+        delete newErrors.email
+        return newErrors
+      })
+    }
   }
 
   const handleNameChange = (e) => {
@@ -305,8 +371,13 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
     setError("")
     
     // Validate required fields
-    if (!customerData.name.trim()) {
-      setError('Full name is required')
+    if (!customerData.firstName.trim()) {
+      setError('First name is required')
+      return
+    }
+    
+    if (!customerData.lastName.trim()) {
+      setError('Last name is required')
       return
     }
     
@@ -325,15 +396,12 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
     setLoading(true)
     
     try {
-      // Use full name as both first and last name to satisfy database requirements
-      const fullName = customerData.name.trim()
-      
       // Format phone number for server (remove all formatting, keep only digits and +)
       const formattedPhone = customerData.phone ? customerData.phone.replace(/[\s\-\(\)]/g, '') : ''
       
       const customerToSave = {
-        firstName: fullName, // Store full name in firstName field
-        lastName: "", // Keep lastName empty or use a placeholder
+        firstName: customerData.firstName.trim(),
+        lastName: customerData.lastName.trim(),
         address: customerData.address,
         suite: customerData.suite,
         phone: formattedPhone,
@@ -395,23 +463,49 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
 
           <form id="customer-form" onSubmit={handleSubmit} className="space-y-6" noValidate>
             {/* Customer Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Full Name *
-              </label>
-              <input
-                type="text"
-                placeholder="Enter customer's full name"
-                value={customerData.name}
-                onChange={handleNameChange}
-                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${
-                  validationErrors.name ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
-                }`}
-                required
-              />
-              {validationErrors.name && (
-                <p className="mt-1 text-sm text-red-600">{validationErrors.name}</p>
-              )}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  First Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="First name"
+                  value={customerData.firstName}
+                  onChange={(e) => {
+                    setCustomerData({ ...customerData, firstName: e.target.value })
+                    validateField('firstName', e.target.value)
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${
+                    validationErrors.firstName ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
+                  }`}
+                  required
+                />
+                {validationErrors.firstName && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors.firstName}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="Last name"
+                  value={customerData.lastName}
+                  onChange={(e) => {
+                    setCustomerData({ ...customerData, lastName: e.target.value })
+                    validateField('lastName', e.target.value)
+                  }}
+                  className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${
+                    validationErrors.lastName ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
+                  }`}
+                  required
+                />
+                {validationErrors.lastName && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors.lastName}</p>
+                )}
+              </div>
             </div>
 
             {/* Address */}
@@ -447,14 +541,14 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
               </div>
             </div>
 
-            {/* Suite */}
+            {/* Apartment/Unit */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Suite
+                Apartment/Unit
               </label>
               <input
                 type="text"
-                placeholder="Suite, Apt, Unit, etc."
+                placeholder="Apt, Unit, Suite, Floor, etc."
                 value={customerData.suite}
                 onChange={(e) => setCustomerData({ ...customerData, suite: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm"
@@ -472,12 +566,19 @@ const CustomerModal = ({ isOpen, onClose, onSave, customer, isEditing = false })
                   placeholder="(555) 123-4567"
                   value={customerData.phone}
                   onChange={handlePhoneChange}
-                  maxLength={15}
+                  maxLength={20}
                   autoComplete="tel"
+                  list="phone-suggestions"
                   className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-gray-900 text-sm ${
                     validationErrors.phone ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300'
                   }`}
                 />
+                <datalist id="phone-suggestions">
+                  <option value="(555) 123-4567" />
+                  <option value="(555) 987-6543" />
+                  <option value="+1 (555) 123-4567" />
+                  <option value="555-123-4567" />
+                </datalist>
                 {isValidatingPhone && (
                   <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-500"></div>

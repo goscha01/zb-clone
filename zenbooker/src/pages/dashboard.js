@@ -61,6 +61,7 @@ const ZenbookerDashboard = () => {
       completed: false,
       link: "/settings/availability",
       icon: Calendar,
+      hidden: true,
     },
     {
       number: 4,
@@ -69,6 +70,7 @@ const ZenbookerDashboard = () => {
       completed: false,
       link: "/settings/availability",
       icon: Calendar,
+      hidden: true,
     },
     {
       number: 5,
@@ -86,6 +88,7 @@ const ZenbookerDashboard = () => {
       completed: false,
       link: "/online-booking",
       icon: Globe,
+      hidden: true,
     },
     {
       number: 7,
@@ -560,7 +563,7 @@ const ZenbookerDashboard = () => {
                 
                 <div className="space-y-3 lg:space-y-4">
                   {setupTasks.map((task, index) => (
-                    <Link to={task.link} key={index}>
+                    <Link to={task.link} key={index} className={task.hidden ? "feature-hidden" : ""}>
                       <div className="flex items-start space-x-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group relative">
                         <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${task.completed ? 'bg-green-50' : 'bg-primary-50'}`}>
                           {task.completed ? (
@@ -613,29 +616,41 @@ const ZenbookerDashboard = () => {
                   </div>
                 </div>
 
-                {/* Map placeholder */}
-                <div className="bg-gray-50 rounded-xl h-64 flex items-center justify-center relative overflow-hidden">
-                  <div className="absolute top-4 right-4 bg-white rounded-lg shadow-sm border border-gray-200 text-sm">
-                    <button className="px-4 py-2 bg-white text-gray-900 font-medium rounded-l-lg border-r border-gray-200">Map</button>
-                    <button className="px-4 py-2 text-gray-600 hover:text-gray-900 transition-colors duration-200 rounded-r-lg">Satellite</button>
+                {/* Map Section */}
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                  <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900">Today's Jobs Map</h3>
+                    <div className="flex bg-gray-100 rounded-lg p-1">
+                      <button className="px-3 py-1 bg-white text-gray-900 font-medium rounded-md shadow-sm text-sm">Map</button>
+                      <button className="px-3 py-1 text-gray-600 hover:text-gray-900 transition-colors duration-200 text-sm">Satellite</button>
+                    </div>
                   </div>
-                  {dashboardData.todayJobs > 0 ? (
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3 mx-auto shadow-sm">
-                        <Calendar className="w-6 h-6 text-green-600" />
+                  
+                  <div className="h-64 relative">
+                    {dashboardData.todayJobs > 0 ? (
+                      <iframe
+                        width="100%"
+                        height="100%"
+                        frameBorder="0"
+                        style={{ border: 0 }}
+                        src="https://www.google.com/maps/embed/v1/view?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNGg&center=37.7749,-122.4194&zoom=10"
+                        allowFullScreen
+                        loading="lazy"
+                        referrerPolicy="no-referrer-when-downgrade"
+                        title="Today's Jobs Map"
+                      />
+                    ) : (
+                      <div className="h-full flex items-center justify-center bg-gray-50">
+                        <div className="text-center">
+                          <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 mx-auto shadow-sm">
+                            <Calendar className="w-6 h-6 text-gray-400" />
+                          </div>
+                          <p className="text-gray-900 font-medium">No scheduled jobs</p>
+                          <p className="text-gray-600 text-sm mt-1">No jobs to display on map today</p>
+                        </div>
                       </div>
-                      <p className="text-gray-900 font-medium">{dashboardData.todayJobs} job{dashboardData.todayJobs !== 1 ? 's' : ''} scheduled</p>
-                      <p className="text-gray-600 text-sm mt-1">You have {dashboardData.todayJobs} job{dashboardData.todayJobs !== 1 ? 's' : ''} to complete today.</p>
-                    </div>
-                  ) : (
-                    <div className="text-center">
-                      <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 mx-auto shadow-sm">
-                        <Calendar className="w-6 h-6 text-gray-400" />
-                      </div>
-                      <p className="text-gray-900 font-medium">No scheduled jobs</p>
-                      <p className="text-gray-600 text-sm mt-1">Looks like you don't have anything to do today.</p>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
 

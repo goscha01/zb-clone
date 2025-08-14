@@ -182,7 +182,6 @@ export default function SignInForm() {
             autoComplete="on"
             onSubmit={handleSubmit}
             className="space-y-6"
-            action="javascript:void(0)"
           >
             {/* Email Input */}
             <div>
@@ -191,7 +190,7 @@ export default function SignInForm() {
                 id="email"
                 type="email"
                 name="email"
-                autoComplete="username email"
+                autoComplete="email"
                 placeholder="Email"
                 value={formData.email}
                 onChange={handleInputChange}
@@ -224,7 +223,7 @@ export default function SignInForm() {
                 }`}
                 required
                 disabled={isLoading}
-                data-lpignore="true"
+
               />
               {errors.password && (
                 <p className="text-red-500 text-sm mt-1">{errors.password}</p>

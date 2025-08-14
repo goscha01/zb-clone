@@ -132,9 +132,13 @@ export const servicesAPI = {
 
   update: async (id, serviceData) => {
     try {
+      console.log('🌐 API: Updating service with ID:', id);
+      console.log('🌐 API: Service data being sent:', serviceData);
       const response = await api.put(`/services/${id}`, serviceData);
+      console.log('🌐 API: Update response:', response.data);
       return response.data;
     } catch (error) {
+      console.error('🌐 API: Update error:', error);
       throw error;
     }
   },
@@ -660,6 +664,15 @@ export const jobsAPI = {
   assignToTeamMember: async (jobId, teamMemberId) => {
     try {
       const response = await api.post(`/jobs/${jobId}/assign`, { teamMemberId });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  removeTeamMember: async (jobId, teamMemberId) => {
+    try {
+      const response = await api.delete(`/jobs/${jobId}/assign/${teamMemberId}`);
       return response.data;
     } catch (error) {
       throw error;

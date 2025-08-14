@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
-import { GripVertical, Wrench, Plus, AlertCircle, Loader2 } from "lucide-react"
+import { GripVertical, Wrench, Plus, AlertCircle, Loader2, Trash2, X } from "lucide-react"
 import CreateServiceModal from "../components/create-service-modal"
 import ServiceTemplatesModal from "../components/service-templates-modal"
 import { servicesAPI } from "../services/api"
@@ -14,9 +14,14 @@ const ZenbookerServices = () => {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [categoriesEnabled, setCategoriesEnabled] = useState(false)
+  const [categoriesEnabled, setCategoriesEnabled] = useState(true)
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [templatesModalOpen, setTemplatesModalOpen] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [serviceToDelete, setServiceToDelete] = useState(null)
+  const [categories, setCategories] = useState([])
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
+  const [newCategoryName, setNewCategoryName] = useState("")
   
   // API State
   const [services, setServices] = useState([])
@@ -37,6 +42,10 @@ const ZenbookerServices = () => {
       setError("")
       const response = await servicesAPI.getAll(user.id)
       setServices(response)
+      
+      // Extract unique categories from services
+      const uniqueCategories = [...new Set(response.map(service => service.category).filter(Boolean))]
+      setCategories(uniqueCategories)
     } catch (error) {
       console.error('Error fetching services:', error)
       setError("Failed to load services. Please try again.")
@@ -106,16 +115,24 @@ const ZenbookerServices = () => {
   }
 
   const handleDeleteService = async (serviceId) => {
-    if (!window.confirm("Are you sure you want to delete this service?")) return
+    const service = services.find(s => s.id === serviceId)
+    setServiceToDelete(service)
+    setDeleteModalOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!serviceToDelete) return
     
     try {
-      setDeleteLoading(serviceId)
+      setDeleteLoading(serviceToDelete.id)
       setError("")
       
-      await servicesAPI.delete(serviceId)
+      await servicesAPI.delete(serviceToDelete.id)
       
       // Remove the service from the list
-      setServices(prev => prev.filter(service => service.id !== serviceId))
+      setServices(prev => prev.filter(service => service.id !== serviceToDelete.id))
+      setDeleteModalOpen(false)
+      setServiceToDelete(null)
     } catch (error) {
       console.error('Error deleting service:', error)
       
@@ -141,6 +158,11 @@ const ZenbookerServices = () => {
     }
   }
 
+  const cancelDelete = () => {
+    setDeleteModalOpen(false)
+    setServiceToDelete(null)
+  }
+
   const handleSelectTemplate = async (template) => {
     setTemplatesModalOpen(false)
     
@@ -164,6 +186,48 @@ const ZenbookerServices = () => {
 
   const handleRetry = () => {
     fetchServices()
+  }
+
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) return
+    
+    try {
+      setCategories(prev => [...prev, newCategoryName.trim()])
+      setNewCategoryName("")
+      setShowAddCategoryModal(false)
+    } catch (error) {
+      console.error('Error adding category:', error)
+      setError("Failed to add category. Please try again.")
+    }
+  }
+
+  const handleMoveServiceToCategory = async (serviceId, newCategory) => {
+    try {
+      const service = services.find(s => s.id === serviceId)
+      if (!service) return
+      
+      // Update the service in the backend
+      await servicesAPI.update(serviceId, { ...service, category: newCategory })
+      
+      // Update the service in the local state
+      setServices(prev => prev.map(s => 
+        s.id === serviceId ? { ...s, category: newCategory } : s
+      ))
+    } catch (error) {
+      console.error('Error moving service to category:', error)
+      setError("Failed to move service to category. Please try again.")
+    }
+  }
+
+  const handleRemoveCategory = (categoryName) => {
+    // Move all services in this category to "Uncategorized"
+    const servicesInCategory = services.filter(s => s.category === categoryName)
+    
+    servicesInCategory.forEach(service => {
+      handleMoveServiceToCategory(service.id, "")
+    })
+    
+    setCategories(prev => prev.filter(cat => cat !== categoryName))
   }
 
   return (
@@ -241,65 +305,161 @@ const ZenbookerServices = () => {
                   </button>
                 </div>
               ) : (
-                services.map((service, index) => (
-                  <div
-                    key={service.id}
-                    className={`flex items-center justify-between p-4 ${
-                      index !== services.length - 1 ? "border-b border-gray-200" : ""
-                    }`}
-                  >
-                    <div 
-                      className="flex items-center space-x-4 flex-1 cursor-pointer hover:bg-gray-50 p-2 rounded"
-                      onClick={() => handleServiceClick(service.id)}
-                    >
-                      <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
-                      <Wrench className="w-5 h-5 text-gray-400" />
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-medium text-gray-900">{service.name}</h3>
-                        {service.description && (
-                          <p className="text-sm text-gray-500 mt-1 line-clamp-1">
-                            {service.description}
-                          </p>
-                        )}
-                        <div className="flex items-center space-x-4 mt-2">
-                          <span className="text-sm text-gray-600">
-                            {service.price ? `$${service.price}` : 'Free'}
+                <div>
+                  {categoriesEnabled && categories.length > 0 ? (
+                    // Group services by category
+                    categories.map(category => {
+                      const categoryServices = services.filter(s => s.category === category)
+                      return (
+                        <div key={category} className="border-b border-gray-200 last:border-b-0">
+                          <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
+                            <h3 className="font-medium text-gray-900">{category}</h3>
+                            <div className="flex items-center space-x-2">
+                              <span className="text-sm text-gray-500">{categoryServices.length} service{categoryServices.length !== 1 ? 's' : ''}</span>
+                              <button
+                                onClick={() => handleRemoveCategory(category)}
+                                className="text-red-600 hover:text-red-700 text-sm"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                          {categoryServices.map((service, index) => (
+                            <div
+                              key={service.id}
+                              className={`flex items-center justify-between p-4 ${
+                                index !== categoryServices.length - 1 ? "border-b border-gray-100" : ""
+                              }`}
+                            >
+                              <div 
+                                className="flex items-center space-x-4 flex-1 cursor-pointer hover:bg-gray-50 p-2 rounded"
+                                onClick={() => handleServiceClick(service.id)}
+                              >
+                                <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
+                                {service.image ? (
+                                  <img 
+                                    src={service.image} 
+                                    alt={service.name}
+                                    className="w-10 h-10 object-cover rounded"
+                                  />
+                                ) : (
+                                  <Wrench className="w-5 h-5 text-gray-400" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-medium text-gray-900">{service.name}</h3>
+                                  {service.description && (
+                                    <p className="text-sm text-gray-500 mt-1 line-clamp-1">
+                                      {service.description}
+                                    </p>
+                                  )}
+                                  <div className="flex items-center space-x-4 mt-2">
+                                    <span className="text-sm text-gray-600">
+                                      {service.price ? `$${service.price}` : 'Free'}
+                                    </span>
+                                    {service.duration && (
+                                      <span className="text-sm text-gray-600">
+                                        {Math.floor(service.duration / 60)}h {service.duration % 60}m
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-4">
+                                <div className={`w-2 h-2 rounded-full ${service.visible ? "bg-green-500" : "bg-yellow-500"}`}></div>
+                                <span className={`text-sm ${service.visible ? "text-green-700" : "text-yellow-700"}`}>
+                                  {service.visible ? "Visible" : "Hidden"}
+                                </span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDeleteService(service.id)
+                                  }}
+                                  disabled={deleteLoading === service.id}
+                                  className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50"
+                                >
+                                  {deleteLoading === service.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    "Delete"
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    })
+                  ) : (
+                    // Show all services without categories
+                    services.map((service, index) => (
+                      <div
+                        key={service.id}
+                        className={`flex items-center justify-between p-4 ${
+                          index !== services.length - 1 ? "border-b border-gray-200" : ""
+                        }`}
+                      >
+                        <div 
+                          className="flex items-center space-x-4 flex-1 cursor-pointer hover:bg-gray-50 p-2 rounded"
+                          onClick={() => handleServiceClick(service.id)}
+                        >
+                          <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
+                          {service.image ? (
+                            <img 
+                              src={service.image} 
+                              alt={service.name}
+                              className="w-10 h-10 object-cover rounded"
+                            />
+                          ) : (
+                            <Wrench className="w-5 h-5 text-gray-400" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-medium text-gray-900">{service.name}</h3>
+                            {service.description && (
+                              <p className="text-sm text-gray-500 mt-1 line-clamp-1">
+                                {service.description}
+                              </p>
+                            )}
+                            <div className="flex items-center space-x-4 mt-2">
+                              <span className="text-sm text-gray-600">
+                                {service.price ? `$${service.price}` : 'Free'}
+                              </span>
+                              {service.duration && (
+                                <span className="text-sm text-gray-600">
+                                  {Math.floor(service.duration / 60)}h {service.duration % 60}m
+                                </span>
+                              )}
+                              {service.category && (
+                                <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                                  {service.category}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          <div className={`w-2 h-2 rounded-full ${service.visible ? "bg-green-500" : "bg-yellow-500"}`}></div>
+                          <span className={`text-sm ${service.visible ? "text-green-700" : "text-yellow-700"}`}>
+                            {service.visible ? "Visible" : "Hidden"}
                           </span>
-                          {service.duration && (
-                            <span className="text-sm text-gray-600">
-                              {Math.floor(service.duration / 60)}h {service.duration % 60}m
-                            </span>
-                          )}
-                          {service.category && (
-                            <span className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                              {service.category}
-                            </span>
-                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteService(service.id)
+                            }}
+                            disabled={deleteLoading === service.id}
+                            className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50"
+                          >
+                            {deleteLoading === service.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              "Delete"
+                            )}
+                          </button>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-2 h-2 rounded-full ${service.visible ? "bg-green-500" : "bg-yellow-500"}`}></div>
-                      <span className={`text-sm ${service.visible ? "text-green-700" : "text-yellow-700"}`}>
-                        {service.visible ? "Visible" : "Hidden"}
-                      </span>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteService(service.id)
-                        }}
-                        disabled={deleteLoading === service.id}
-                        className="text-red-600 hover:text-red-700 text-sm font-medium disabled:opacity-50"
-                      >
-                        {deleteLoading === service.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          "Delete"
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                ))
+                    ))
+                  )}
+                </div>
               )}
             </div>
 
@@ -328,6 +488,38 @@ const ZenbookerServices = () => {
                   </button>
                 </div>
               </div>
+              
+              {categoriesEnabled && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-gray-900">Categories</h4>
+                    <button
+                      onClick={() => setShowAddCategoryModal(true)}
+                      className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+                    >
+                      Add Category
+                    </button>
+                  </div>
+                  
+                  {categories.length > 0 ? (
+                    <div className="space-y-2">
+                      {categories.map(category => (
+                        <div key={category} className="flex items-center justify-between bg-white p-3 rounded border">
+                          <span className="font-medium text-gray-900">{category}</span>
+                          <button
+                            onClick={() => handleRemoveCategory(category)}
+                            className="text-red-600 hover:text-red-700 text-sm"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 text-sm">No categories created yet. Add your first category to get started.</p>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -349,6 +541,85 @@ const ZenbookerServices = () => {
         onClose={() => setTemplatesModalOpen(false)}
         onSelectTemplate={handleSelectTemplate}
       />
+
+              {/* Delete Confirmation Modal */}
+        {deleteModalOpen && serviceToDelete && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Confirm Deletion</h3>
+                <button onClick={cancelDelete} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-gray-800 mb-4">
+                Are you sure you want to delete the service "{serviceToDelete.name}"? This action cannot be undone.
+              </p>
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={cancelDelete}
+                  className="px-4 py-2 rounded-lg text-gray-700 border border-gray-300 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  disabled={deleteLoading === serviceToDelete.id}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deleteLoading === serviceToDelete.id ? (
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  ) : (
+                    <Trash2 className="w-4 h-4 mr-2" />
+                  )}
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Category Modal */}
+        {showAddCategoryModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Add Category</h3>
+                <button onClick={() => setShowAddCategoryModal(false)} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Category Name
+                </label>
+                <input
+                  type="text"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="Enter category name"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowAddCategoryModal(false)}
+                  className="px-4 py-2 rounded-lg text-gray-700 border border-gray-300 hover:bg-gray-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAddCategory}
+                  disabled={!newCategoryName.trim()}
+                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                >
+                  Add Category
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
     </div>
   )
 }

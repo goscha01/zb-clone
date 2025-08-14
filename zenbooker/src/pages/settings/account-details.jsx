@@ -2,11 +2,15 @@
 
 import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
-import Sidebar from "../../components/sidebar"
-import MobileHeader from "../../components/mobile-header"
-import { ChevronLeft, Camera, Eye, EyeOff, Check, X } from "lucide-react"
+import PageLayout from "../../components/PageLayout"
+import Card from "../../components/Card"
+import Button from "../../components/Button"
+import Input from "../../components/Input"
+import { Camera, Eye, EyeOff, Check, X } from "lucide-react"
 import { userProfileAPI, authAPI } from "../../services/api"
 import { useAuth } from "../../context/AuthContext"
+import Sidebar from "../../components/sidebar"
+import MobileHeader from "../../components/mobile-header"
 
 const AccountDetails = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -19,6 +23,7 @@ const AccountDetails = () => {
   
   const [formData, setFormData] = useState({
     fullName: "",
+    businessName: "",
     phone: "",
     email: "",
     emailNotifications: true,
@@ -107,6 +112,7 @@ const AccountDetails = () => {
       console.log('Profile loaded:', profile);
       setFormData({
         fullName: `${profile.firstName} ${profile.lastName}`,
+        businessName: profile.business_name || "",
         phone: profile.phone || "",
         email: profile.email,
         emailNotifications: profile.emailNotifications,
@@ -125,6 +131,7 @@ const AccountDetails = () => {
         const user = authAPI.getCurrentUser()
         setFormData({
           fullName: user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'User',
+          businessName: "",
           phone: "",
           email: user?.email || "",
           emailNotifications: true,
@@ -137,6 +144,7 @@ const AccountDetails = () => {
         const user = authAPI.getCurrentUser()
         setFormData({
           fullName: user?.firstName ? `${user.firstName} ${user.lastName || ''}` : 'User',
+          businessName: "",
           phone: "",
           email: user?.email || "",
           emailNotifications: true,
@@ -180,6 +188,7 @@ const AccountDetails = () => {
         userId: user.id,
         firstName,
         lastName,
+        businessName: formData.businessName,
         phone: formData.phone,
         emailNotifications: formData.emailNotifications,
         smsNotifications: formData.smsNotifications
@@ -355,46 +364,32 @@ const AccountDetails = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gray-50 overflow-hidden">
-      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-
-      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
-        <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
-
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 px-6 py-4">
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => navigate("/settings")}
-              className="flex items-center space-x-2 text-gray-600 hover:text-gray-900"
-            >
-              <ChevronLeft className="w-5 h-5" />
-              <span className="text-sm">Settings</span>
-            </button>
-            <h1 className="text-2xl font-semibold text-gray-900">Account Details</h1>
-          </div>
-        </div>
-
+    <PageLayout
+      title="Account Details"
+      subtitle="Manage your account settings and preferences"
+      showBackButton={true}
+      backLabel="Settings"
+      sidebarOpen={sidebarOpen}
+      setSidebarOpen={setSidebarOpen}
+      maxWidth="max-w-4xl"
+    >
         {/* Message */}
         {message.text && (
-          <div className={`px-6 py-3 ${message.type === 'success' ? 'bg-green-50 border-l-4 border-green-400' : 'bg-red-50 border-l-4 border-red-400'}`}>
+        <div className={`mb-6 p-4 rounded-lg ${message.type === 'success' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
             <div className="flex items-center">
               {message.type === 'success' ? (
-                <Check className="w-5 h-5 text-green-400 mr-2" />
+              <Check className="w-5 h-5 text-green-500 mr-2" />
               ) : (
-                <X className="w-5 h-5 text-red-400 mr-2" />
+              <X className="w-5 h-5 text-red-500 mr-2" />
               )}
-              <span className={`text-sm ${message.type === 'success' ? 'text-green-700' : 'text-red-700'}`}>
+            <span className={`text-sm font-medium ${message.type === 'success' ? 'text-green-800' : 'text-red-800'}`}>
                 {message.text}
               </span>
             </div>
           </div>
         )}
 
-        {/* Content */}
-        <div className="flex-1 overflow-auto">
-          <div className="max-w-4xl mx-auto p-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
+      <Card>
               {/* Profile Picture */}
               <div className="flex items-center space-x-4 mb-8">
                 <div className="relative w-20 h-20 flex-shrink-0">
@@ -469,32 +464,28 @@ const AccountDetails = () => {
 
               {/* Form Fields */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                {/* Full Name */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Full Name
-                  </label>
-                  <input
+                <Input
+                  label="Full Name"
                     type="text"
                     value={formData.fullName}
                     onChange={(e) => handleInputChange('fullName', e.target.value)}
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                {/* Phone */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Phone
-                  </label>
-                  <input
+                />
+                
+                <Input
+                  label="Company Name"
+                  type="text"
+                  value={formData.businessName}
+                  onChange={(e) => handleInputChange('businessName', e.target.value)}
+                  placeholder="Your Company Name"
+                />
+                
+                <Input
+                  label="Phone"
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => handleInputChange('phone', e.target.value)}
                     placeholder="Mobile Phone Number"
-                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
-                </div>
               </div>
 
               {/* Email */}
@@ -585,28 +576,26 @@ const AccountDetails = () => {
 
               {/* Save Button */}
               <div className="mt-8 pt-6 border-t border-gray-200">
-                <button
+                <Button
                   onClick={handleSaveProfile}
+                  loading={saving}
                   disabled={saving}
-                  className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {saving ? 'Saving...' : 'Save Changes'}
-                </button>
+                </Button>
               </div>
 
               {/* Sign Out Button */}
               <div className="mt-6">
-                <button 
+                <Button 
+                  variant="ghost"
                   onClick={handleSignOut}
-                  className="text-red-600 hover:text-red-700 font-medium"
+                  className="text-red-600 hover:text-red-700"
                 >
                   Sign Out
-                </button>
+                </Button>
               </div>
-            </div>
-          </div>
-        </div>
-      </div>
+            </Card>
 
       {/* Password Change Modal */}
       {showPasswordModal && (
@@ -755,7 +744,7 @@ const AccountDetails = () => {
           </div>
         </div>
       )}
-    </div>
+          </PageLayout>
   )
 }
 

@@ -15,3 +15,8 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Hide unimplemented features for MVP */
+.feature-hidden {
+  display: none !important;
+}

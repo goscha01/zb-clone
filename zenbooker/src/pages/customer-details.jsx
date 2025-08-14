@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { ChevronLeft, Edit, Trash2, Phone, Mail, MapPin, Calendar, DollarSign, FileText, AlertCircle, Loader2 } from "lucide-react"
+import { ChevronLeft, Edit, Trash2, Phone, Mail, MapPin, Calendar, DollarSign, FileText, AlertCircle, Loader2, CheckCircle } from "lucide-react"
 import { customersAPI, jobsAPI, estimatesAPI, invoicesAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
 import Sidebar from "../components/sidebar"
@@ -27,6 +27,7 @@ const CustomerDetails = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
 
   useEffect(() => {
     // Wait for auth to finish loading before trying to fetch data
@@ -68,9 +69,32 @@ const CustomerDetails = () => {
   }
 
   const handleEditCustomer = () => {
-    // Open edit modal instead of navigating to non-existent route
+    // Open edit modal with customer data
     console.log('Opening edit modal for customer:', customer)
     setShowEditModal(true)
+  }
+
+  const handleCustomerSave = async (customerData) => {
+    try {
+      setError("")
+      console.log('Updating customer:', customerData)
+      const response = await customersAPI.update(customerId, customerData)
+      console.log('Customer updated successfully:', response)
+      
+      // Update local state
+      setCustomer(response.customer || response)
+      
+      // Show success message
+      setSuccessMessage('Customer updated successfully!')
+      setTimeout(() => setSuccessMessage(''), 3000)
+      
+      // Close modal
+      setShowEditModal(false)
+    } catch (error) {
+      console.error('Error updating customer:', error)
+      setError("Failed to update customer. Please try again.")
+      throw error // Re-throw to prevent modal from closing
+    }
   }
 
   const handleDeleteCustomer = () => {
@@ -246,6 +270,22 @@ const CustomerDetails = () => {
                 </div>
               </div>
             </div>
+
+            {/* Success Message */}
+            {successMessage && (
+              <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mb-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <CheckCircle className="h-5 w-5 text-green-400" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm font-medium text-green-800">{successMessage}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -541,19 +581,7 @@ const CustomerDetails = () => {
       <CustomerModal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
-        onSave={async (updatedCustomer) => {
-          try {
-            // Call the API to update the customer
-            const result = await customersAPI.update(customerId, updatedCustomer)
-            setShowEditModal(false)
-            setCustomer(result)
-            fetchCustomerData() // Refresh the data
-            return result
-          } catch (error) {
-            console.error('Error updating customer:', error)
-            throw error
-          }
-        }}
+        onSave={handleCustomerSave}
         customer={customer} // Pass current customer data for editing
         isEditing={true}
       />

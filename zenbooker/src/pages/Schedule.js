@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from "react"
-import { Plus, ChevronLeft, ChevronRight, Calendar, Grid3X3, MapPin, Clock, DollarSign, User, Filter, AlertTriangle, RefreshCw } from "lucide-react"
+import { Plus, ChevronLeft, ChevronRight, Calendar, Grid3X3, MapPin, Clock, DollarSign, User, Filter, AlertTriangle, RefreshCw, Map, BarChart3, Users, UserX, CheckCircle, PlayCircle, XCircle } from "lucide-react"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
+import ScheduleSidebar from "../components/schedule-sidebar"
 import { useNavigate } from "react-router-dom"
 
-import EditJobModal from "../components/edit-job-modal"
+
 import { useAuth } from "../context/AuthContext"
 import { jobsAPI, teamAPI } from "../services/api"
 
@@ -15,9 +16,14 @@ const ZenbookerSchedule = () => {
   const [currentView, setCurrentView] = useState("day") // day, week, month
   const [currentDate, setCurrentDate] = useState(new Date()) // Current date
   const [jobs, setJobs] = useState([])
+  const [showMap, setShowMap] = useState(false)
+  const [filters, setFilters] = useState({
+    status: "all",
+    teamMember: "all",
+    timeRange: "all"
+  })
 
-  const [showEditJob, setShowEditJob] = useState(false)
-  const [selectedJob, setSelectedJob] = useState(null)
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [teamMembers, setTeamMembers] = useState([])
@@ -153,25 +159,224 @@ const ZenbookerSchedule = () => {
     navigate(`/customer/${customerId}`)
   }
 
-  const handleEditJob = (job) => {
-    setSelectedJob(job)
-    setShowEditJob(true)
+
+
+  // Calculate job summary statistics
+  const getJobSummary = () => {
+    const filteredJobs = getFilteredJobs()
+    
+    const totalJobs = filteredJobs.length
+    const completedJobs = filteredJobs.filter(job => job.status === 'completed').length
+    const inProgressJobs = filteredJobs.filter(job => job.status === 'in_progress').length
+    const pendingJobs = filteredJobs.filter(job => job.status === 'pending').length
+    const confirmedJobs = filteredJobs.filter(job => job.status === 'confirmed').length
+    const cancelledJobs = filteredJobs.filter(job => job.status === 'cancelled').length
+    
+    const totalRevenue = filteredJobs.reduce((sum, job) => sum + (parseFloat(job.service_price) || 0), 0)
+    const totalDuration = filteredJobs.reduce((sum, job) => sum + (parseFloat(job.duration) || 0), 0)
+    
+    const assignedJobs = filteredJobs.filter(job => job.team_member_id).length
+    const unassignedJobs = totalJobs - assignedJobs
+    
+    return {
+      totalJobs,
+      completedJobs,
+      inProgressJobs,
+      pendingJobs,
+      confirmedJobs,
+      cancelledJobs,
+      totalRevenue,
+      totalDuration,
+      assignedJobs,
+      unassignedJobs
+    }
   }
 
-  const handleSaveJob = (updatedJob) => {
-    setJobs(prev => prev.map(job => job.id === updatedJob.id ? updatedJob : job))
-    setShowEditJob(false)
-    setSelectedJob(null)
+  // Get filtered jobs based on current filters
+  const getFilteredJobs = () => {
+    let filtered = jobs
+
+    // Filter by status
+    if (filters.status !== 'all') {
+      filtered = filtered.filter(job => job.status === filters.status)
+    }
+
+    // Filter by team member
+    if (filters.teamMember !== 'all') {
+      if (filters.teamMember === 'unassigned') {
+        filtered = filtered.filter(job => !job.team_member_id)
+      } else {
+        filtered = filtered.filter(job => job.team_member_id === filters.teamMember)
+      }
+    }
+
+    // Filter by time range
+    if (filters.timeRange !== 'all') {
+      const now = new Date()
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      
+      filtered = filtered.filter(job => {
+        const jobTime = new Date(job.scheduled_date)
+        const jobDate = new Date(jobTime.getFullYear(), jobTime.getMonth(), jobTime.getDate())
+        
+        switch (filters.timeRange) {
+          case 'morning':
+            return jobTime.getHours() < 12
+          case 'afternoon':
+            return jobTime.getHours() >= 12 && jobTime.getHours() < 17
+          case 'evening':
+            return jobTime.getHours() >= 17
+          case 'today':
+            return jobDate.getTime() === today.getTime()
+          default:
+            return true
+        }
+      })
+    }
+
+    return filtered
   }
 
-  const handleCloseModals = () => {
-    setShowEditJob(false)
+  const handleFilterChange = (filterType, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [filterType]: value
+    }))
+  }
+
+  // Jobs Summary Component
+  const JobsSummary = () => {
+    const summary = getJobSummary()
+    
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-gray-900">Day Summary</h2>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setShowMap(!showMap)}
+              className={`px-3 py-1.5 text-sm font-medium rounded-lg transition-colors ${
+                showMap ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              <Map className="w-4 h-4 inline mr-1" />
+              {showMap ? 'Hide Map' : 'Show Map'}
+            </button>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-gray-900">{summary.totalJobs}</div>
+            <div className="text-sm text-gray-600">Total Jobs</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">{summary.completedJobs}</div>
+            <div className="text-sm text-gray-600">Completed</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-blue-600">{summary.inProgressJobs}</div>
+            <div className="text-sm text-gray-600">In Progress</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-yellow-600">{summary.pendingJobs}</div>
+            <div className="text-sm text-gray-600">Pending</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-green-600">${summary.totalRevenue.toFixed(2)}</div>
+            <div className="text-sm text-gray-600">Revenue</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-purple-600">{summary.assignedJobs}</div>
+            <div className="text-sm text-gray-600">Assigned</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Map Component
+  const JobsMap = () => {
+    const filteredJobs = getFilteredJobs()
+    const jobsWithLocation = filteredJobs.filter(job => job.customer_address || (job.service_address_street && job.service_address_city))
+    
+    if (jobsWithLocation.length === 0) {
+      return (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="text-center">
+            <Map className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No locations available</h3>
+            <p className="text-gray-500">Jobs need addresses to be displayed on the map.</p>
+          </div>
+        </div>
+      )
+    }
+
+    // Use a default center (San Francisco) since we don't have coordinates
+    const mapCenter = '37.7749,-122.4194' // San Francisco coordinates
+
+    return (
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Job Locations</h3>
+        <p className="text-sm text-gray-600 mb-4">Map shows general area. Job details with addresses are listed below.</p>
+        
+        {/* Google Maps iframe with markers */}
+        <div className="h-80 bg-gray-100 rounded-lg overflow-hidden mb-4 relative">
+          <iframe
+            width="100%"
+            height="100%"
+            frameBorder="0"
+            style={{ border: 0 }}
+            src={`https://www.google.com/maps/embed/v1/view?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNGg&center=${mapCenter}&zoom=10`}
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            title="Job Locations Map"
+            onLoad={() => {
+              // Map loaded successfully
+            }}
+          />
+          <div className="absolute top-2 right-2 bg-white px-2 py-1 rounded text-xs text-gray-600 shadow-sm">
+            {jobsWithLocation.length} job{jobsWithLocation.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+        
+        {/* Job list below map */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {jobsWithLocation.slice(0, 6).map(job => (
+            <div key={job.id} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+              <div className="font-medium text-sm text-gray-900">{job.service_name}</div>
+              <div className="text-xs text-gray-600 truncate mt-1">
+                {job.customer_address || `${job.service_address_street}, ${job.service_address_city}`}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                {new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div className="text-xs text-gray-400 mt-1">
+                {job.customer_first_name} {job.customer_last_name}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                Status: {job.status || 'pending'}
+              </div>
+            </div>
+          ))}
+        </div>
+        
+        {jobsWithLocation.length > 6 && (
+          <div className="text-center text-sm text-gray-500 mt-3">
+            +{jobsWithLocation.length - 6} more jobs with locations
+          </div>
+        )}
+      </div>
+    )
   }
 
   // Day View Component
   const DayView = () => (
-    <div className="flex-1 bg-gray-50 overflow-auto">
-      <div className="max-w-4xl mx-auto p-4 sm:p-6">
+    <div className="flex-1 bg-gray-50 overflow-y-auto">
+      <div className="max-w-6xl mx-auto p-4 sm:p-6">
+        <JobsSummary />
+        {showMap && <JobsMap />}
         {loading ? (
           <div className="text-center py-16">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 sm:p-12">
@@ -194,9 +399,9 @@ const ZenbookerSchedule = () => {
               </button>
             </div>
           </div>
-        ) : jobs.length > 0 ? (
-          <div className="space-y-4">
-            {jobs.map((job) => {
+        ) : getFilteredJobs().length > 0 ? (
+          <div className="space-y-4 pb-8 min-h-0">
+            {getFilteredJobs().map((job) => {
               const getStatusColor = (status) => {
                 switch (status) {
                   case 'completed': return 'bg-green-100 text-green-800 border-green-200';
@@ -263,12 +468,6 @@ const ZenbookerSchedule = () => {
                     
                     <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2 sm:ml-4">
                       <button 
-                        onClick={() => handleEditJob(job)}
-                        className="px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors border border-blue-200"
-                      >
-                        Edit
-                      </button>
-                      <button 
                         onClick={() => handleViewJob(job)}
                         className="px-3 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors border border-gray-200"
                       >
@@ -281,11 +480,18 @@ const ZenbookerSchedule = () => {
             })}
           </div>
         ) : (
-          <div className="text-center py-16">
+          <div className="text-center py-16 pb-8">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 sm:p-12">
               <Calendar className="w-12 h-12 sm:w-16 sm:h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No scheduled jobs</h3>
-              <p className="text-gray-500 mb-6">No jobs scheduled for {formatDate(currentDate, 'day')}</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {jobs.length > 0 ? 'No jobs match your filters' : 'No scheduled jobs'}
+              </h3>
+              <p className="text-gray-500 mb-6">
+                {jobs.length > 0 
+                  ? 'Try adjusting your filters to see more jobs.'
+                  : `No jobs scheduled for ${formatDate(currentDate, 'day')}`
+                }
+              </p>
               <button 
                 onClick={handleCreateJob}
                 className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 transition-all duration-200 transform hover:scale-[1.02] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
@@ -319,8 +525,8 @@ const ZenbookerSchedule = () => {
     }
 
     return (
-      <div className="flex-1 bg-gray-50 overflow-auto">
-        <div className="max-w-7xl mx-auto p-4 sm:p-6">
+      <div className="flex-1 bg-gray-50 overflow-y-auto">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-8">
           <div className="grid grid-cols-1 sm:grid-cols-7 gap-4">
             {weekDays.map((day, index) => {
               const dayJobs = getJobsForDay(day)
@@ -392,8 +598,8 @@ const ZenbookerSchedule = () => {
     const days = generateDaysArray()
 
     return (
-      <div className="flex-1 bg-gray-50 overflow-auto">
-        <div className="max-w-7xl mx-auto p-4 sm:p-6">
+      <div className="flex-1 bg-gray-50 overflow-y-auto">
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 pb-8">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <div className="grid grid-cols-7 gap-px bg-gray-200">
               {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
@@ -455,11 +661,19 @@ const ZenbookerSchedule = () => {
     <div className="flex h-screen bg-gray-50 overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       
-      <div className="flex-1 flex flex-col min-w-0 lg:ml-64">
-        <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+      <div className="flex-1 flex min-w-0 lg:ml-64 h-full">
+        {/* Schedule Sidebar */}
+        <ScheduleSidebar 
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          teamMembers={teamMembers}
+        />
         
-        <div className="flex-1 flex flex-col">
-          <div className="border-b border-gray-200 bg-white">
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
+          <MobileHeader onMenuClick={() => setSidebarOpen(true)} />
+          
+          <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="border-b border-gray-200 bg-white flex-shrink-0">
             <div className="px-4 sm:px-6 py-4">
               <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
                 <div className="flex items-center space-x-4">
@@ -524,15 +738,9 @@ const ZenbookerSchedule = () => {
           {renderView()}
         </div>
       </div>
+    </div>
 
-      {/* Modals */}
-      
-      <EditJobModal 
-        isOpen={showEditJob}
-        onClose={handleCloseModals}
-        job={selectedJob}
-        onSave={handleSaveJob}
-      />
+
     </div>
   )
 }

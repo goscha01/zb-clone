@@ -6,7 +6,7 @@ import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
 import CreateRecurringOptionModal from "../components/create-recurring-option-modal"
 import TerritoryAdjustmentModal from "../components/territory-adjustment-modal"
-import ModifierModal from "../components/modifier-modal"
+
 import CreateModifierGroupModal from "../components/create-modifier-group-modal"
 import IntakeQuestionModal from "../components/intake-question-modal"
 import { servicesAPI, serviceAvailabilityAPI } from "../services/api"
@@ -41,11 +41,11 @@ const ServiceDetails = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [expandedSection, setExpandedSection] = useState(null)
   const [editingModifier, setEditingModifier] = useState(null)
-  const [isModifierModalOpen, setIsModifierModalOpen] = useState(false)
   const [isCreateModifierGroupModalOpen, setIsCreateModifierGroupModalOpen] = useState(false)
   const [isIntakeDropdownOpen, setIsIntakeDropdownOpen] = useState(false)
   const [isIntakeModalOpen, setIsIntakeModalOpen] = useState(false)
   const [selectedQuestionType, setSelectedQuestionType] = useState(null)
+  const [editingIntakeQuestion, setEditingIntakeQuestion] = useState(null)
   const [isSkillTagModalOpen, setIsSkillTagModalOpen] = useState(false)
   const [isRecurringModalOpen, setIsRecurringModalOpen] = useState(false)
   const [isTerritoryModalOpen, setIsTerritoryModalOpen] = useState(false)
@@ -65,6 +65,7 @@ const ServiceDetails = () => {
   })
   const [availabilityLoading, setAvailabilityLoading] = useState(false)
   const [availabilitySaving, setAvailabilitySaving] = useState(false)
+  const [imageUploading, setImageUploading] = useState(false)
   
   // API State
   const [loading, setLoading] = useState(true)
@@ -85,7 +86,8 @@ const ServiceDetails = () => {
     hidePrice: false,
     modifiers: [],
     intakeQuestions: [],
-    require_payment_method: false
+    require_payment_method: false,
+    image: null
   })
 
   // Load service data on component mount
@@ -145,6 +147,11 @@ const ServiceDetails = () => {
       const service = await Promise.race([servicePromise, timeoutPromise])
       
       console.log('Service data received:', service)
+      console.log('Service modifiers from backend:', service.modifiers)
+      console.log('Service modifiers type:', typeof service.modifiers)
+      if (service.modifiers) {
+        console.log('Parsed modifiers:', typeof service.modifiers === 'string' ? JSON.parse(service.modifiers) : service.modifiers)
+      }
       
       if (!service) {
         console.error('No service found')
@@ -164,6 +171,7 @@ const ServiceDetails = () => {
         price: service.price || 0,
         duration: service.duration || 0,
         category: service.category || "",
+        image: service.image || null,
         isFree: service.price === 0,
         bookingType: "bookable",
         displayPrefix: "Estimated Total",
@@ -173,6 +181,8 @@ const ServiceDetails = () => {
         intakeQuestions: service.intake_questions ? (typeof service.intake_questions === 'string' ? JSON.parse(service.intake_questions) : service.intake_questions) : [],
         require_payment_method: !!service.require_payment_method
       })
+      
+      console.log('Parsed modifiers:', service.modifiers ? (typeof service.modifiers === 'string' ? JSON.parse(service.modifiers) : service.modifiers) : [])
       
       console.log('Service data set successfully')
       
@@ -232,22 +242,28 @@ const ServiceDetails = () => {
     }
   }
 
-  const handleSaveService = async () => {
+  const handleSaveService = async (dataToSave = null) => {
     try {
+      const data = dataToSave || serviceData;
+      console.log('💾 Saving service data:', data);
       setSaving(true)
       setError("")
       setSuccessMessage("")
       
       const updateData = {
-        name: serviceData.name,
-        description: serviceData.description,
-        price: serviceData.isFree ? 0 : serviceData.price,
-        duration: serviceData.duration,
-        category: serviceData.category,
-        modifiers: JSON.stringify(serviceData.modifiers),
-        intake_questions: JSON.stringify(serviceData.intakeQuestions || []),
-        require_payment_method: !!serviceData.require_payment_method
+        name: data.name,
+        description: data.description,
+        price: data.isFree ? 0 : data.price,
+        duration: data.duration,
+        category: data.category,
+        image: data.image,
+        modifiers: JSON.stringify(data.modifiers),
+        intake_questions: JSON.stringify(data.intakeQuestions || []),
+        require_payment_method: !!data.require_payment_method
       }
+      
+      console.log('💾 Update data being sent to backend:', updateData);
+      console.log('💾 Modifiers JSON:', JSON.stringify(serviceData.modifiers));
       
       await servicesAPI.update(serviceData.id, updateData)
       
@@ -268,81 +284,78 @@ const ServiceDetails = () => {
 
   const handleEditModifier = (modifier) => {
     setEditingModifier(modifier)
-    setIsModifierModalOpen(true)
+    setIsCreateModifierGroupModalOpen(true)
   }
 
-  const handleSaveModifier = async (modifierData) => {
-    try {
-      let updatedModifiers
-      const currentModifiers = serviceData.modifiers || []
-      
-    if (editingModifier) {
-      // Update existing modifier
-        updatedModifiers = currentModifiers.map(mod => 
-          mod.id === editingModifier.id ? { ...modifierData, id: mod.id } : mod
-        )
-    } else {
-      // Add new modifier
-        updatedModifiers = [...currentModifiers, { ...modifierData, id: Date.now() }]
-      }
-      
-      setServiceData(prev => ({
-        ...prev,
-        modifiers: updatedModifiers
-      }))
-      
-      // Save to backend
-      await handleSaveService()
-      
-    setIsModifierModalOpen(false)
-    setEditingModifier(null)
-    } catch (error) {
-      console.error('Error saving modifier:', error)
-      setError("Failed to save modifier. Please try again.")
-    }
-  }
+
 
   const handleSaveModifierGroup = async (modifierGroupData) => {
     try {
+      console.log('🔄 Saving modifier group:', modifierGroupData);
+      console.log('🔄 Editing modifier:', editingModifier);
+      
       let updatedModifiers
       const currentModifiers = serviceData.modifiers || []
       
       // Convert the new format to the existing format for compatibility
       const convertedModifier = {
-        id: Date.now(),
+        id: editingModifier ? editingModifier.id : Date.now(),
         title: modifierGroupData.groupName,
         description: modifierGroupData.groupDescription,
         selectionType: modifierGroupData.selectionType,
         required: modifierGroupData.required,
         options: modifierGroupData.options.map(option => ({
+          id: option.id,
           label: option.name,
           price: option.price,
           duration: option.durationHours * 60 + option.durationMinutes, // Convert to minutes
           description: option.description,
+          image: option.image,
           allowCustomerNotes: option.allowCustomerNotes,
           convertToServiceRequest: option.convertToServiceRequest
         }))
       }
       
-      updatedModifiers = [...currentModifiers, convertedModifier]
+      console.log('🔄 Converted modifier:', convertedModifier);
       
-      setServiceData(prev => ({
-        ...prev,
+      if (editingModifier) {
+        // Update existing modifier
+        console.log('🔄 Updating existing modifier with ID:', editingModifier.id);
+        updatedModifiers = currentModifiers.map(mod => 
+          mod.id === editingModifier.id ? convertedModifier : mod
+        )
+        console.log('🔄 Updated modifiers array:', updatedModifiers);
+      } else {
+        // Add new modifier
+        console.log('🔄 Adding new modifier');
+        updatedModifiers = [...currentModifiers, convertedModifier]
+      }
+      
+      console.log('🔄 Setting service data with updated modifiers');
+      
+      // Update the service data immediately
+      const updatedServiceData = {
+        ...serviceData,
         modifiers: updatedModifiers
-      }))
+      };
       
-      // Save to backend
-      await handleSaveService()
+      setServiceData(updatedServiceData);
+      
+      // Save to backend with the updated data
+      console.log('🔄 About to save service with updated modifiers:', updatedServiceData.modifiers);
+      await handleSaveService(updatedServiceData)
+      console.log('🔄 Service saved successfully');
       
       setIsCreateModifierGroupModalOpen(false)
-      setSuccessMessage("Modifier group created successfully!")
+      setEditingModifier(null)
+      setSuccessMessage(editingModifier ? "Modifier group updated successfully!" : "Modifier group created successfully!")
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(""), 3000)
       
     } catch (error) {
-      console.error('Error creating modifier group:', error)
-      setError("Failed to create modifier group. Please try again.")
+      console.error('Error saving modifier group:', error)
+      setError("Failed to save modifier group. Please try again.")
     }
   }
 
@@ -351,13 +364,17 @@ const ServiceDetails = () => {
       try {
         const currentModifiers = serviceData.modifiers || []
         const updatedModifiers = currentModifiers.filter(mod => mod.id !== modifierId)
-        setServiceData(prev => ({
-          ...prev,
-          modifiers: updatedModifiers
-        }))
         
-        // Save to backend
-        await handleSaveService()
+        // Update service data immediately
+        const updatedServiceData = {
+          ...serviceData,
+          modifiers: updatedModifiers
+        };
+        
+        setServiceData(updatedServiceData);
+        
+        // Save to backend with the updated data
+        await handleSaveService(updatedServiceData)
       } catch (error) {
         console.error('Error deleting modifier:', error)
         setError("Failed to delete modifier. Please try again.")
@@ -367,21 +384,47 @@ const ServiceDetails = () => {
 
   const handleSaveIntakeQuestion = async (questionData) => {
     try {
-      // Create a new intake question with proper structure
-      const newIntakeQuestion = {
-        id: Date.now(),
-        questionType: questionData.questionType,
-        question: questionData.question,
-        description: questionData.description,
-        selectionType: questionData.selectionType,
-        required: questionData.required,
-        options: questionData.options || []
-      }
+      let updatedServiceData;
       
-      // Update service data with the new question
-      const updatedServiceData = {
-        ...serviceData,
-        intakeQuestions: [...(serviceData.intakeQuestions || []), newIntakeQuestion]
+      if (editingIntakeQuestion) {
+        // Update existing question
+        const currentQuestions = serviceData.intakeQuestions || [];
+        const updatedQuestions = currentQuestions.map(q => 
+          q.id === editingIntakeQuestion.id ? {
+            ...q,
+            questionType: questionData.questionType,
+            question: questionData.question,
+            description: questionData.description,
+            selectionType: questionData.selectionType,
+            required: questionData.required,
+            options: questionData.options || []
+          } : q
+        );
+        
+        updatedServiceData = {
+          ...serviceData,
+          intakeQuestions: updatedQuestions
+        };
+        
+        setSuccessMessage("Intake question updated successfully!")
+      } else {
+        // Create new question
+        const newIntakeQuestion = {
+          id: Date.now(),
+          questionType: questionData.questionType,
+          question: questionData.question,
+          description: questionData.description,
+          selectionType: questionData.selectionType,
+          required: questionData.required,
+          options: questionData.options || []
+        }
+        
+        updatedServiceData = {
+          ...serviceData,
+          intakeQuestions: [...(serviceData.intakeQuestions || []), newIntakeQuestion]
+        };
+        
+        setSuccessMessage("Intake question created successfully!")
       }
       
       // Update state
@@ -403,7 +446,7 @@ const ServiceDetails = () => {
       
       setIsIntakeModalOpen(false)
       setSelectedQuestionType(null)
-      setSuccessMessage("Intake question created successfully!")
+      setEditingIntakeQuestion(null) // Clear editing state
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(""), 3000)
@@ -452,6 +495,165 @@ const ServiceDetails = () => {
     }
   }
 
+  const handleEditIntakeQuestion = (question) => {
+    setEditingIntakeQuestion(question)
+    setIsIntakeModalOpen(true)
+  }
+
+  const handleCloseIntakeModal = () => {
+    setIsIntakeModalOpen(false)
+    setSelectedQuestionType(null)
+    setEditingIntakeQuestion(null)
+  }
+
+  const handleCopyIntakeQuestion = async (question) => {
+    try {
+      const copiedQuestion = {
+        ...question,
+        id: Date.now().toString(), // Generate new ID
+        question: `${question.question} (Copy)`
+      }
+      
+      const updatedServiceData = {
+        ...serviceData,
+        intakeQuestions: [...(serviceData.intakeQuestions || []), copiedQuestion]
+      }
+      
+      setServiceData(updatedServiceData)
+      
+      const updateData = {
+        name: updatedServiceData.name,
+        description: updatedServiceData.description,
+        price: updatedServiceData.isFree ? 0 : updatedServiceData.price,
+        duration: updatedServiceData.duration,
+        category: updatedServiceData.category,
+        modifiers: JSON.stringify(updatedServiceData.modifiers),
+        intake_questions: JSON.stringify(updatedServiceData.intakeQuestions),
+        require_payment_method: !!updatedServiceData.require_payment_method
+      }
+      
+      await servicesAPI.update(updatedServiceData.id, updateData)
+      
+      setSuccessMessage("Intake question copied successfully!")
+      setTimeout(() => setSuccessMessage(""), 3000)
+    } catch (error) {
+      console.error('Error copying intake question:', error)
+      setError("Failed to copy intake question. Please try again.")
+    }
+  }
+
+  const handleImageUpload = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      setError("Please select a valid image file.");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image file size must be less than 5MB.");
+      return;
+    }
+
+    try {
+      setImageUploading(true);
+      setError("");
+
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('serviceId', serviceId);
+
+      // Get auth token
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('https://zenbookapi.now2code.online/api/upload-service-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Upload failed with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      console.log('Image upload response:', data);
+      
+      if (!data.imageUrl) {
+        throw new Error('No image URL received from server');
+      }
+      
+      // Update service data with new image URL
+      const updatedServiceData = {
+        ...serviceData,
+        image: data.imageUrl
+      };
+      
+      setServiceData(updatedServiceData);
+      
+      // Update service in backend with the new image URL
+      const updateData = {
+        name: updatedServiceData.name,
+        description: updatedServiceData.description,
+        price: updatedServiceData.isFree ? 0 : updatedServiceData.price,
+        duration: updatedServiceData.duration,
+        category: updatedServiceData.category,
+        modifiers: JSON.stringify(updatedServiceData.modifiers),
+        intake_questions: JSON.stringify(updatedServiceData.intakeQuestions),
+        require_payment_method: !!updatedServiceData.require_payment_method,
+        image: data.imageUrl
+      };
+      
+      await servicesAPI.update(serviceId, updateData);
+
+      setSuccessMessage("Image uploaded successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      setError(error.message || "Failed to upload image. Please try again.");
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    try {
+      setSaving(true);
+      setError("");
+
+      const updatedServiceData = {
+        ...serviceData,
+        image: null
+      };
+      
+      setServiceData(updatedServiceData);
+      
+      // Update service in backend
+      await servicesAPI.update(serviceId, {
+        ...serviceData,
+        image: null
+      });
+
+      setSuccessMessage("Image removed successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      console.error('Error removing image:', error);
+      setError("Failed to remove image. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const IntakeQuestionDropdown = () => {
     const questionTypes = [
       { icon: "⬇️", label: "Dropdown", value: "dropdown" },
@@ -464,7 +666,9 @@ const ServiceDetails = () => {
     ]
 
     const handleQuestionTypeSelect = (type) => {
+      console.log('🔄 Intake question type selected:', type);
       setSelectedQuestionType(type)
+      setEditingIntakeQuestion(null) // Clear editing state when creating new
       setIsIntakeModalOpen(true)
       setIsIntakeDropdownOpen(false)
     }
@@ -472,7 +676,10 @@ const ServiceDetails = () => {
     return (
       <div className="relative">
         <button
-          onClick={() => setIsIntakeDropdownOpen(!isIntakeDropdownOpen)}
+          onClick={() => {
+            console.log('🔄 Intake dropdown button clicked, current state:', isIntakeDropdownOpen);
+            setIsIntakeDropdownOpen(!isIntakeDropdownOpen);
+          }}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
         >
           New Intake Question
@@ -599,6 +806,18 @@ const ServiceDetails = () => {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
+                        <button 
+                          onClick={() => handleEditIntakeQuestion(question)}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          Edit
+                        </button>
+                        <button 
+                          onClick={() => handleCopyIntakeQuestion(question)}
+                          className="text-sm text-green-600 hover:text-green-800"
+                        >
+                          Copy
+                        </button>
                         <button 
                           onClick={() => handleDeleteIntakeQuestion(question.id)}
                           className="text-sm text-red-600 hover:text-red-800"
@@ -1373,9 +1592,45 @@ const ServiceDetails = () => {
                 </div>
 
                 <div className="w-48">
-                  <div className="border border-dashed border-gray-300 rounded-lg p-6 text-center">
-                    <Camera className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                    <button className="text-sm text-blue-600 font-medium">Add an image</button>
+                  <div className={`border border-dashed border-gray-300 rounded-lg p-6 text-center relative ${imageUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                    {imageUploading && (
+                      <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center rounded-lg z-10">
+                        <div className="text-center">
+                          <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto mb-2" />
+                          <p className="text-sm text-gray-600">Uploading...</p>
+                        </div>
+                      </div>
+                    )}
+                    {serviceData.image ? (
+                      <div className="relative">
+                        <img 
+                          src={serviceData.image} 
+                          alt={serviceData.name}
+                          className="w-full h-32 object-cover rounded-lg mb-2"
+                        />
+                        <button
+                          onClick={() => handleRemoveImage()}
+                          disabled={imageUploading}
+                          className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <Camera className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <label className={`text-sm text-blue-600 font-medium cursor-pointer ${imageUploading ? 'pointer-events-none' : ''}`}>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageUpload}
+                            disabled={imageUploading}
+                            className="hidden"
+                          />
+                          {imageUploading ? 'Uploading...' : 'Add an image'}
+                        </label>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1435,8 +1690,15 @@ const ServiceDetails = () => {
                   <div className="px-4 pb-4">
                     <div className="flex flex-wrap gap-2">
                         {modifier.options && modifier.options.map((option, optionIndex) => (
-                        <div key={optionIndex} className="bg-gray-100 rounded-full px-3 py-1 text-sm">
-                          {option.label}
+                        <div key={optionIndex} className="bg-gray-100 rounded-full px-3 py-1 text-sm flex items-center space-x-2">
+                          {option.image && (
+                            <img
+                              src={option.image}
+                              alt={option.label}
+                              className="w-4 h-4 object-cover rounded-full"
+                            />
+                          )}
+                          <span>{option.label}</span>
                           {option.price && <span className="text-gray-500 ml-1">${option.price}</span>}
                         </div>
                       ))}
@@ -1549,6 +1811,19 @@ const ServiceDetails = () => {
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">
+      {/* Image Upload Loading Overlay */}
+      {imageUploading && (
+        <div className="fixed inset-0 bg-black bg-opacity-25 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 shadow-lg">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+              <p className="text-lg font-medium text-gray-900 mb-2">Uploading Image</p>
+              <p className="text-sm text-gray-600">Please wait while we upload your image...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Sidebar */}
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} activePage="services" />
 
@@ -1671,29 +1946,23 @@ const ServiceDetails = () => {
           </div>
         </div>
       </div>
-      <ModifierModal
-        isOpen={isModifierModalOpen}
-        onClose={() => {
-          setIsModifierModalOpen(false)
-          setEditingModifier(null)
-        }}
-        editingModifier={editingModifier}
-        onSave={handleSaveModifier}
-      />
+
       <CreateModifierGroupModal
         isOpen={isCreateModifierGroupModalOpen}
-        onClose={() => setIsCreateModifierGroupModalOpen(false)}
-        onSave={handleSaveModifierGroup}
-      />
-      <IntakeQuestionModal
-        isOpen={isIntakeModalOpen}
         onClose={() => {
-          setIsIntakeModalOpen(false)
-          setSelectedQuestionType(null)
+          setIsCreateModifierGroupModalOpen(false)
+          setEditingModifier(null)
         }}
-        selectedQuestionType={selectedQuestionType}
-        onSave={handleSaveIntakeQuestion}
+        onSave={handleSaveModifierGroup}
+        editingModifier={editingModifier}
       />
+              <IntakeQuestionModal
+          isOpen={isIntakeModalOpen}
+          onClose={handleCloseIntakeModal}
+          selectedQuestionType={selectedQuestionType}
+          onSave={handleSaveIntakeQuestion}
+          editingQuestion={editingIntakeQuestion}
+        />
       {isSkillTagModalOpen && <SkillTagModal />}
       <CreateRecurringOptionModal
         isOpen={isRecurringModalOpen}

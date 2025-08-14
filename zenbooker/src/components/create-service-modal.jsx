@@ -8,7 +8,8 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
     price: "",
     duration: { hours: 0, minutes: 30 },
     category: "",
-    isFree: false
+    isFree: false,
+    image: null
   })
   const [loading, setLoading] = useState(false)
 
@@ -199,6 +200,51 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
                     className="w-16 border border-gray-300 rounded-lg px-2 py-2 text-center focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                   <span className="text-sm text-gray-600">minutes</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Service Image */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Service Image
+              </label>
+              <div className="flex items-center space-x-4">
+                {formData.image ? (
+                  <div className="relative">
+                    <img
+                      src={URL.createObjectURL(formData.image)}
+                      alt="Service preview"
+                      className="w-20 h-20 object-cover rounded-lg border border-gray-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange('image', null)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ) : (
+                  <div className="w-20 h-20 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center">
+                    <span className="text-gray-400 text-xs text-center">No image</span>
+                  </div>
+                )}
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files[0]
+                      if (file) {
+                        handleInputChange('image', file)
+                      }
+                    }}
+                    className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">
+                    Upload an image to help customers identify this service
+                  </p>
                 </div>
               </div>
             </div>

@@ -19,6 +19,8 @@ const ServiceAreas = () => {
     enforceServiceArea: true,
     territories: []
   })
+  const [editingTerritory, setEditingTerritory] = useState(null)
+  const [showEditModal, setShowEditModal] = useState(false)
 
   // Get current user
   const { user } = useAuth()
@@ -78,6 +80,45 @@ const ServiceAreas = () => {
     } catch (error) {
       console.error('Error updating service areas:', error)
       setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to update service areas' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEditTerritory = (territory) => {
+    setEditingTerritory(territory)
+    setShowEditModal(true)
+  }
+
+  const handleSaveTerritory = async (updatedTerritory) => {
+    try {
+      setSaving(true)
+      
+      // Update the territory in the local state
+      const updatedTerritories = serviceAreasData.territories.map(territory =>
+        territory.id === updatedTerritory.id ? updatedTerritory : territory
+      )
+      
+      const updatedData = {
+        ...serviceAreasData,
+        territories: updatedTerritories
+      }
+      
+      // Save to backend
+      await serviceAreasAPI.updateServiceAreas({
+        userId: user.id,
+        enforceServiceArea: updatedData.enforceServiceArea,
+        territories: updatedData.territories
+      })
+      
+      setServiceAreasData(updatedData)
+      setShowEditModal(false)
+      setEditingTerritory(null)
+      setMessage({ type: 'success', text: 'Territory updated successfully!' })
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000)
+    } catch (error) {
+      console.error('Error updating territory:', error)
+      setMessage({ type: 'error', text: error.response?.data?.error || 'Failed to update territory' })
     } finally {
       setSaving(false)
     }
@@ -216,7 +257,12 @@ const ServiceAreas = () => {
                       <div className="p-4">
                         <div className="flex items-center justify-between mb-4">
                           <h3 className="text-lg font-medium text-gray-900">{territory.name}</h3>
-                          <button className="text-blue-600 hover:text-blue-700 text-sm font-medium">Edit</button>
+                          <button 
+                            onClick={() => handleEditTerritory(territory)}
+                            className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                          >
+                            Edit
+                          </button>
                         </div>
                         {territory.description && (
                           <p className="text-sm text-gray-600 mb-4">{territory.description}</p>
@@ -231,7 +277,12 @@ const ServiceAreas = () => {
                           </div>
                           <div className="flex items-center space-x-2">
                             <span className="text-gray-900">{territory.radius_miles} mile radius</span>
-                            <button className="text-blue-600 hover:text-blue-700 font-medium">Edit</button>
+                            <button 
+                              onClick={() => handleEditTerritory(territory)}
+                              className="text-blue-600 hover:text-blue-700 font-medium"
+                            >
+                              Edit
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -243,6 +294,113 @@ const ServiceAreas = () => {
           </div>
         </div>
       </div>
+
+      {/* Edit Territory Modal */}
+      {showEditModal && editingTerritory && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Edit Territory</h3>
+              <button
+                onClick={() => {
+                  setShowEditModal(false)
+                  setEditingTerritory(null)
+                }}
+                className="text-gray-400 hover:text-gray-500"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Territory Name
+                  </label>
+                  <input
+                    type="text"
+                    value={editingTerritory.name}
+                    onChange={(e) => setEditingTerritory({
+                      ...editingTerritory,
+                      name: e.target.value
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Location
+                  </label>
+                  <input
+                    type="text"
+                    value={editingTerritory.location || ''}
+                    onChange={(e) => setEditingTerritory({
+                      ...editingTerritory,
+                      location: e.target.value
+                    })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter address or location"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Service Radius (miles)
+                  </label>
+                  <input
+                    type="number"
+                    value={editingTerritory.radius_miles || 25}
+                    onChange={(e) => setEditingTerritory({
+                      ...editingTerritory,
+                      radius_miles: parseInt(e.target.value) || 25
+                    })}
+                    min="1"
+                    max="100"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Description (Optional)
+                  </label>
+                  <textarea
+                    value={editingTerritory.description || ''}
+                    onChange={(e) => setEditingTerritory({
+                      ...editingTerritory,
+                      description: e.target.value
+                    })}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Describe this territory..."
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setShowEditModal(false)
+                  setEditingTerritory(null)
+                }}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleSaveTerritory(editingTerritory)}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

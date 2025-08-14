@@ -1,43 +1,129 @@
 "use client"
 
-import { Users, UserX } from "lucide-react"
+import { Users, UserX, Filter, Clock, CheckCircle, PlayCircle, XCircle, AlertCircle, Calendar } from "lucide-react"
 
-const ScheduleSidebar = ({ activeFilter, onFilterChange }) => {
-  const jobAssignments = [
-    { id: "all", label: "All Jobs", icon: Users, active: true },
+const ScheduleSidebar = ({ filters, onFilterChange, teamMembers }) => {
+  const statusOptions = [
+    { id: "all", label: "All Statuses", icon: Filter },
+    { id: "pending", label: "Pending", icon: AlertCircle, color: "text-yellow-600" },
+    { id: "confirmed", label: "Confirmed", icon: CheckCircle, color: "text-blue-600" },
+    { id: "in_progress", label: "In Progress", icon: PlayCircle, color: "text-orange-600" },
+    { id: "completed", label: "Completed", icon: CheckCircle, color: "text-green-600" },
+    { id: "cancelled", label: "Cancelled", icon: XCircle, color: "text-red-600" },
+  ]
+
+  const timeRangeOptions = [
+    { id: "all", label: "All Day", icon: Calendar },
+    { id: "morning", label: "Morning (Before 12 PM)", icon: Clock },
+    { id: "afternoon", label: "Afternoon (12 PM - 5 PM)", icon: Clock },
+    { id: "evening", label: "Evening (After 5 PM)", icon: Clock },
+  ]
+
+  const teamMemberOptions = [
+    { id: "all", label: "All Team Members", icon: Users },
     { id: "unassigned", label: "Unassigned", icon: UserX },
-    { id: "justweb", label: "Just web", avatar: "JW" },
+    ...(teamMembers || []).map(member => ({
+      id: member.id,
+      label: member.name || member.email,
+      icon: Users,
+      color: member.color || "#2563EB"
+    }))
   ]
 
   return (
-    <div className="w-64 bg-gray-50 border-r border-gray-200 flex-shrink-0">
-      <div className="p-4">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">JOBS ASSIGNED TO</h3>
+    <div className="w-64 bg-gray-50 border-r border-gray-200 flex-shrink-0 overflow-y-auto h-full">
+      <div className="p-4 space-y-6">
+        {/* Status Filter */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">STATUS</h3>
         <nav className="space-y-1">
-          {jobAssignments.map((assignment) => {
-            const isActive = activeFilter === assignment.id
+            {statusOptions.map((option) => {
+              const isActive = filters.status === option.id
             return (
               <button
-                key={assignment.id}
-                onClick={() => onFilterChange(assignment.id)}
+                  key={option.id}
+                  onClick={() => onFilterChange('status', option.id)}
                 className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
                   isActive
                     ? "bg-blue-50 text-blue-700 border border-blue-200"
                     : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                 }`}
               >
-                {assignment.avatar ? (
-                  <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                    <span className="text-white font-medium text-xs">{assignment.avatar}</span>
+                  <option.icon className={`w-4 h-4 flex-shrink-0 ${option.color || ''}`} />
+                  <span>{option.label}</span>
+                </button>
+              )
+            })}
+          </nav>
                   </div>
-                ) : (
-                  <assignment.icon className="w-5 h-5 flex-shrink-0" />
-                )}
-                <span>{assignment.label}</span>
+
+        {/* Team Member Filter */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">TEAM MEMBER</h3>
+          <nav className="space-y-1">
+            {teamMemberOptions.map((option) => {
+              const isActive = filters.teamMember === option.id
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => onFilterChange('teamMember', option.id)}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
+                    isActive
+                      ? "bg-blue-50 text-blue-700 border border-blue-200"
+                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  {option.color ? (
+                    <div className="w-4 h-4 rounded-full flex-shrink-0" style={{ backgroundColor: option.color }}></div>
+                  ) : (
+                    <option.icon className="w-4 h-4 flex-shrink-0" />
+                  )}
+                  <span className="truncate">{option.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+        </div>
+
+        {/* Time Range Filter */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">TIME RANGE</h3>
+          <nav className="space-y-1">
+            {timeRangeOptions.map((option) => {
+              const isActive = filters.timeRange === option.id
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => onFilterChange('timeRange', option.id)}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
+                    isActive
+                      ? "bg-blue-50 text-blue-700 border border-blue-200"
+                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <option.icon className="w-4 h-4 flex-shrink-0" />
+                  <span>{option.label}</span>
               </button>
             )
           })}
         </nav>
+        </div>
+
+        {/* Clear Filters */}
+        {(filters.status !== 'all' || filters.teamMember !== 'all' || filters.timeRange !== 'all') && (
+          <div className="pt-4 border-t border-gray-200">
+            <button
+              onClick={() => {
+                onFilterChange('status', 'all')
+                onFilterChange('teamMember', 'all')
+                onFilterChange('timeRange', 'all')
+              }}
+              className="w-full px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              Clear All Filters
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )

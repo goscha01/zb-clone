@@ -66,7 +66,7 @@ const ZenbookerJobs = () => {
           dateFilter = "future" // Jobs scheduled for today and future
           break
         case "past":
-          statusFilter = "completed,cancelled"
+          statusFilter = "completed,cancelled,pending,confirmed,in_progress"
           dateFilter = "past" // Jobs from yesterday and earlier
           break
         case "complete":
@@ -104,6 +104,10 @@ const ZenbookerJobs = () => {
         undefined, // customerId
         filters.territoryId // pass territoryId to API
       )
+      
+      console.log('🔄 Jobs API Response:', response);
+      console.log('🔄 Jobs Array:', response.jobs);
+      console.log('🔄 Jobs Count:', response.jobs ? response.jobs.length : 0);
       
       setJobs(response.jobs || [])
     } catch (error) {
@@ -181,12 +185,28 @@ const ZenbookerJobs = () => {
 
   const handleStatusChange = async (job, newStatus) => {
     try {
+      console.log('Updating job status:', job.id, 'to:', newStatus);
       await jobsAPI.updateStatus(job.id, newStatus)
-      await fetchJobs() // Refresh the jobs list
-      alert(`Job status updated to ${newStatus}`)
+      
+      // Update the job in the local state immediately for better UX
+      setJobs(prevJobs => prevJobs.map(j => 
+        j.id === job.id ? { ...j, status: newStatus } : j
+      ));
+      
+      // Show success message
+      console.log(`Job status updated to ${newStatus}`);
+      
+      // Refresh the jobs list after a short delay to ensure consistency
+      setTimeout(() => {
+        fetchJobs();
+      }, 500);
     } catch (error) {
       console.error('Error updating job status:', error)
-      alert('Failed to update job status')
+      // Revert the local state change on error
+      setJobs(prevJobs => prevJobs.map(j => 
+        j.id === job.id ? { ...j, status: job.status } : j
+      ));
+      alert('Failed to update job status. Please try again.');
     }
   }
 
@@ -266,6 +286,25 @@ const ZenbookerJobs = () => {
       style: 'currency',
       currency: 'USD'
     }).format(amount || 0)
+  }
+
+  const getRelativeTime = (dateString) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffTime = date.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    if (diffDays < 0) {
+      return `${Math.abs(diffDays)} day${Math.abs(diffDays) !== 1 ? 's' : ''} ago`
+    } else if (diffDays === 0) {
+      return 'Today'
+    } else if (diffDays === 1) {
+      return 'Tomorrow'
+    } else if (diffDays <= 7) {
+      return `In ${diffDays} days`
+    } else {
+      return `In ${Math.ceil(diffDays / 7)} week${Math.ceil(diffDays / 7) !== 1 ? 's' : ''}`
+    }
   }
 
   // Show loading spinner while auth is loading
@@ -408,7 +447,16 @@ const ZenbookerJobs = () => {
               </div>
             ) : jobs.length === 0 ? (
               <JobsEmptyState onCreateJob={handleCreateJob} />
-            ) : viewMode === "table" ? (
+            ) : (
+              <>
+                {/* Debug info */}
+                <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    Debug: {jobs.length} jobs loaded, User ID: {user?.id}, Active Tab: {activeTab}
+                  </p>
+                </div>
+                
+                {viewMode === "table" ? (
               // Table View
               <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
                 <div className="overflow-x-auto">
@@ -440,11 +488,24 @@ const ZenbookerJobs = () => {
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {jobs.map((job) => (
-                        <tr key={job.id} className="hover:bg-gray-50">
+                        <tr 
+                          key={job.id} 
+                          className="hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => handleViewJob(job)}
+                        >
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             <div className="flex flex-col">
-                              <span className="font-medium">{formatDate(job.scheduled_date)}</span>
-                              <span className="text-gray-500">{formatTime(job.scheduled_date)}</span>
+                              <span className="font-medium">
+                                {job.scheduled_date ? formatDate(job.scheduled_date) : 'Date not set'}
+                              </span>
+                              <span className="text-gray-500">
+                                {job.scheduled_date ? formatTime(job.scheduled_date) : 'Time not set'}
+                              </span>
+                              {job.scheduled_date && (
+                                <span className="text-xs text-gray-400">
+                                  {getRelativeTime(job.scheduled_date)}
+                                </span>
+                              )}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -467,36 +528,90 @@ const ZenbookerJobs = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">
-                              {job.customer_first_name} {job.customer_last_name}
+                            <div 
+                              className="text-sm text-blue-600 hover:text-blue-800 font-medium cursor-pointer transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewCustomer(job.customer_id);
+                              }}
+                            >
+                              {job.customer_first_name && job.customer_last_name 
+                                ? `${job.customer_first_name} ${job.customer_last_name}`
+                                : job.customer_email 
+                                ? job.customer_email 
+                                : 'Customer Name'
+                              }
                             </div>
                             <div className="text-sm text-gray-500">
-                              {job.customer_city}, {job.customer_state}
+                              {job.customer_city && job.customer_state 
+                                ? `${job.customer_city}, ${job.customer_state}`
+                                : job.customer_phone 
+                                ? job.customer_phone 
+                                : 'Location not specified'
+                              }
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {job.team_member_first_name ? (
-                              <div className="flex items-center">
-                                <div className="flex-shrink-0 h-6 w-6">
-                                  <div className="h-6 w-6 rounded-full bg-green-100 flex items-center justify-center">
-                                    <span className="text-xs font-medium text-green-600">
-                                      {job.team_member_first_name[0]}{job.team_member_last_name[0]}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="ml-2 text-sm text-gray-900">
-                                  {job.team_member_first_name} {job.team_member_last_name}
+                            {job.team_assignments && job.team_assignments.length > 0 ? (
+                              <div className="space-y-1">
+                                {job.team_assignments.map((assignment, index) => {
+                                  const memberName = assignment.first_name && assignment.last_name 
+                                    ? `${assignment.first_name} ${assignment.last_name}`
+                                    : assignment.email || 'Unknown Member';
+                                  return (
+                                    <div key={assignment.team_member_id} className="flex items-center">
+                                      <div className="flex-shrink-0 h-6 w-6">
+                                        <div className={`h-6 w-6 rounded-full flex items-center justify-center ${
+                                          assignment.is_primary ? 'bg-green-100' : 'bg-blue-100'
+                                        }`}>
+                                          <span className={`text-xs font-medium ${
+                                            assignment.is_primary ? 'text-green-600' : 'text-blue-600'
+                                          }`}>
+                                            {memberName.split(' ').map(n => n[0]).join('').toUpperCase()}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <div className="ml-2 text-sm text-gray-900">
+                                        {memberName}
+                                        {assignment.is_primary && (
+                                          <span className="ml-1 text-xs text-green-600">(Primary)</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                <div className="text-xs text-gray-500">
+                                  {job.team_assignments.length} member{job.team_assignments.length !== 1 ? 's' : ''}
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-sm text-gray-500">Unassigned</span>
+                              <div className="flex items-center">
+                                <div className="flex-shrink-0 h-6 w-6">
+                                  <div className="h-6 w-6 rounded-full bg-gray-100 flex items-center justify-center">
+                                    <Users className="w-3 h-3 text-gray-400" />
+                                  </div>
+                                </div>
+                                <div className="ml-2 text-sm text-gray-500">
+                                  <span className="cursor-pointer hover:text-blue-600 transition-colors" onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleAssignJob(job);
+                                  }}>
+                                    Assign Team Member
+                                  </span>
+                                </div>
+                              </div>
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(job.status)}`}>
                               {getStatusIcon(job.status)}
-                              <span className="ml-1">{getStatusLabel(job.status)}</span>
+                              <span className="ml-1">{getStatusLabel(job.status || 'pending')}</span>
                             </span>
+                            {job.status === 'pending' && (
+                              <div className="mt-1 text-xs text-gray-500">
+                                Awaiting confirmation
+                              </div>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             <div className="flex flex-col">
@@ -513,7 +628,10 @@ const ZenbookerJobs = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                             <button
-                              onClick={() => handleViewJob(job)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewJob(job);
+                              }}
                               className="text-blue-600 hover:text-blue-900"
                             >
                               View
@@ -531,7 +649,8 @@ const ZenbookerJobs = () => {
                 {jobs.map((job) => (
                   <div
                     key={job.id}
-                    className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow"
+                    className="bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
+                    onClick={() => handleViewJob(job)}
                   >
                     {/* Job Header */}
                     <div className="p-6">
@@ -560,8 +679,17 @@ const ZenbookerJobs = () => {
                       <div className="space-y-3 mb-6">
                         <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm text-gray-600">Due {formatDate(job.scheduled_date)}</p>
-                          <p className="text-sm text-gray-600">{formatTime(job.scheduled_date)}</p>
+                          <p className="text-sm text-gray-600">
+                            Due {job.scheduled_date ? formatDate(job.scheduled_date) : 'Date not set'}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {job.scheduled_date ? formatTime(job.scheduled_date) : 'Time not set'}
+                          </p>
+                          {job.scheduled_date && (
+                            <p className="text-xs text-gray-400">
+                              {getRelativeTime(job.scheduled_date)}
+                            </p>
+                          )}
                         </div>
                                                  <div className="text-right">
                             <p className="text-sm text-gray-600">Amount</p>
@@ -572,16 +700,56 @@ const ZenbookerJobs = () => {
                         {/* Customer Info */}
                         <div className="flex items-center space-x-2 text-sm text-gray-600">
                           <Users className="w-4 h-4" />
-                          <span>{job.customer_first_name} {job.customer_last_name}</span>
+                          <span 
+                            className="text-blue-600 hover:text-blue-800 cursor-pointer transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleViewCustomer(job.customer_id);
+                            }}
+                          >
+                            {job.customer_first_name && job.customer_last_name 
+                              ? `${job.customer_first_name} ${job.customer_last_name}`
+                              : job.customer_email 
+                              ? job.customer_email 
+                              : 'Customer Name'
+                            }
+                          </span>
                         </div>
                         
-                        {/* Team Member */}
-                        {job.team_member_first_name && (
+                        {/* Team Members */}
                           <div className="flex items-center space-x-2 text-sm text-gray-600">
                             <Users className="w-4 h-4" />
-                            <span>Assigned to {job.team_member_first_name} {job.team_member_last_name}</span>
+                          {job.team_assignments && job.team_assignments.length > 0 ? (
+                            <div className="flex flex-col">
+                              <span>
+                                {job.team_assignments.length} member{job.team_assignments.length !== 1 ? 's' : ''} assigned
+                              </span>
+                              <div className="text-xs text-gray-500">
+                                {job.team_assignments.map((assignment, index) => {
+                                  const memberName = assignment.first_name && assignment.last_name 
+                                    ? `${assignment.first_name} ${assignment.last_name}`
+                                    : assignment.email || 'Unknown Member';
+                                  return (
+                                    <span key={assignment.team_member_id}>
+                                      {memberName}{assignment.is_primary && ' (Primary)'}
+                                      {index < job.team_assignments.length - 1 ? ', ' : ''}
+                                    </span>
+                                  );
+                                })}
+                              </div>
                           </div>
-                        )}
+                          ) : (
+                            <span 
+                              className="text-blue-600 hover:text-blue-800 cursor-pointer transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAssignJob(job);
+                              }}
+                            >
+                              Assign Team Member
+                            </span>
+                          )}
+                        </div>
                         
                         {/* Invoice Status */}
                         <div className="flex items-center justify-between">
@@ -600,7 +768,10 @@ const ZenbookerJobs = () => {
                       {/* Action Buttons */}
                       <div className="flex items-center justify-between">
                         <button
-                          onClick={() => handleViewJob(job)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewJob(job);
+                          }}
                           className="flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                         >
                           <Eye className="w-4 h-4 mr-2" />
@@ -608,21 +779,30 @@ const ZenbookerJobs = () => {
                         </button>
                         <div className="flex items-center space-x-2">
                           <button 
-                            onClick={() => handleAssignJob(job)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAssignJob(job);
+                            }}
                             className="p-2 text-gray-400 hover:text-gray-600"
                             title="Assign Job"
                           >
                             <Users className="w-4 h-4" />
                           </button>
                           <button 
-                            onClick={() => handleSendInvoice(job)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSendInvoice(job);
+                            }}
                             className="p-2 text-gray-400 hover:text-gray-600"
                             title="Send Invoice"
                           >
                             <DollarSign className="w-4 h-4" />
                           </button>
                           <button 
-                            onClick={() => handleStatusChange(job, 'completed')}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatusChange(job, 'completed');
+                            }}
                             className="p-2 text-gray-400 hover:text-gray-600"
                             title="Mark as Complete"
                           >
@@ -634,6 +814,8 @@ const ZenbookerJobs = () => {
                   </div>
                 ))}
               </div>
+            )}
+              </>
             )}
 
             {/* Pagination */}

@@ -44,6 +44,20 @@ const ZenbookerCustomers = () => {
     }
   }, [user?.id, authLoading])
 
+  // Also fetch customers when the page becomes visible (handles page reload)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && user?.id && !loading) {
+        fetchCustomers()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [user?.id, loading])
+
   // Close city filter dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -104,8 +118,15 @@ const ZenbookerCustomers = () => {
       // Add the new customer to the list
       setCustomers(prev => [response.customer || response, ...prev])
       
-      // Show success message (optional)
-      console.log('Customer created successfully')
+      // Show success message
+      setSuccessMessage('Customer created successfully!')
+      setTimeout(() => setSuccessMessage(''), 3000)
+      
+      // Navigate to customer details page
+      const customerId = response.customer?.id || response.id
+      if (customerId) {
+        navigate(`/customer/${customerId}`)
+      }
       
       // Return the customer data for navigation
       return response.customer || response

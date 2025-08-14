@@ -19,8 +19,18 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
     zipCode: "",
     role: "worker",
     isServiceProvider: true,
+    isActive: true,
     territories: [],
     skills: [],
+    availability: {
+      monday: { start: "09:00", end: "17:00", available: true },
+      tuesday: { start: "09:00", end: "17:00", available: true },
+      wednesday: { start: "09:00", end: "17:00", available: true },
+      thursday: { start: "09:00", end: "17:00", available: true },
+      friday: { start: "09:00", end: "17:00", available: true },
+      saturday: { start: "09:00", end: "17:00", available: false },
+      sunday: { start: "09:00", end: "17:00", available: false }
+    },
     permissions: {
       viewCustomerNotes: true,
       modifyJobStatus: true,
@@ -233,6 +243,19 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
     setFormData(prev => ({
       ...prev,
       [field]: value
+    }))
+  }
+
+  const handleAvailabilityChange = (day, field, value) => {
+    setFormData(prev => ({
+      ...prev,
+      availability: {
+        ...prev.availability,
+        [day]: {
+          ...prev.availability[day],
+          [field]: value
+        }
+      }
     }))
   }
 
@@ -469,6 +492,83 @@ const AddTeamMemberModal = ({ isOpen, onClose, onSuccess, userId, member = null,
                     {formData.isServiceProvider ? 'YES' : 'NO'}
                   </span>
                 </div>
+              </div>
+            </div>
+
+            {/* Activation Toggle */}
+            <div className="border-t border-gray-200 pt-4 sm:pt-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0">
+                <div>
+                  <h3 className="text-sm font-medium text-gray-900">Account Status</h3>
+                  <p className="text-sm text-gray-500">Is this team member active and able to work?</p>
+                </div>
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => handleInputChange('isActive', !formData.isActive)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 ${
+                      formData.isActive ? 'bg-green-600' : 'bg-red-600'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        formData.isActive ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                  <span className="ml-2 text-sm font-medium text-gray-900">
+                    {formData.isActive ? 'ACTIVE' : 'INACTIVE'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Availability Section */}
+            <div className="border-t border-gray-200 pt-4 sm:pt-6">
+              <h3 className="text-sm font-medium text-gray-900 mb-3">AVAILABILITY</h3>
+              <div className="space-y-3">
+                {Object.entries(formData.availability).map(([day, schedule]) => (
+                  <div key={day} className="flex items-center space-x-3">
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        checked={schedule.available}
+                        onChange={(e) => handleAvailabilityChange(day, 'available', e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label className="ml-2 text-sm font-medium text-gray-900 capitalize">
+                        {day}
+                      </label>
+                    </div>
+                    {schedule.available && (
+                      <div className="flex items-center space-x-2">
+                        <select
+                          value={schedule.start}
+                          onChange={(e) => handleAvailabilityChange(day, 'start', e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-1 text-sm"
+                        >
+                          {Array.from({ length: 24 }, (_, i) => (
+                            <option key={i} value={`${i.toString().padStart(2, '0')}:00`}>
+                              {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="text-sm text-gray-500">to</span>
+                        <select
+                          value={schedule.end}
+                          onChange={(e) => handleAvailabilityChange(day, 'end', e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-1 text-sm"
+                        >
+                          {Array.from({ length: 24 }, (_, i) => (
+                            <option key={i} value={`${i.toString().padStart(2, '0')}:00`}>
+                              {i === 0 ? '12:00 AM' : i < 12 ? `${i}:00 AM` : i === 12 ? '12:00 PM' : `${i - 12}:00 PM`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 

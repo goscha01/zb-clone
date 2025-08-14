@@ -343,17 +343,38 @@ const JobDetails = () => {
     }
   }
 
-  const handleTeamAssignment = async (teamMemberId) => {
+  const handleTeamAssignment = async (teamMemberId, specificMemberId = null) => {
     if (!job) return
     try {
       setLoading(true)
-      await jobsAPI.assignToTeamMember(job.id, teamMemberId)
-      setJob(prev => ({ ...prev, team_member_id: teamMemberId }))
+      
+      if (specificMemberId) {
+        // Remove specific team member
+        await jobsAPI.removeTeamMember(job.id, specificMemberId)
+        setJob(prev => ({
+          ...prev,
+          team_assignments: prev.team_assignments.filter(ta => ta.team_member_id !== specificMemberId)
+        }))
+        setSuccessMessage('Team member removed!')
+      } else if (teamMemberId) {
+        // Add new team member
+        await jobsAPI.assignToTeamMember(job.id, teamMemberId)
+        // Refresh job data to get updated team assignments
+        const updatedJob = await jobsAPI.getById(job.id)
+        setJob(updatedJob)
+        setSuccessMessage('Team member assigned!')
+      } else {
+        // Remove all team members
+        await jobsAPI.assignToTeamMember(job.id, null)
+        setJob(prev => ({ ...prev, team_assignments: [] }))
+        setSuccessMessage('All team members unassigned!')
+      }
+      
       setAssigning(false)
       setSelectedTeamMember(null)
-      setSuccessMessage(teamMemberId ? 'Team member assigned!' : 'Team member unassigned!')
       setTimeout(() => setSuccessMessage(""), 3000)
     } catch (error) {
+      console.error('Team assignment error:', error)
       setError('Failed to assign team member')
     } finally {
       setLoading(false)
@@ -620,26 +641,38 @@ const JobDetails = () => {
               <div className="relative">
                 {/* Google Maps Integration */}
                 <div className="w-full h-48 sm:h-64 bg-gradient-to-br from-green-100 to-blue-100 rounded-t-lg flex items-center justify-center">
-                  {job.service_address_street ? (
+                  {job.service_address_street && job.service_address_city ? (
                     <iframe
                       width="100%"
                       height="100%"
                       style={{ border: 0, borderRadius: '8px 8px 0 0' }}
                       loading="lazy"
                       allowFullScreen
+                      referrerPolicy="no-referrer-when-downgrade"
                       src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNGg&q=${encodeURIComponent(
-                        `${job.service_address_street}, ${job.service_address_city}, ${job.service_address_state} ${job.service_address_zip}`
+                        `${job.service_address_street}, ${job.service_address_city}, ${job.service_address_state || ''} ${job.service_address_zip || ''}`
                       )}`}
+                      onError={(e) => {
+                        console.error('Map iframe failed to load:', e);
+                        e.target.style.display = 'none';
+                        e.target.nextSibling.style.display = 'flex';
+                      }}
+                      onLoad={() => {
+                        console.log('Map loaded successfully for address:', `${job.service_address_street}, ${job.service_address_city}`);
+                      }}
                     />
-                  ) : (
-                    <div className="text-center">
-                      <div className="w-10 sm:w-12 h-10 sm:h-12 bg-blue-500 rounded-lg flex items-center justify-center mx-auto mb-3">
-                        <MapPin className="w-5 sm:w-6 h-5 sm:h-6 text-white" />
-                      </div>
-                      <p className="text-gray-600 font-medium">No address set</p>
-                      <p className="text-sm text-gray-500">Add an address to see the map</p>
+                  ) : null}
+                  <div className={`text-center ${job.service_address_street && job.service_address_city ? 'hidden' : 'flex flex-col items-center justify-center'}`}>
+                    <div className="w-10 sm:w-12 h-10 sm:h-12 bg-blue-500 rounded-lg flex items-center justify-center mx-auto mb-3">
+                      <MapPin className="w-5 sm:w-6 h-5 sm:h-6 text-white" />
                     </div>
-                  )}
+                    <p className="text-gray-600 font-medium">
+                      {job.service_address_street ? 'Map unavailable' : 'No address set'}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {job.service_address_street ? 'Unable to load map for this address' : 'Add an address to see the map'}
+                    </p>
+                  </div>
                 </div>
                 
                 {/* Location Info Overlay */}
@@ -914,7 +947,7 @@ const JobDetails = () => {
                   </div>
                 </div>
 
-                {/* Assigned Team Member */}
+                {/* Assigned Team Members */}
                 <div className="pt-4 border-t border-gray-200">
                   <div className="flex justify-between items-center mb-2">
                     <span className="text-sm font-medium text-gray-700">ASSIGNED</span>
@@ -924,21 +957,45 @@ const JobDetails = () => {
                     >Assign</button>
                   </div>
                   <div className="text-center py-4">
-                    {job.team_member_id ? (
+                    {job.team_assignments && job.team_assignments.length > 0 ? (
                       <>
-                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-2">
-                          <Users className="w-6 h-6 text-gray-400" />
+                        <div className="space-y-3">
+                          {job.team_assignments.map((assignment, index) => {
+                            const member = teamMembers.find(m => String(m.id) === String(assignment.team_member_id));
+                            const memberName = member ? (member.name || member.fullName || member.email || member.id) : 'Unknown Member';
+                            return (
+                              <div key={assignment.team_member_id} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                    <Users className="w-4 h-4 text-blue-600" />
+                                  </div>
+                                  <div className="text-left">
+                                    <p className="text-sm font-medium text-gray-700">
+                                      {memberName}
+                                      {assignment.is_primary && (
+                                        <span className="ml-2 text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded">
+                                          Primary
+                                        </span>
+                                      )}
+                                    </p>
+                                    <p className="text-xs text-gray-500">
+                                      Assigned {new Date(assignment.assigned_at).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                </div>
+                                <button
+                                  className="text-xs text-red-600 hover:underline"
+                                  onClick={() => handleTeamAssignment(null, assignment.team_member_id)}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
-                        <p className="text-gray-500 font-medium mb-1">
-                          {(() => {
-                            const member = teamMembers.find(m => String(m.id) === String(job.team_member_id));
-                            return member ? (member.name || member.fullName || member.email || member.id) : 'Assigned (not found)';
-                          })()}
+                        <p className="text-xs text-gray-500 mt-2">
+                          {job.team_assignments.length} team member{job.team_assignments.length !== 1 ? 's' : ''} assigned
                         </p>
-                        <button
-                          className="text-xs text-red-600 hover:underline"
-                          onClick={() => handleTeamAssignment(null)}
-                        >Unassign</button>
                       </>
                     ) : (
                       <>

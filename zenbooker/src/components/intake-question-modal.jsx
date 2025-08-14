@@ -2,7 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronDown, ChevronUp, Plus, HelpCircle, FileText, Minus } from 'lucide-react';
 
-const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave }) => {
+const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave, editingQuestion }) => {
+  console.log('🔄 IntakeQuestionModal props:', { isOpen, selectedQuestionType, editingQuestion });
   const [formData, setFormData] = useState({
     questionType: selectedQuestionType || 'multiple_choice',
     question: '',
@@ -31,14 +32,30 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave }) 
 
   const needsOptions = ['dropdown', 'multiple_choice', 'picture_choice', 'color_choice'].includes(formData.questionType);
 
+  // Initialize form data when editing
   useEffect(() => {
-    if (selectedQuestionType) {
+    if (editingQuestion) {
+      setFormData({
+        id: editingQuestion.id,
+        questionType: editingQuestion.questionType || 'multiple_choice',
+        question: editingQuestion.question || '',
+        description: editingQuestion.description || '',
+        selectionType: editingQuestion.selectionType || 'single',
+        required: editingQuestion.required || false,
+        options: editingQuestion.options && editingQuestion.options.length > 0 
+          ? editingQuestion.options.map((option, index) => ({
+              id: option.id || index + 1,
+              text: option.text || ''
+            }))
+          : [{ id: 1, text: '' }]
+      });
+    } else if (selectedQuestionType) {
       setFormData(prev => ({
         ...prev,
         questionType: selectedQuestionType
       }));
     }
-  }, [selectedQuestionType]);
+  }, [editingQuestion, selectedQuestionType]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -107,7 +124,9 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave }) 
           >
             <X className="w-6 h-6" />
           </button>
-          <h2 className="text-xl font-semibold text-gray-900">Create Intake Question</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {editingQuestion ? 'Edit Intake Question' : 'Create Intake Question'}
+          </h2>
           <div className="w-6"></div> {/* Spacer for centering */}
         </div>
 
@@ -314,7 +333,7 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave }) 
             onClick={handleSave}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
           >
-            Create Intake Question
+            {editingQuestion ? 'Update Intake Question' : 'Create Intake Question'}
           </button>
         </div>
       </div>

@@ -33,17 +33,17 @@ const Sidebar = ({ isOpen, onClose }) => {
     { icon: MessageSquare, label: "Requests", path: "/request" },
     { icon: Calendar, label: "Schedule", path: "/schedule" },
     { icon: Briefcase, label: "Jobs", path: "/jobs" },
-    { icon: FileText, label: "Estimates", path: "/estimates" },
-    { icon: FileText, label: "Invoices", path: "/invoices" },
-    { icon: RotateCcw, label: "Recurring", path: "/recurring" },
-    { icon: CreditCard, label: "Payments", path: "/payments" },
+    { icon: FileText, label: "Estimates", path: "/estimates", hidden: true },
+    { icon: FileText, label: "Invoices", path: "/invoices", hidden: true },
+    { icon: RotateCcw, label: "Recurring", path: "/recurring", hidden: true },
+    { icon: CreditCard, label: "Payments", path: "/payments", hidden: true },
     { icon: Users, label: "Customers", path: "/customers" },
     { icon: UserCheck, label: "Team", path: "/team" },
     { icon: Wrench, label: "Services", path: "/services" },
-    { icon: Tag, label: "Coupons", path: "/coupons" },
+    { icon: Tag, label: "Coupons", path: "/coupons", hidden: true },
     { icon: MapPin, label: "Territories", path: "/territories" },
-    { icon: BarChart3, label: "Analytics", path: "/analytics" },
-    { icon: Globe, label: "Online Booking", path: "/online-booking" },
+    { icon: BarChart3, label: "Analytics", path: "/analytics", hidden: true },
+    { icon: Globe, label: "Online Booking", path: "/online-booking", hidden: true },
     { icon: Settings, label: "Settings", path: "/settings" },
   ]
 
@@ -90,7 +90,7 @@ const Sidebar = ({ isOpen, onClose }) => {
               const Icon = item.icon
               const isActive = location.pathname === item.path
               return (
-                <li key={index}>
+                <li key={index} className={item.hidden ? "feature-hidden" : ""}>
                   <button
                     onClick={() => handleNavigation(item.path)}
                     className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${

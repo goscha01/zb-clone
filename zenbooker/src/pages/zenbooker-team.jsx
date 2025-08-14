@@ -12,7 +12,7 @@ const ZenbookerTeam = () => {
   console.log('Current user:', user)
   console.log('Auth loading:', authLoading)
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [activeTab, setActiveTab] = useState("active")
+  const [activeTab, setActiveTab] = useState("all")
   const [selectedMember, setSelectedMember] = useState(null)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -277,10 +277,21 @@ const ZenbookerTeam = () => {
 
                   {/* Tabs */}
                   <div className="border-b border-gray-200 mb-6">
-                    <nav className="-mb-px flex space-x-8">
+                    <nav className="-mb-px flex space-x-8 overflow-x-auto">
+                      <button
+                        onClick={() => setActiveTab("all")}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                          activeTab === "all"
+                            ? "border-blue-500 text-blue-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        <Users className="w-4 h-4 inline mr-2" />
+                        All ({teamMembers.length})
+                      </button>
                       <button
                         onClick={() => setActiveTab("active")}
-                        className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                           activeTab === "active"
                             ? "border-blue-500 text-blue-600"
                             : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -291,7 +302,7 @@ const ZenbookerTeam = () => {
                       </button>
                       <button
                         onClick={() => setActiveTab("pending")}
-                        className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                           activeTab === "pending"
                             ? "border-blue-500 text-blue-600"
                             : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -302,7 +313,7 @@ const ZenbookerTeam = () => {
                       </button>
                       <button
                         onClick={() => setActiveTab("invited")}
-                        className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                           activeTab === "invited"
                             ? "border-blue-500 text-blue-600"
                             : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -313,7 +324,7 @@ const ZenbookerTeam = () => {
                       </button>
                       <button
                         onClick={() => setActiveTab("deactivated")}
-                        className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                        className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                           activeTab === "deactivated"
                             ? "border-blue-500 text-blue-600"
                             : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -322,11 +333,22 @@ const ZenbookerTeam = () => {
                         <Users className="w-4 h-4 inline mr-2" />
                         Deactivated ({teamMembers.filter(m => m.status === 'inactive' || m.status === 'on_leave').length})
                       </button>
+                      <button
+                        onClick={() => setActiveTab("analytics")}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
+                          activeTab === "analytics"
+                            ? "border-blue-500 text-blue-600"
+                            : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                        }`}
+                      >
+                        <BarChart3 className="w-4 h-4 inline mr-2" />
+                        Analytics
+                      </button>
                     </nav>
                   </div>
 
                   {/* Team Members Tab */}
-                  {(activeTab === "active" || activeTab === "pending" || activeTab === "invited" || activeTab === "deactivated") && (
+                  {(activeTab === "all" || activeTab === "active" || activeTab === "pending" || activeTab === "invited" || activeTab === "deactivated") && (
                     <div>
                       {/* Filters */}
                       <div className="bg-white border border-gray-200 rounded-lg p-4 mb-6">
@@ -421,6 +443,7 @@ const ZenbookerTeam = () => {
                             <ul className="divide-y divide-gray-200">
                               {Array.isArray(teamMembers) ? teamMembers
                                 .filter(member => {
+                                  if (activeTab === "all") return true;
                                   if (activeTab === "active") return member.status === 'active';
                                   if (activeTab === "pending") return member.status === 'pending';
                                   if (activeTab === "invited") return member.status === 'invited';
@@ -448,16 +471,16 @@ const ZenbookerTeam = () => {
                                                   </p>
                                                   <div className="flex-shrink-0">
                                                     {member.status === 'active' && (
-                                                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                                      <div className="w-2 h-2 bg-green-500 rounded-full" title="Active"></div>
                                                     )}
                                                     {member.status === 'pending' && (
-                                                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                                                      <div className="w-2 h-2 bg-yellow-500 rounded-full" title="Pending"></div>
                                                     )}
                                                     {member.status === 'invited' && (
-                                                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                                                      <div className="w-2 h-2 bg-blue-500 rounded-full" title="Invited"></div>
                                                     )}
                                                     {(member.status === 'inactive' || member.status === 'on_leave') && (
-                                                      <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                                                      <div className="w-2 h-2 bg-red-500 rounded-full" title="Inactive"></div>
                                                     )}
                                                   </div>
                                                 </div>

@@ -170,6 +170,9 @@ root.render(
       <Route path="team-member/login" element={<TeamMemberLogin />} />
       <Route path="team-member/dashboard" element={<TeamMemberDashboard />} />
       <Route path="team-member/field-app" element={<TeamMemberFieldApp />} />
+      
+      {/* Catch-all route - redirect to dashboard for any unmatched routes */}
+      <Route path="*" element={<ProtectedRoute><ZenbookerDashboard /></ProtectedRoute>} />
       </Routes>
     </TeamMemberAuthProvider>
     </AuthProvider>

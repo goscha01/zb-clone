@@ -1,8 +1,9 @@
 "use client"
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, ChevronDown, ChevronUp, Plus, HelpCircle, Image as ImageIcon } from 'lucide-react';
 
-const CreateModifierGroupModal = ({ isOpen, onClose, onSave }) => {
+const CreateModifierGroupModal = ({ isOpen, onClose, onSave, editingModifier = null }) => {
+  const [uploadingImages, setUploadingImages] = useState({});
   const [formData, setFormData] = useState({
     groupName: '',
     groupDescription: '',
@@ -24,6 +25,69 @@ const CreateModifierGroupModal = ({ isOpen, onClose, onSave }) => {
   });
 
   const [expandedOption, setExpandedOption] = useState(1);
+
+  // Handle editing - populate form data when editingModifier is provided
+  useEffect(() => {
+    console.log('🔄 Modal useEffect triggered with editingModifier:', editingModifier);
+    console.log('🔄 Modal isOpen:', isOpen);
+    
+    if (editingModifier) {
+      console.log('🔄 Populating form with editing modifier data');
+      // Convert the existing modifier format to the form format
+      setFormData({
+        groupName: editingModifier.title || '',
+        groupDescription: editingModifier.description || '',
+        selectionType: editingModifier.selectionType || 'single',
+        required: editingModifier.required || false,
+        options: editingModifier.options ? editingModifier.options.map((option, index) => ({
+          id: option.id || index + 1,
+          name: option.label || option.name || '',
+          image: option.image || null,
+          description: option.description || '',
+          price: option.price || 0,
+          durationHours: option.duration ? Math.floor(option.duration / 60) : 0,
+          durationMinutes: option.duration ? option.duration % 60 : 0,
+          allowCustomerNotes: option.allowCustomerNotes || false,
+          convertToServiceRequest: option.convertToServiceRequest || false
+        })) : [
+          {
+            id: 1,
+            name: '',
+            image: null,
+            description: '',
+            price: 0,
+            durationHours: 0,
+            durationMinutes: 0,
+            allowCustomerNotes: false,
+            convertToServiceRequest: false
+          }
+        ]
+      });
+      setExpandedOption(1);
+    } else {
+      // Reset form for new modifier
+      setFormData({
+        groupName: '',
+        groupDescription: '',
+        selectionType: 'single',
+        required: false,
+        options: [
+          {
+            id: 1,
+            name: '',
+            image: null,
+            description: '',
+            price: 0,
+            durationHours: 0,
+            durationMinutes: 0,
+            allowCustomerNotes: false,
+            convertToServiceRequest: false
+          }
+        ]
+      });
+      setExpandedOption(1);
+    }
+  }, [editingModifier, isOpen]);
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -72,7 +136,138 @@ const CreateModifierGroupModal = ({ isOpen, onClose, onSave }) => {
     }
   };
 
+  const handleOptionImageUpload = async (optionId, file) => {
+    console.log('🖼️ handleOptionImageUpload called with:', { optionId, file });
+    if (!file) {
+      console.log('❌ No file provided');
+      return;
+    }
+
+    // Helper to check if token is expired
+    const isTokenExpired = (token) => {
+      if (!token) return true;
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (!payload.exp) return true;
+        return Date.now() >= payload.exp * 1000;
+      } catch (e) {
+        return true;
+      }
+    };
+
+    // Helper to check if token is about to expire (within 5 minutes)
+    const isTokenAboutToExpire = (token) => {
+      if (!token) return true;
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        if (!payload.exp) return true;
+        const fiveMinutesFromNow = Date.now() + (5 * 60 * 1000);
+        return fiveMinutesFromNow >= payload.exp * 1000;
+      } catch (e) {
+        return true;
+      }
+    };
+
+    try {
+      setUploadingImages(prev => ({ ...prev, [optionId]: true }));
+      let token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+      
+      if (isTokenExpired(token) || isTokenAboutToExpire(token)) {
+        // Try to refresh the token first
+        try {
+          console.log('🔄 Token expired or about to expire, attempting to refresh...');
+          const refreshResponse = await fetch('https://zenbookapi.now2code.online/api/auth/refresh', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (refreshResponse.ok) {
+            const refreshData = await refreshResponse.json();
+            const newToken = refreshData.token;
+            localStorage.setItem('authToken', newToken);
+            console.log('✅ Token refreshed successfully');
+            // Use the new token for the upload
+            token = newToken;
+          } else {
+            throw new Error('Token has expired. Please log in again.');
+          }
+        } catch (refreshError) {
+          console.error('❌ Token refresh failed:', refreshError);
+          throw new Error('Token has expired. Please log in again.');
+        }
+      }
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      console.log('Uploading modifier image for option:', optionId);
+
+      const response = await fetch('https://zenbookapi.now2code.online/api/upload-modifier-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      console.log('Upload response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Upload failed with status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log('Upload result:', result);
+      
+      if (!result.imageUrl) {
+        throw new Error('No image URL received from server');
+      }
+      
+      // Update the option with the new image URL
+      setFormData(prev => ({
+        ...prev,
+        options: prev.options.map(option => 
+          option.id === optionId ? { ...option, image: result.imageUrl } : option
+        )
+      }));
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      
+      // If token is expired or invalid, redirect to login
+      if (error.message.includes('Token has expired') || error.message.includes('Invalid or expired token')) {
+        alert('Your session has expired. Please log in again.');
+        // Clear invalid token
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('user');
+        // Redirect to login page
+        window.location.href = '/signin';
+        return;
+      }
+      
+      alert(`Failed to upload image: ${error.message}`);
+    } finally {
+      setUploadingImages(prev => ({ ...prev, [optionId]: false }));
+    }
+  };
+
+  const handleOptionImageRemove = (optionId) => {
+    setFormData(prev => ({
+      ...prev,
+      options: prev.options.map(option => 
+        option.id === optionId ? { ...option, image: null } : option
+      )
+    }));
+  };
+
   const handleSave = () => {
+    console.log('🔄 Modal handleSave called with formData:', formData);
     onSave(formData);
     onClose();
   };
@@ -90,7 +285,9 @@ const CreateModifierGroupModal = ({ isOpen, onClose, onSave }) => {
           >
             <X className="w-6 h-6" />
           </button>
-          <h2 className="text-xl font-semibold text-gray-900">Create Modifier Group</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            {editingModifier ? 'Edit Modifier Group' : 'Create Modifier Group'}
+          </h2>
           <div className="w-6"></div> {/* Spacer for centering */}
         </div>
 
@@ -235,13 +432,50 @@ const CreateModifierGroupModal = ({ isOpen, onClose, onSave }) => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Image
                         </label>
-                        <button
-                          type="button"
-                          className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-                        >
-                          <ImageIcon className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-600">Upload image</span>
-                        </button>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => handleOptionImageUpload(option.id, e.target.files[0])}
+                          className="hidden"
+                          id={`image-upload-${option.id}`}
+                          disabled={uploadingImages[option.id]}
+                        />
+                        <div className="flex items-center space-x-3">
+                          {uploadingImages[option.id] ? (
+                            <div className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                              <span className="text-sm text-gray-600">Uploading...</span>
+                            </div>
+                          ) : option.image ? (
+                            <div className="relative">
+                              <img
+                                src={option.image}
+                                alt="Option image"
+                                className="w-16 h-16 object-cover rounded-lg border border-gray-200"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleOptionImageRemove(option.id)}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ) : (
+                            <label
+                              htmlFor={`image-upload-${option.id}`}
+                              className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer"
+                            >
+                              <ImageIcon className="w-4 h-4 text-gray-400" />
+                              <span className="text-sm text-gray-600">Upload image</span>
+                            </label>
+                          )}
+                          {option.image && !uploadingImages[option.id] && (
+                            <span className="text-xs text-gray-500">
+                              Click the × to remove
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Description */}
