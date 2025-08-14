@@ -164,7 +164,7 @@ export default function SignInForm() {
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 mb-6">
           <div className="flex justify-center mb-8">
              <Link to="/" className="flex items-center">
-            <img src="/images/zenbooker-logo-v3.1-mobile.svg" alt="Zenbooker" className="h-10 w-auto" />
+            <img src="/logo.svg" alt="ServiceFlow" className="h-10 w-auto" />
           </Link>
           </div>
 

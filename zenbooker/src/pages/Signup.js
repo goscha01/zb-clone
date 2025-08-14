@@ -128,7 +128,7 @@ export default function SignupForm() {
             {/* Logo */}
             <div className="text-center mb-8">
               <Link to="/" className="flex items-center">
-                         <img src="/images/zenbooker-logo-v3.1-mobile.svg" alt="Zenbooker" className="h-10 w-auto" />
+                         <img src="/logo.svg" alt="ServiceFlow" className="h-10 w-auto" />
                        </Link>
             </div>
 

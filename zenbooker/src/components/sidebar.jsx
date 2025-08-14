@@ -79,7 +79,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         {/* Logo */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center space-x-2 cursor-pointer" onClick={() => handleNavigation("/dashboard")}>
-           <img src="/images/zenbooker-logo-v3.1-mobile.svg" alt="Zenbooker Logo"  />
+           <img src="/logo.svg" alt="ServiceFlow Logo"  />
           </div>
         </div>
 
