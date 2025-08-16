@@ -1,7 +1,7 @@
 import { useState } from "react"
-import { X, DollarSign, Clock, FileText, Tag } from "lucide-react"
+import { X, DollarSign, Clock, FileText, Tag, ChevronDown } from "lucide-react"
 
-const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTemplate }) => {
+const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTemplate, existingCategories = [] }) => {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -12,6 +12,8 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
     image: null
   })
   const [loading, setLoading] = useState(false)
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false)
+  const [newCategory, setNewCategory] = useState("")
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -21,14 +23,7 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
     try {
       await onCreateService(formData)
       // Reset form
-      setFormData({
-        name: "",
-        description: "",
-        price: "",
-        duration: { hours: 0, minutes: 30 },
-        category: "",
-        isFree: false
-      })
+      resetForm()
     } catch (error) {
       console.error('Error creating service:', error)
     } finally {
@@ -61,6 +56,25 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
     }))
   }
 
+  const resetForm = () => {
+    setFormData({
+      name: "",
+      description: "",
+      price: "",
+      duration: { hours: 0, minutes: 30 },
+      category: "",
+      isFree: false,
+      image: null
+    })
+    setNewCategory("")
+    setShowCategoryDropdown(false)
+  }
+
+  const handleClose = () => {
+    resetForm()
+    onClose()
+  }
+
   if (!isOpen) return null
 
   return (
@@ -70,7 +84,7 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <h2 className="text-xl font-semibold text-gray-900">Create a service</h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="text-gray-400 hover:text-gray-500 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -130,10 +144,84 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
                   type="text"
                   value={formData.category}
                   onChange={(e) => handleInputChange('category', e.target.value)}
+                  onFocus={() => setShowCategoryDropdown(true)}
                   placeholder="e.g., Cleaning, Installation, Repair"
-                  className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border border-gray-300 rounded-lg pl-10 pr-10 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+                  className="absolute right-3 top-2.5 h-4 w-4 text-gray-400 hover:text-gray-600"
+                >
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                
+                {/* Category Dropdown */}
+                {showCategoryDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    {existingCategories.length > 0 && (
+                      <div className="p-2 border-b border-gray-200">
+                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide px-2 py-1">Existing Categories</p>
+                        {existingCategories.map((category, index) => (
+                          <button
+                            key={index}
+                            type="button"
+                            onClick={() => {
+                              handleInputChange('category', category)
+                              setShowCategoryDropdown(false)
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
+                          >
+                            {category}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Add New Category */}
+                    <div className="p-2">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide px-2 py-1">Add New Category</p>
+                      <div className="flex space-x-2">
+                        <input
+                          type="text"
+                          value={newCategory}
+                          onChange={(e) => setNewCategory(e.target.value)}
+                          placeholder="Enter new category name"
+                          className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter' && newCategory.trim()) {
+                              handleInputChange('category', newCategory.trim())
+                              setNewCategory("")
+                              setShowCategoryDropdown(false)
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (newCategory.trim()) {
+                              handleInputChange('category', newCategory.trim())
+                              setNewCategory("")
+                              setShowCategoryDropdown(false)
+                            }
+                          }}
+                          className="px-3 py-2 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                        >
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
+              
+              {/* Close dropdown when clicking outside */}
+              {showCategoryDropdown && (
+                <div 
+                  className="fixed inset-0 z-0" 
+                  onClick={() => setShowCategoryDropdown(false)}
+                />
+              )}
             </div>
 
             {/* Price Section */}

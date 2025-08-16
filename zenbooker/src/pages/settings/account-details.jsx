@@ -52,7 +52,7 @@ const AccountDetails = () => {
 
   // Get current user
   const currentUser = authAPI.getCurrentUser()
-  const { updateUserProfile } = useAuth()
+  const { updateUserProfile, refreshUserProfile } = useAuth()
 
   useEffect(() => {
     let isMounted = true;
@@ -112,7 +112,7 @@ const AccountDetails = () => {
       console.log('Profile loaded:', profile);
       setFormData({
         fullName: `${profile.firstName} ${profile.lastName}`,
-        businessName: profile.business_name || "",
+        businessName: profile.businessName || profile.business_name || "",
         phone: profile.phone || "",
         email: profile.email,
         emailNotifications: profile.emailNotifications,
@@ -184,7 +184,7 @@ const AccountDetails = () => {
       const [firstName, ...lastNameParts] = formData.fullName.split(' ')
       const lastName = lastNameParts.join(' ') || ''
       
-      await userProfileAPI.updateProfile({
+      const result = await userProfileAPI.updateProfile({
         userId: user.id,
         firstName,
         lastName,
@@ -193,6 +193,32 @@ const AccountDetails = () => {
         emailNotifications: formData.emailNotifications,
         smsNotifications: formData.smsNotifications
       })
+      
+      // Update the user data in AuthContext and localStorage
+      const updatedUser = {
+        ...user,
+        firstName,
+        lastName,
+        businessName: formData.businessName,
+        business_name: formData.businessName,
+        phone: formData.phone,
+        emailNotifications: formData.emailNotifications,
+        smsNotifications: formData.smsNotifications
+      }
+      
+      // Update localStorage
+      localStorage.setItem('user', JSON.stringify(updatedUser))
+      
+      // Update AuthContext
+      updateUserProfile(updatedUser)
+      
+      // Refresh user profile to ensure all data is synced
+      try {
+        await refreshUserProfile()
+        console.log('🔍 Profile refreshed after update')
+      } catch (error) {
+        console.error('Error refreshing profile:', error)
+      }
       
       setMessage({ type: 'success', text: 'Profile updated successfully!' })
       setTimeout(() => setMessage({ type: '', text: '' }), 3000)

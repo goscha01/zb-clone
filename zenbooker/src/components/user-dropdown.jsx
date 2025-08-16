@@ -118,7 +118,7 @@ const UserDropdown = ({ isOpen, onClose, onToggle }) => {
               }
             </p>
             <p className="text-xs text-gray-500 truncate">
-              {user?.businessName || user?.email || 'Business'}
+              {user?.business_name || user?.businessName || user?.email || 'Business'}
             </p>
           </div>
         </div>

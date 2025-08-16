@@ -9,6 +9,8 @@ import TerritoryAdjustmentModal from "../components/territory-adjustment-modal"
 
 import CreateModifierGroupModal from "../components/create-modifier-group-modal"
 import IntakeQuestionModal from "../components/intake-question-modal"
+import IntakeQuestionsForm from "../components/intake-questions-form"
+import ServiceModifiersForm from "../components/service-modifiers-form"
 import { servicesAPI, serviceAvailabilityAPI } from "../services/api"
 import { useAuth } from "../context/AuthContext"
 import { 
@@ -409,8 +411,13 @@ const ServiceDetails = () => {
         setSuccessMessage("Intake question updated successfully!")
       } else {
         // Create new question
+        const currentQuestions = serviceData.intakeQuestions || [];
+        const maxId = currentQuestions.length > 0 
+          ? Math.max(...currentQuestions.map(q => typeof q.id === 'number' ? q.id : parseInt(q.id) || 0))
+          : 0;
+        
         const newIntakeQuestion = {
-          id: Date.now(),
+          id: maxId + 1, // Use sequential numeric IDs
           questionType: questionData.questionType,
           question: questionData.question,
           description: questionData.description,
@@ -795,14 +802,28 @@ const ServiceDetails = () => {
                               </span>
                             )}
                           </div>
+                          {/* Field Description */}
                           {question.description && (
                             <p className="text-sm text-gray-500 mt-1">{question.description}</p>
                           )}
-                          {question.selectionType && (
-                            <p className="text-sm text-gray-500">
-                              {question.selectionType === 'single' ? 'Single Select' : 'Multi-Select'}
-                            </p>
-                          )}
+                          {/* Question Type and Selection Type */}
+                          <div className="flex items-center space-x-2 mt-1">
+                            <span className="text-sm text-gray-500">
+                              {question.questionType === 'dropdown' && 'Dropdown'}
+                              {question.questionType === 'multiple_choice' && 'Multiple Choice'}
+                              {question.questionType === 'picture_choice' && 'Picture Choice'}
+                              {question.questionType === 'short_text' && 'Short Text Answer'}
+                              {question.questionType === 'long_text' && 'Long Text Answer'}
+                              {question.questionType === 'color_choice' && 'Color Choice'}
+                              {question.questionType === 'image_upload' && 'Image Upload'}
+                              {question.questionType === 'quantity_select' && 'Quantity Select'}
+                            </span>
+                            {question.selectionType && ['dropdown', 'multiple_choice', 'picture_choice', 'color_choice'].includes(question.questionType) && (
+                              <span className="text-sm text-gray-500">
+                                {question.selectionType === 'single' ? 'Single Select' : 'Multi-Select'}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -826,7 +847,8 @@ const ServiceDetails = () => {
                         </button>
                       </div>
                     </div>
-                    {question.options && question.options.length > 0 && (
+                    {/* Show options only for question types that have options */}
+                    {question.options && question.options.length > 0 && ['dropdown', 'multiple_choice', 'picture_choice', 'color_choice', 'quantity_select'].includes(question.questionType) && (
                       <div className="px-4 pb-4">
                         <div className="flex flex-wrap gap-2">
                           {question.options.map((option, optionIndex) => (
@@ -846,6 +868,23 @@ const ServiceDetails = () => {
                 </div>
               )}
             </div>
+
+            {/* Customer Preview Section */}
+            {serviceData.intakeQuestions && serviceData.intakeQuestions.length > 0 && (
+              <div className="border-t border-gray-200 pt-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Customer Preview</h3>
+                  <p className="text-sm text-gray-600">This is how your intake questions will appear to customers during booking.</p>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <IntakeQuestionsForm 
+                    questions={serviceData.intakeQuestions}
+                    onAnswersChange={() => {}} // Read-only preview
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="bg-gray-50 rounded-lg p-6 flex flex-col items-center justify-center text-center">
               <IntakeQuestionDropdown />
@@ -1713,6 +1752,23 @@ const ServiceDetails = () => {
                 </div>
               )}
             </div>
+
+            {/* Customer Preview Section */}
+            {serviceData.modifiers && serviceData.modifiers.length > 0 && (
+              <div className="border-t border-gray-200 pt-6">
+                <div className="mb-4">
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Customer Preview</h3>
+                  <p className="text-sm text-gray-600">This is how your modifiers will appear to customers during booking.</p>
+                </div>
+                
+                <div className="bg-gray-50 rounded-lg p-6">
+                  <ServiceModifiersForm 
+                    modifiers={serviceData.modifiers}
+                    onModifiersChange={() => {}} // Read-only preview
+                  />
+                </div>
+              </div>
+            )}
 
             <button 
               onClick={() => {

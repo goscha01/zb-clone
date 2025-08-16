@@ -42,6 +42,7 @@ export const AuthProvider = ({ children }) => {
           try {
             const { userProfileAPI } = await import('../services/api');
             const fullProfile = await userProfileAPI.getProfile(basicUserData.id);
+            console.log('🔍 AuthContext: Full profile loaded:', fullProfile);
             setUser(fullProfile);
             // Update localStorage with full profile data
             localStorage.setItem('user', JSON.stringify(fullProfile));
@@ -103,8 +104,41 @@ export const AuthProvider = ({ children }) => {
   };
 
   const updateUserProfile = (updatedProfile) => {
-    setUser(updatedProfile);
-    localStorage.setItem('user', JSON.stringify(updatedProfile));
+    // Ensure both business name fields are present for consistency
+    const syncedProfile = {
+      ...updatedProfile,
+      businessName: updatedProfile.businessName || updatedProfile.business_name,
+      business_name: updatedProfile.business_name || updatedProfile.businessName
+    };
+    
+    console.log('🔍 AuthContext: Updating user profile with synced data:', syncedProfile);
+    setUser(syncedProfile);
+    localStorage.setItem('user', JSON.stringify(syncedProfile));
+  };
+
+  const refreshUserProfile = async () => {
+    try {
+      if (!user?.id) return;
+      
+      const { userProfileAPI } = await import('../services/api');
+      const freshProfile = await userProfileAPI.getProfile(user.id);
+      
+      // Ensure both business name fields are present
+      const syncedProfile = {
+        ...freshProfile,
+        businessName: freshProfile.businessName || freshProfile.business_name,
+        business_name: freshProfile.business_name || freshProfile.businessName
+      };
+      
+      console.log('🔍 AuthContext: Refreshing user profile with fresh data:', syncedProfile);
+      setUser(syncedProfile);
+      localStorage.setItem('user', JSON.stringify(syncedProfile));
+      
+      return syncedProfile;
+    } catch (error) {
+      console.error('Error refreshing user profile:', error);
+      throw error;
+    }
   };
 
   // Listen for token expiration on every page load and API error
@@ -130,6 +164,7 @@ export const AuthProvider = ({ children }) => {
     signup,
     logout,
     updateUserProfile,
+    refreshUserProfile,
     isAuthenticated
   };
 

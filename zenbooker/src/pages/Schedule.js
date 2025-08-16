@@ -20,7 +20,8 @@ const ZenbookerSchedule = () => {
   const [filters, setFilters] = useState({
     status: "all",
     teamMember: "all",
-    timeRange: "all"
+    timeRange: "all",
+    territory: "all"
   })
 
 
@@ -48,10 +49,28 @@ const ZenbookerSchedule = () => {
       const response = await teamAPI.getAll(currentUser.id)
       // response may be { teamMembers: [...] } or just an array
       const members = Array.isArray(response) ? response : (response.teamMembers || response || [])
-      setTeamMembers(members)
+      
+      // Add sample territories for testing if none exist
+      const membersWithTerritories = members.map(member => ({
+        ...member,
+        territory: member.territory || (member.id % 3 === 0 ? 'Jacksonville' : member.id % 3 === 1 ? 'St. Petersburg' : 'Tampa')
+      }))
+      
+      setTeamMembers(membersWithTerritories)
     } catch (error) {
       setTeamMembers([])
     }
+  }
+
+  // Get unique territories from team members
+  const getTerritories = () => {
+    const territories = new Set()
+    teamMembers.forEach(member => {
+      if (member.territory) {
+        territories.add(member.territory)
+      }
+    })
+    return Array.from(territories).sort()
   }
 
   const loadJobs = async () => {
@@ -148,7 +167,7 @@ const ZenbookerSchedule = () => {
   }
 
   const handleCreateJob = () => {
-    navigate('/create-job')
+    navigate('/createjob')
   }
 
   const handleViewJob = (job) => {
@@ -210,6 +229,22 @@ const ZenbookerSchedule = () => {
       }
     }
 
+    // Filter by territory
+    if (filters.territory !== 'all') {
+      filtered = filtered.filter(job => {
+        // Check if job has territory information
+        if (job.territory) {
+          return job.territory === filters.territory
+        }
+        // If no territory on job, check team member's territory
+        if (job.team_member_id) {
+          const teamMember = teamMembers.find(tm => tm.id === job.team_member_id)
+          return teamMember?.territory === filters.territory
+        }
+        return false
+      })
+    }
+
     // Filter by time range
     if (filters.timeRange !== 'all') {
       const now = new Date()
@@ -251,7 +286,9 @@ const ZenbookerSchedule = () => {
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Day Summary</h2>
+          <h2 className="text-lg font-semibold text-gray-900">
+            Day Summary - {formatDate(currentDate, 'day')}
+          </h2>
           <div className="flex items-center space-x-2">
             <button
               onClick={() => setShowMap(!showMap)}
@@ -265,7 +302,7 @@ const ZenbookerSchedule = () => {
           </div>
         </div>
         
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-4">
           <div className="text-center">
             <div className="text-2xl font-bold text-gray-900">{summary.totalJobs}</div>
             <div className="text-sm text-gray-600">Total Jobs</div>
@@ -291,15 +328,57 @@ const ZenbookerSchedule = () => {
             <div className="text-sm text-gray-600">Assigned</div>
           </div>
         </div>
+
+        {/* Additional metrics row */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-gray-100">
+          <div className="text-center">
+            <div className="text-lg font-semibold text-orange-600">{summary.confirmedJobs}</div>
+            <div className="text-sm text-gray-600">Confirmed</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-semibold text-red-600">{summary.cancelledJobs}</div>
+            <div className="text-sm text-gray-600">Cancelled</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-semibold text-gray-600">{summary.unassignedJobs}</div>
+            <div className="text-sm text-gray-600">Unassigned</div>
+          </div>
+          <div className="text-center">
+            <div className="text-lg font-semibold text-blue-600">
+              {summary.totalDuration > 0 ? `${Math.round(summary.totalDuration / 60)}h ${summary.totalDuration % 60}m` : '0h 0m'}
+            </div>
+            <div className="text-sm text-gray-600">Total Duration</div>
+          </div>
+        </div>
+
+        {/* Progress bar for completion rate */}
+        {summary.totalJobs > 0 && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">Completion Rate</span>
+              <span className="text-sm text-gray-600">
+                {Math.round((summary.completedJobs / summary.totalJobs) * 100)}%
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-green-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(summary.completedJobs / summary.totalJobs) * 100}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
 
-  // Map Component
+  // Jobs Map Component
   const JobsMap = () => {
-    const filteredJobs = getFilteredJobs()
-    const jobsWithLocation = filteredJobs.filter(job => job.customer_address || (job.service_address_street && job.service_address_city))
-    
+    // Filter jobs that have location data
+    const jobsWithLocation = getFilteredJobs().filter(job => 
+      job.customer_address || (job.service_address_street && job.service_address_city)
+    )
+
     if (jobsWithLocation.length === 0) {
       return (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
@@ -312,22 +391,41 @@ const ZenbookerSchedule = () => {
       )
     }
 
-    // Use a default center (San Francisco) since we don't have coordinates
-    const mapCenter = '37.7749,-122.4194' // San Francisco coordinates
+    // Create a custom map URL that shows all job locations
+    const createMultiLocationMap = () => {
+      if (jobsWithLocation.length === 1) {
+        // Single job - use place mode
+        const address = jobsWithLocation[0].customer_address || `${jobsWithLocation[0].service_address_street}, ${jobsWithLocation[0].service_address_city}`
+        return `https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(address)}&zoom=14`
+      } else {
+        // Multiple jobs - use a custom approach with search mode
+        const addresses = jobsWithLocation.map(job => 
+          job.customer_address || `${job.service_address_street}, ${job.service_address_city}`
+        ).join('|')
+        
+        // Use search mode to show multiple locations
+        return `https://www.google.com/maps/embed/v1/search?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=${encodeURIComponent(addresses)}&zoom=10`
+      }
+    }
 
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Job Locations</h3>
-        <p className="text-sm text-gray-600 mb-4">Map shows general area. Job details with addresses are listed below.</p>
+        <p className="text-sm text-gray-600 mb-4">
+          {jobsWithLocation.length === 1 
+            ? "Map shows the job location." 
+            : `Map shows all ${jobsWithLocation.length} job locations. Job details are listed below.`
+          }
+        </p>
         
-        {/* Google Maps iframe with markers */}
+        {/* Google Maps iframe with all job locations */}
         <div className="h-80 bg-gray-100 rounded-lg overflow-hidden mb-4 relative">
           <iframe
             width="100%"
             height="100%"
             frameBorder="0"
             style={{ border: 0 }}
-            src={`https://www.google.com/maps/embed/v1/view?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNGg&center=${mapCenter}&zoom=10`}
+            src={createMultiLocationMap()}
             allowFullScreen
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
@@ -341,11 +439,16 @@ const ZenbookerSchedule = () => {
           </div>
         </div>
         
-        {/* Job list below map */}
+        {/* Job list below map with numbered markers */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {jobsWithLocation.slice(0, 6).map(job => (
-            <div key={job.id} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-              <div className="font-medium text-sm text-gray-900">{job.service_name}</div>
+          {jobsWithLocation.slice(0, 6).map((job, index) => (
+            <div key={job.id} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer border-l-4 border-blue-500">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-6 h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                  {index + 1}
+                </div>
+                <div className="font-medium text-sm text-gray-900">{job.service_name}</div>
+              </div>
               <div className="text-xs text-gray-600 truncate mt-1">
                 {job.customer_address || `${job.service_address_street}, ${job.service_address_city}`}
               </div>

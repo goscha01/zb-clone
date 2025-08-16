@@ -63,6 +63,8 @@ import ServiceAddressModal from "../components/service-address-modal";
 import PaymentMethodModal from "../components/payment-method-modal";
 import TerritorySelectionModal from "../components/territory-selection-modal";
 import AddressAutocomplete from "../components/address-autocomplete";
+import IntakeQuestionsForm from "../components/intake-questions-form";
+import ServiceModifiersForm from "../components/service-modifiers-form";
 import { useNavigate } from 'react-router-dom';
 import { jobsAPI, customersAPI, servicesAPI, teamAPI, territoriesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
@@ -90,7 +92,7 @@ export default function CreateJobPage() {
     scheduledTime: "09:00",
     notes: "",
     status: "pending",
-    duration: 6,
+    duration: 360, // Default 6 hours in minutes
     workers: 1,
     skillsRequired: 0,
     price: 0,
@@ -165,6 +167,7 @@ export default function CreateJobPage() {
   // Service modifiers and intake questions state
   const [selectedModifiers, setSelectedModifiers] = useState({}); // { modifierId: selectedOptions[] }
   const [intakeQuestionAnswers, setIntakeQuestionAnswers] = useState({}); // { questionId: answer }
+  const [calculationTrigger, setCalculationTrigger] = useState(0); // Trigger for recalculations
 
   // Expandable sections
   const [expandedSections, setExpandedSections] = useState({
@@ -263,6 +266,13 @@ export default function CreateJobPage() {
   useEffect(() => {
     console.log('scheduledTime changed to:', formData.scheduledTime);
   }, [formData.scheduledTime]);
+
+  // Monitor selectedModifiers changes for debugging
+  useEffect(() => {
+    console.log('🔄 selectedModifiers changed:', selectedModifiers);
+    console.log('🔄 Current price calculation:', calculateTotalPrice());
+    console.log('🔄 Current duration calculation:', calculateTotalDuration());
+  }, [selectedModifiers, calculationTrigger]);
 
   const loadData = async () => {
     if (!user?.id) return;
@@ -368,8 +378,8 @@ export default function CreateJobPage() {
   const handleServiceSelect = (service) => {
     setSelectedService(service);
     
-    // Handle duration properly - services use { hours: X, minutes: Y } format
-    let durationInHours = 1; // Default
+    // Handle duration properly - services store duration in MINUTES
+    let durationInMinutes = 60; // Default 1 hour
     if (service.duration) {
       console.log('🔄 Service duration before conversion:', {
         duration: service.duration,
@@ -379,23 +389,23 @@ export default function CreateJobPage() {
       
       if (typeof service.duration === 'object' && service.duration.hours !== undefined) {
         // New format: { hours: X, minutes: Y }
-        durationInHours = service.duration.hours + (service.duration.minutes / 60);
-        console.log('🔄 Converted object duration to hours:', {
+        durationInMinutes = (service.duration.hours * 60) + service.duration.minutes;
+        console.log('🔄 Converted object duration to minutes:', {
           hours: service.duration.hours,
           minutes: service.duration.minutes,
-          totalHours: durationInHours
+          totalMinutes: durationInMinutes
         });
       } else if (typeof service.duration === 'number') {
-        // Old format: minutes as number
-        durationInHours = service.duration / 60; // Don't use Math.ceil, keep decimal
-        console.log('🔄 Converted number duration to hours:', {
+        // Service duration is already in minutes
+        durationInMinutes = service.duration;
+        console.log('🔄 Service duration in minutes:', {
           originalMinutes: service.duration,
-          convertedHours: durationInHours
+          totalMinutes: durationInMinutes
         });
       }
     }
     
-    console.log('🔄 Final duration in hours for formData:', durationInHours);
+    console.log('🔄 Final duration in minutes for formData:', durationInMinutes);
     
     // Parse modifiers and intake questions if they exist
     let serviceModifiers = [];
@@ -410,9 +420,19 @@ export default function CreateJobPage() {
         // Debug modifier durations
         console.log('🔄 Service modifiers loaded:', serviceModifiers);
         serviceModifiers.forEach(modifier => {
+          console.log(`🔄 Modifier "${modifier.title || modifier.id}":`, {
+            id: modifier.id,
+            title: modifier.title,
+            selectionType: modifier.selectionType,
+            options: modifier.options?.length || 0
+          });
           if (modifier.options) {
             modifier.options.forEach(option => {
-              console.log(`🔄 Modifier option "${option.title}" duration:`, {
+              console.log(`🔄 Modifier option "${option.label || option.title || option.id}":`, {
+                id: option.id,
+                label: option.label,
+                title: option.title,
+                price: option.price,
                 duration: option.duration,
                 type: typeof option.duration,
                 isObject: typeof option.duration === 'object'
@@ -428,20 +448,49 @@ export default function CreateJobPage() {
     
     if (service.intake_questions) {
       try {
-        serviceIntakeQuestions = typeof service.intake_questions === 'string' 
+        const originalQuestions = typeof service.intake_questions === 'string' 
           ? JSON.parse(service.intake_questions) 
           : service.intake_questions;
+        
+        // Create a mapping from normalized IDs to original IDs
+        const idMapping = {};
+        serviceIntakeQuestions = originalQuestions.map((question, index) => {
+          const normalizedId = index + 1;
+          idMapping[normalizedId] = question.id; // Map normalized ID to original ID
+          return {
+            ...question,
+            id: normalizedId // Use normalized ID for frontend
+          };
+        });
+        
+        // Store the ID mapping for later use when sending to backend
+        setFormData(prev => ({ ...prev, intakeQuestionIdMapping: idMapping }));
+        
+        console.log('🔄 Service intake questions loaded:', serviceIntakeQuestions);
+        console.log('🔄 ID mapping created:', idMapping);
+        console.log('🔄 Service intake questions count:', serviceIntakeQuestions.length);
+        serviceIntakeQuestions.forEach((q, index) => {
+          console.log(`🔄 Question ${index + 1}:`, {
+            id: q.id,
+            originalId: idMapping[q.id],
+            question: q.question,
+            questionType: q.questionType,
+            required: q.required
+          });
+        });
       } catch (error) {
         console.error('Error parsing service intake questions:', error);
         serviceIntakeQuestions = [];
       }
+    } else {
+      console.log('🔄 No intake questions found for service');
     }
     
     setFormData(prev => ({
       ...prev,
       serviceId: service.id,
       price: service.price || 0,
-      duration: durationInHours,
+      duration: durationInMinutes, // Store in minutes
       workers: selectedTeamMembers.length > 0 ? selectedTeamMembers.length : (service.workers || 1),
       skillsRequired: service.skills || 0,
       serviceName: service.name,
@@ -455,6 +504,7 @@ export default function CreateJobPage() {
     
     // Clear previous intake answers when selecting a new service
     setIntakeQuestionAnswers({});
+    setSelectedModifiers({}); // Clear previous modifier selections
     
     setShowServiceDropdown(false);
     setServiceSearch("");
@@ -627,11 +677,45 @@ export default function CreateJobPage() {
         qualityCheck: formData.qualityCheck,
         // Service modifiers and intake questions
         selectedModifiers: selectedModifiers,
-        intakeQuestionAnswers: intakeQuestionAnswers,
+        intakeQuestionAnswers: (() => {
+          // Convert normalized IDs back to original IDs for backend
+          const idMapping = formData.intakeQuestionIdMapping || {};
+          const convertedAnswers = {};
+          
+          Object.entries(intakeQuestionAnswers).forEach(([normalizedId, answer]) => {
+            const originalId = idMapping[normalizedId];
+            if (originalId) {
+              convertedAnswers[originalId] = answer;
+              
+              // Debug specific question types
+              const question = formData.serviceIntakeQuestions?.find(q => q.id == normalizedId);
+              if (question) {
+                console.log(`🔄 Question "${question.question}" (${question.questionType}):`, {
+                  normalizedId,
+                  originalId,
+                  answer,
+                  answerType: typeof answer,
+                  answerLength: answer?.length
+                });
+              }
+            }
+          });
+          
+          console.log('🔄 Converting intake answers:', {
+            original: intakeQuestionAnswers,
+            converted: convertedAnswers,
+            mapping: idMapping
+          });
+          
+          return convertedAnswers;
+        })(),
         totalPrice: calculateTotalPrice()
       };
 
       console.log('Creating job with data:', jobData);
+      console.log('🔄 Intake questions being sent:', jobData.intakeQuestionAnswers);
+      console.log('🔄 Intake questions count being sent:', Object.keys(jobData.intakeQuestionAnswers || {}).length);
+      console.log('🔄 Intake questions keys being sent:', Object.keys(jobData.intakeQuestionAnswers || {}));
       console.log('Time value being sent:', jobData.scheduledTime);
       console.log('Time value type:', typeof jobData.scheduledTime);
       console.log('Time value length:', jobData.scheduledTime ? jobData.scheduledTime.length : 'null/undefined');
@@ -711,10 +795,8 @@ export default function CreateJobPage() {
       let newSelections;
       
       if (isSelected) {
-        // Add option
         newSelections = [...currentSelections, optionId];
       } else {
-        // Remove option
         newSelections = currentSelections.filter(id => id !== optionId);
       }
       
@@ -724,11 +806,59 @@ export default function CreateJobPage() {
       };
       
       console.log('🔄 Updated modifier selections:', updatedSelections);
-      console.log('🔄 New total price:', calculateTotalPrice());
-      console.log('🔄 New total duration:', calculateTotalDuration());
-      
       return updatedSelections;
     });
+  };
+
+  // Handle modifiers change from the new component
+  const handleModifiersChange = (modifiers) => {
+    console.log('🔄 Modifiers changed:', modifiers);
+    console.log('🔄 Service modifiers available:', formData.serviceModifiers);
+    
+    // Convert the new format to the existing format for compatibility
+    const convertedModifiers = {};
+    
+    Object.entries(modifiers).forEach(([modifierId, modifierData]) => {
+      const modifier = formData.serviceModifiers?.find(m => m.id == modifierId);
+      console.log(`🔄 Processing modifier ${modifierId}:`, { modifier, modifierData });
+      
+      if (!modifier) {
+        console.log(`🔄 Modifier ${modifierId} not found in serviceModifiers`);
+        return;
+      }
+      
+      if (modifier.selectionType === 'quantity') {
+        // Handle quantity selection
+        const quantities = modifierData.quantities || {};
+        console.log(`🔄 Quantity modifier ${modifierId} quantities:`, quantities);
+        Object.entries(quantities).forEach(([optionId, quantity]) => {
+          if (quantity > 0) {
+            if (!convertedModifiers[modifierId]) {
+              convertedModifiers[modifierId] = {};
+            }
+            convertedModifiers[modifierId][optionId] = quantity;
+          }
+        });
+      } else if (modifier.selectionType === 'multi') {
+        // Handle multi-selection
+        const selections = modifierData.selections || [];
+        console.log(`🔄 Multi modifier ${modifierId} selections:`, selections);
+        if (selections.length > 0) {
+          convertedModifiers[modifierId] = selections;
+        }
+      } else {
+        // Handle single selection
+        const selection = modifierData.selection;
+        console.log(`🔄 Single modifier ${modifierId} selection:`, selection);
+        if (selection) {
+          convertedModifiers[modifierId] = [selection];
+        }
+      }
+    });
+    
+    console.log('🔄 Converted modifiers:', convertedModifiers);
+    setSelectedModifiers(convertedModifiers);
+    setCalculationTrigger(prev => prev + 1); // Trigger recalculation
   };
 
   // Handle intake question answers
@@ -739,6 +869,25 @@ export default function CreateJobPage() {
     }));
   };
 
+  // Handle intake questions change from the new component
+  const handleIntakeQuestionsChange = (answers) => {
+    console.log('🔄 Intake questions changed:', answers);
+    console.log('🔄 Intake questions count:', Object.keys(answers).length);
+    console.log('🔄 Intake questions keys:', Object.keys(answers));
+    console.log('🔄 Intake questions values:', Object.values(answers));
+    
+    // Verify that all questions have answers
+    const serviceQuestions = formData.serviceIntakeQuestions || [];
+    console.log('🔄 Service questions:', serviceQuestions.map(q => ({ id: q.id, question: q.question })));
+    
+    const missingAnswers = serviceQuestions.filter(q => !answers[q.id]);
+    if (missingAnswers.length > 0) {
+      console.log('🔄 Missing answers for questions:', missingAnswers);
+    }
+    
+    setIntakeQuestionAnswers(answers);
+  };
+
   // Calculate total price including modifiers
   const calculateTotalPrice = () => {
     try {
@@ -747,13 +896,25 @@ export default function CreateJobPage() {
       let modifierPrice = 0;
       
       // Add prices from selected modifiers
-      Object.entries(selectedModifiers).forEach(([modifierId, selectedOptionIds]) => {
+      Object.entries(selectedModifiers).forEach(([modifierId, modifierData]) => {
         const modifier = formData.serviceModifiers?.find(m => m.id == modifierId);
-        if (modifier) {
+        if (!modifier) return;
+        
+        if (modifier.selectionType === 'quantity') {
+          // Handle quantity selection - modifierData is { optionId: quantity }
+          Object.entries(modifierData).forEach(([optionId, quantity]) => {
+            const option = modifier.options?.find(o => o.id == optionId);
+            if (option && option.price && quantity > 0) {
+              const optionPrice = parseFloat(option.price) || 0;
+              modifierPrice += optionPrice * quantity;
+            }
+          });
+        } else {
+          // Handle single/multi selection - modifierData is array of optionIds
+          const selectedOptionIds = Array.isArray(modifierData) ? modifierData : [modifierData];
           selectedOptionIds.forEach(optionId => {
             const option = modifier.options?.find(o => o.id == optionId);
             if (option && option.price) {
-              // Ensure option.price is a number
               const optionPrice = parseFloat(option.price) || 0;
               modifierPrice += optionPrice;
             }
@@ -762,7 +923,7 @@ export default function CreateJobPage() {
       });
       
       const totalPrice = basePrice + modifierPrice;
-      console.log('🔄 Price calculation:', { basePrice, modifierPrice, totalPrice });
+      console.log('🔄 Price calculation:', { basePrice, modifierPrice, totalPrice, selectedModifiers });
       return totalPrice;
     } catch (error) {
       console.error('Error calculating total price:', error);
@@ -773,42 +934,64 @@ export default function CreateJobPage() {
   // Calculate total duration including modifiers
   const calculateTotalDuration = () => {
     try {
-      // Ensure baseDuration is a number (already in hours from service selection)
+      // Ensure baseDuration is a number (stored in minutes)
       let baseDuration = parseFloat(formData.duration) || 0;
       let modifierDuration = 0;
       
       // Add duration from selected modifiers
-      Object.entries(selectedModifiers).forEach(([modifierId, selectedOptionIds]) => {
+      Object.entries(selectedModifiers).forEach(([modifierId, modifierData]) => {
         const modifier = formData.serviceModifiers?.find(m => m.id == modifierId);
-        if (modifier) {
-          selectedOptionIds.forEach(optionId => {
+        if (!modifier) return;
+        
+        if (modifier.selectionType === 'quantity') {
+          // Handle quantity selection - modifierData is { optionId: quantity }
+          Object.entries(modifierData).forEach(([optionId, quantity]) => {
             const option = modifier.options?.find(o => o.id == optionId);
-            if (option && option.duration) {
-              // Modifier durations are stored in minutes (from service-details.jsx)
-              // Convert minutes to hours to match base duration format
+            if (option && option.duration && quantity > 0) {
+              // Modifier durations are stored in minutes
               const optionDurationInMinutes = parseFloat(option.duration) || 0;
-              const optionDurationInHours = optionDurationInMinutes / 60;
               
-              modifierDuration += optionDurationInHours;
+              modifierDuration += optionDurationInMinutes * quantity;
               
               console.log(`🔄 Modifier option "${option.label}" duration:`, {
                 originalMinutes: optionDurationInMinutes,
-                convertedHours: optionDurationInHours
+                quantity,
+                totalForThisOption: optionDurationInMinutes * quantity
+              });
+            }
+          });
+        } else {
+          // Handle single/multi selection - modifierData is array of optionIds
+          const selectedOptionIds = Array.isArray(modifierData) ? modifierData : [modifierData];
+          selectedOptionIds.forEach(optionId => {
+            const option = modifier.options?.find(o => o.id == optionId);
+            if (option && option.duration) {
+              // Modifier durations are stored in minutes
+              const optionDurationInMinutes = parseFloat(option.duration) || 0;
+              
+              modifierDuration += optionDurationInMinutes;
+              
+              console.log(`🔄 Modifier option "${option.label}" duration:`, {
+                originalMinutes: optionDurationInMinutes
               });
             }
           });
         }
       });
       
-      const totalDuration = baseDuration + modifierDuration;
+      const totalDurationInMinutes = baseDuration + modifierDuration;
+      const totalDurationInHours = totalDurationInMinutes / 60; // Convert to hours for display
+      
       console.log('🔄 Duration calculation:', { 
-        baseDuration, 
-        modifierDuration, 
-        totalDuration,
+        baseDurationMinutes: baseDuration, 
+        modifierDurationMinutes: modifierDuration, 
+        totalDurationMinutes: totalDurationInMinutes,
+        totalDurationHours: totalDurationInHours,
         formDataDuration: formData.duration,
-        selectedModifiersCount: Object.keys(selectedModifiers).length
+        selectedModifiersCount: Object.keys(selectedModifiers).length,
+        selectedModifiers
       });
-      return totalDuration;
+      return totalDurationInHours; // Return in hours for display
     } catch (error) {
       console.error('Error calculating total duration:', error);
       return 0;
@@ -1014,258 +1197,31 @@ export default function CreateJobPage() {
 
                 {/* Service Modifiers - Right after service selection */}
                 {formData.serviceModifiers && formData.serviceModifiers.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="text-md font-medium text-gray-900">Service Options</h3>
-                    {formData.serviceModifiers.map((modifier) => {
-                      console.log('Modifier data:', modifier);
-                      return (
-                        <div key={modifier.id} className="border border-gray-200 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="font-medium text-gray-900">{modifier.title}</h4>
-                            {modifier.required && (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                                Required
-                              </span>
-                            )}
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">Service Options</h3>
+                      <p className="text-sm text-gray-600">Select any additional options to customize this service.</p>
                           </div>
-                          {modifier.description && (
-                            <p className="text-sm text-gray-600 mb-3">{modifier.description}</p>
-                          )}
-                          
-                          {/* Single Selection */}
-                          {modifier.selectionType === 'single' && (
-                            <div className="space-y-2">
-                              {modifier.options?.map((option) => {
-                                console.log('Option data:', option);
-                                return (
-                                  <label key={option.id} className="flex items-center space-x-3">
-                                    <input
-                                      type="radio"
-                                      name={`modifier-${modifier.id}`}
-                                      value={option.id}
-                                      checked={selectedModifiers[modifier.id]?.includes(option.id)}
-                                      onChange={(e) => {
-                                        if (e.target.checked) {
-                                          handleModifierSelection(modifier.id, option.id, true);
-                                        }
-                                      }}
-                                      className="text-blue-600 focus:ring-blue-500"
-                                    />
-                                    {option.image && (
-                                      <img
-                                        src={option.image}
-                                        alt={option.label || option.name}
-                                        className="w-8 h-8 object-cover rounded-lg border border-gray-200"
-                                      />
-                                    )}
-                                    <span className="text-sm text-gray-900">
-                                      {option.label || option.name || `Option ${option.id}`}
-                                    </span>
-                                    {option.price > 0 && (
-                                      <span className="text-sm text-green-600">+${option.price}</span>
-                                    )}
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          )}
-                          
-                          {/* Multi Selection */}
-                          {modifier.selectionType === 'multi' && (
-                            <div className="space-y-2">
-                              {modifier.options?.map((option) => {
-                                console.log('Option data:', option);
-                                return (
-                                  <label key={option.id} className="flex items-center space-x-3">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedModifiers[modifier.id]?.includes(option.id)}
-                                      onChange={(e) => handleModifierSelection(modifier.id, option.id, e.target.checked)}
-                                      className="text-blue-600 focus:ring-blue-500"
-                                    />
-                                    {option.image && (
-                                      <img
-                                        src={option.image}
-                                        alt={option.label || option.name}
-                                        className="w-8 h-8 object-cover rounded-lg border border-gray-200"
-                                      />
-                                    )}
-                                    <span className="text-sm text-gray-900">
-                                      {option.label || option.name || `Option ${option.id}`}
-                                    </span>
-                                    {option.price > 0 && (
-                                      <span className="text-sm text-green-600">+${option.price}</span>
-                                    )}
-                                  </label>
-                                );
-                              })}
-                            </div>
-                          )}
-
-                          {/* Quantity Selection */}
-                          {modifier.selectionType === 'quantity' && (
-                            <div className="space-y-3">
-                              {modifier.options?.map((option) => {
-                                const currentQuantity = selectedModifiers[modifier.id]?.[option.id] || 0;
-                                return (
-                                  <div key={option.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
-                                    <div className="flex-1 flex items-center space-x-3">
-                                      {option.image && (
-                                        <img
-                                          src={option.image}
-                                          alt={option.label || option.name}
-                                          className="w-8 h-8 object-cover rounded-lg border border-gray-200"
-                                        />
-                                      )}
-                                      <div>
-                                        <span className="text-sm font-medium text-gray-900">
-                                          {option.label || option.name || `Option ${option.id}`}
-                                        </span>
-                                        {option.price > 0 && (
-                                          <span className="text-sm text-green-600 ml-2">+${option.price} each</span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          if (currentQuantity > 0) {
-                                            handleModifierSelection(modifier.id, option.id, currentQuantity - 1);
-                                          }
-                                        }}
-                                        className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
-                                      >
-                                        -
-                                      </button>
-                                      <span className="w-8 text-center text-sm font-medium">{currentQuantity}</span>
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          handleModifierSelection(modifier.id, option.id, currentQuantity + 1);
-                                        }}
-                                        className="w-8 h-8 flex items-center justify-center border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"
-                                      >
-                                        +
-                                      </button>
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    
+                    <ServiceModifiersForm 
+                      modifiers={formData.serviceModifiers}
+                      onModifiersChange={handleModifiersChange}
+                    />
                   </div>
                 )}
 
                 {/* Intake Questions - Right after modifiers */}
                 {formData.serviceIntakeQuestions && formData.serviceIntakeQuestions.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="text-md font-medium text-gray-900">Customer Questions</h3>
-                    {formData.serviceIntakeQuestions.map((question) => (
-                      <div key={question.id} className="border border-gray-200 rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="font-medium text-gray-900">{question.question}</h4>
-                          {question.required && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
-                              Required
-                            </span>
-                          )}
+                  <div className="space-y-6">
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">Customer Information</h3>
+                      <p className="text-sm text-gray-600">Please provide additional details for this job.</p>
                         </div>
-                        {question.description && (
-                          <p className="text-sm text-gray-600 mb-3">{question.description}</p>
-                        )}
-                        
-                        {/* Multiple Choice */}
-                        {question.questionType === 'multiple_choice' && (
-                          <div className="space-y-2">
-                            {question.options?.map((option) => (
-                              <label key={option.id} className="flex items-center space-x-3">
-                                <input
-                                  type={question.selectionType === 'single' ? 'radio' : 'checkbox'}
-                                  name={question.selectionType === 'single' ? `question-${question.id}` : undefined}
-                                  checked={intakeQuestionAnswers[question.id]?.includes(option.id)}
-                                  onChange={(e) => {
-                                    const currentAnswers = intakeQuestionAnswers[question.id] || [];
-                                    let newAnswers;
-                                    if (question.selectionType === 'single') {
-                                      newAnswers = e.target.checked ? [option.id] : [];
-                                    } else {
-                                      if (e.target.checked) {
-                                        newAnswers = [...currentAnswers, option.id];
-                                      } else {
-                                        newAnswers = currentAnswers.filter(id => id !== option.id);
-                                      }
-                                    }
-                                    setIntakeQuestionAnswers(prev => ({
-                                      ...prev,
-                                      [question.id]: newAnswers
-                                    }));
-                                  }}
-                                  className="text-blue-600 focus:ring-blue-500"
-                                />
-                                <span className="text-sm text-gray-900">{option.text}</span>
-                              </label>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Dropdown */}
-                        {question.questionType === 'dropdown' && (
-                          <select
-                            value={intakeQuestionAnswers[question.id] || ''}
-                            onChange={(e) => {
-                              setIntakeQuestionAnswers(prev => ({
-                                ...prev,
-                                [question.id]: e.target.value
-                              }));
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="">Select an option</option>
-                            {question.options?.map((option) => (
-                              <option key={option.id} value={option.id}>
-                                {option.text}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-
-                        {/* Short Text */}
-                        {question.questionType === 'short_text' && (
-                          <input
-                            type="text"
-                            value={intakeQuestionAnswers[question.id] || ''}
-                            onChange={(e) => {
-                              setIntakeQuestionAnswers(prev => ({
-                                ...prev,
-                                [question.id]: e.target.value
-                              }));
-                            }}
-                            placeholder="Enter your answer"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        )}
-
-                        {/* Long Text */}
-                        {question.questionType === 'long_text' && (
-                          <textarea
-                            value={intakeQuestionAnswers[question.id] || ''}
-                            onChange={(e) => {
-                              setIntakeQuestionAnswers(prev => ({
-                                ...prev,
-                                [question.id]: e.target.value
-                              }));
-                            }}
-                            placeholder="Enter your answer"
-                            rows={3}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        )}
-                      </div>
-                    ))}
+                    
+                    <IntakeQuestionsForm 
+                      questions={formData.serviceIntakeQuestions}
+                      onAnswersChange={handleIntakeQuestionsChange}
+                    />
                   </div>
                 )}
 
@@ -1423,15 +1379,25 @@ export default function CreateJobPage() {
                 
                 {expandedSections.serviceDetails && (
                   <div className="px-6 pb-6 space-y-6">
+                    {/* Debug Info */}
+                    <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <h4 className="text-sm font-medium text-yellow-800 mb-2">Debug Info:</h4>
+                      <div className="text-xs text-yellow-700 space-y-1">
+                        <div>Selected Modifiers: {JSON.stringify(selectedModifiers)}</div>
+                        <div>Service Modifiers Count: {formData.serviceModifiers?.length || 0}</div>
+                        <div>Calculation Trigger: {calculationTrigger}</div>
+                      </div>
+                    </div>
+
                     {/* Service Info Chips */}
                     <div className="flex flex-wrap gap-3 mb-6">
                       <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
                         <Clock className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-sm font-medium text-gray-700" key={`duration-${calculationTrigger}`}>
                           {(calculateTotalDuration() || 0).toFixed(1)} hr
-                          {(calculateTotalDuration() || 0) !== (parseFloat(formData.duration) || 0) && (
+                          {(calculateTotalDuration() || 0) !== ((parseFloat(formData.duration) || 0) / 60) && (
                             <span className="text-xs text-blue-600 ml-1">
-                              (base: {(parseFloat(formData.duration) || 0).toFixed(1)} + modifiers: {((calculateTotalDuration() || 0) - (parseFloat(formData.duration) || 0)).toFixed(1)})
+                              (base: {((parseFloat(formData.duration) || 0) / 60).toFixed(1)} + modifiers: {((calculateTotalDuration() || 0) - ((parseFloat(formData.duration) || 0) / 60)).toFixed(1)})
                             </span>
                           )}
                         </span>
@@ -1445,7 +1411,7 @@ export default function CreateJobPage() {
                       
                       <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
                         <DollarSign className="w-4 h-4 text-gray-600" />
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-sm font-medium text-gray-700" key={`price-${calculationTrigger}`}>
                           ${(calculateTotalPrice() || 0).toFixed(2)}
                           {(calculateTotalPrice() || 0) !== (parseFloat(formData.price) || 0) && (
                             <span className="text-xs text-blue-600 ml-1">

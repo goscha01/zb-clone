@@ -2,6 +2,9 @@ import React from 'react';
 import { FileText, CheckCircle, MessageSquare } from 'lucide-react';
 
 const IntakeAnswersDisplay = ({ intakeAnswers = [] }) => {
+  console.log('🔄 IntakeAnswersDisplay received:', intakeAnswers);
+  console.log('🔄 IntakeAnswersDisplay length:', intakeAnswers?.length);
+  
   if (!intakeAnswers || intakeAnswers.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -41,11 +44,96 @@ const IntakeAnswersDisplay = ({ intakeAnswers = [] }) => {
   const formatAnswer = (answer, questionType) => {
     if (!answer) return 'No answer provided';
     
+    // Handle picture choice - parse JSON if it's a string
+    if (questionType === 'picture_choice') {
+      let parsedAnswer = answer;
+      if (typeof answer === 'string') {
+        try {
+          parsedAnswer = JSON.parse(answer);
+        } catch (e) {
+          console.log('Failed to parse picture choice answer:', e);
+          return answer; // Return as-is if parsing fails
+        }
+      }
+      
+      // Now handle the parsed object
+      if (typeof parsedAnswer === 'object' && parsedAnswer.text) {
+        return (
+          <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
+            {parsedAnswer.image && (
+              <img 
+                src={parsedAnswer.image} 
+                alt={parsedAnswer.text} 
+                className="w-16 h-16 object-cover rounded border border-gray-200 shadow-sm" 
+              />
+            )}
+            <span className="text-sm text-gray-700 font-medium">{parsedAnswer.text}</span>
+          </div>
+        );
+      } else {
+        // Fallback for old format (just text)
+        return <span className="text-sm text-gray-700">{answer}</span>;
+      }
+    }
+    
     if (questionType === 'multiple_choice' && Array.isArray(answer)) {
       return answer.join(', ');
     }
     
-    return answer;
+    if (questionType === 'image_upload' && answer.startsWith('http')) {
+      return (
+        <div className="mt-2">
+          <img 
+            src={answer} 
+            alt="Uploaded image" 
+            className="w-32 h-32 object-cover rounded border border-gray-200 shadow-sm" 
+          />
+          <p className="text-xs text-gray-500 mt-1">Image uploaded</p>
+        </div>
+      );
+    }
+    
+    if (questionType === 'color_choice') {
+      // Handle both single color and array of colors
+      let colors = [];
+      if (typeof answer === 'string') {
+        try {
+          // Try to parse as JSON array
+          const parsed = JSON.parse(answer);
+          if (Array.isArray(parsed)) {
+            colors = parsed;
+          } else if (answer.startsWith('#')) {
+            // Single color
+            colors = [answer];
+          }
+        } catch (e) {
+          // If parsing fails, check if it's a single color
+          if (answer.startsWith('#')) {
+            colors = [answer];
+          }
+        }
+      } else if (Array.isArray(answer)) {
+        colors = answer;
+      }
+      
+      if (colors.length > 0) {
+        return (
+          <div className="flex flex-wrap gap-3">
+            {colors.map((color, index) => (
+              <div key={index} className="flex items-center space-x-3 p-2 bg-gray-50 rounded-lg border border-gray-200">
+                <div 
+                  className="w-8 h-8 rounded-full border-2 border-gray-300 shadow-sm flex-shrink-0" 
+                  style={{ backgroundColor: color }}
+                />
+                <span className="text-sm text-gray-700 font-mono truncate">{color}</span>
+              </div>
+            ))}
+          </div>
+        );
+      }
+    }
+    
+    return <span className="text-sm text-gray-700">{answer}</span>;
   };
 
   return (
@@ -56,42 +144,46 @@ const IntakeAnswersDisplay = ({ intakeAnswers = [] }) => {
       </h3>
       
       <div className="space-y-4">
-        {intakeAnswers.map((qa, index) => (
-          <div key={index} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
-            <div className="flex items-start space-x-3">
-              <div className="flex-shrink-0 mt-1">
-                <span className="text-lg">{getQuestionTypeIcon(qa.question_type)}</span>
-              </div>
-              
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-sm font-medium text-gray-900">
-                    {qa.question_text}
-                  </h4>
-                  <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
-                    {qa.question_type.replace('_', ' ')}
-                  </span>
+        {intakeAnswers.map((qa, index) => {
+          console.log('🔄 Processing answer:', qa);
+          return (
+            <div key={index} className="border border-gray-200 rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+              <div className="flex flex-col sm:flex-row sm:items-start space-y-3 sm:space-y-0 sm:space-x-3">
+                <div className="flex-shrink-0 flex justify-center sm:justify-start">
+                  <span className="text-lg">{getQuestionTypeIcon(qa.question_type)}</span>
                 </div>
                 
-                <div className="bg-white border border-gray-200 rounded-md p-3">
-                  <p className="text-sm text-gray-700">
-                    {formatAnswer(qa.answer, qa.question_type)}
-                  </p>
-                </div>
-                
-                <div className="mt-2 text-xs text-gray-500">
-                  Answered on {new Date(qa.created_at).toLocaleDateString()}
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-2 sm:space-y-0 mb-3">
+                    <h4 className="text-sm font-semibold text-gray-900">
+                      {qa.question_text}
+                    </h4>
+                    <span className="text-xs text-gray-600 bg-gray-200 px-2 py-1 rounded-full font-medium self-start sm:self-auto">
+                      {qa.question_type.replace('_', ' ')}
+                    </span>
+                  </div>
+                  
+                  <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <div className="text-sm text-gray-700">
+                      {formatAnswer(qa.answer, qa.question_type)}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-3 text-xs text-gray-500 flex items-center justify-center sm:justify-start">
+                    <CheckCircle className="w-3 h-3 mr-1 text-green-500" />
+                    Answered on {new Date(qa.created_at).toLocaleDateString()}
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       
-      <div className="mt-4 pt-4 border-t border-gray-200">
-        <div className="flex items-center text-sm text-gray-600">
+      <div className="mt-6 pt-4 border-t border-gray-200">
+        <div className="flex items-center justify-center sm:justify-start text-sm text-gray-600">
           <CheckCircle className="w-4 h-4 mr-2 text-green-500" />
-          <span>{intakeAnswers.length} question{intakeAnswers.length !== 1 ? 's' : ''} answered</span>
+          <span className="font-medium">{intakeAnswers.length} question{intakeAnswers.length !== 1 ? 's' : ''} answered</span>
         </div>
       </div>
     </div>

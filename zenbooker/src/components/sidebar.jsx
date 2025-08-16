@@ -27,6 +27,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation()
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
   const { user } = useAuth()
+  console.log('🔍 Sidebar: Current user data:', user)
 
   const sidebarItems = [
     { icon: Home, label: "Dashboard", path: "/dashboard" },
@@ -140,7 +141,15 @@ const Sidebar = ({ isOpen, onClose }) => {
                 }
               </p>
               <p className="text-xs text-gray-500 truncate">
-                {user?.businessName || user?.email || 'Business'}
+                {(() => {
+                  const businessName = user?.business_name || user?.businessName || user?.email || 'Business';
+                  console.log('🔍 Sidebar: Displaying business name:', businessName, 'from fields:', {
+                    business_name: user?.business_name,
+                    businessName: user?.businessName,
+                    email: user?.email
+                  });
+                  return businessName;
+                })()}
               </p>
             </div>
           </button>

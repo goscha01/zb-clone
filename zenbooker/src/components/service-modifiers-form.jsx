@@ -1,0 +1,207 @@
+import React, { useState } from 'react';
+import { Plus, Minus, Image as ImageIcon } from 'lucide-react';
+
+const ServiceModifiersForm = ({ modifiers = [], onModifiersChange }) => {
+  const [selectedModifiers, setSelectedModifiers] = useState({});
+
+  const handleModifierChange = (modifierId, optionId, value) => {
+    const currentModifier = selectedModifiers[modifierId] || {};
+    let newValue;
+
+    if (modifiers.find(m => m.id === modifierId)?.selectionType === 'quantity') {
+      // Handle quantity selection
+      const currentQuantities = currentModifier.quantities || {};
+      const currentQuantity = currentQuantities[optionId] || 0;
+      const newQuantity = Math.max(0, currentQuantity + value);
+      
+      newValue = {
+        ...currentModifier,
+        quantities: {
+          ...currentQuantities,
+          [optionId]: newQuantity
+        }
+      };
+    } else if (modifiers.find(m => m.id === modifierId)?.selectionType === 'multi') {
+      // Handle multi-selection
+      const currentSelections = currentModifier.selections || [];
+      if (value > 0) {
+        // Add selection
+        if (!currentSelections.includes(optionId)) {
+          newValue = {
+            ...currentModifier,
+            selections: [...currentSelections, optionId]
+          };
+        } else {
+          newValue = currentModifier;
+        }
+      } else {
+        // Remove selection
+        newValue = {
+          ...currentModifier,
+          selections: currentSelections.filter(id => id !== optionId)
+        };
+      }
+    } else {
+      // Handle single selection
+      newValue = {
+        ...currentModifier,
+        selection: value > 0 ? optionId : null
+      };
+    }
+
+    const updatedModifiers = {
+      ...selectedModifiers,
+      [modifierId]: newValue
+    };
+
+    setSelectedModifiers(updatedModifiers);
+    onModifiersChange(updatedModifiers);
+  };
+
+  const isOptionSelected = (modifierId, optionId) => {
+    const modifier = selectedModifiers[modifierId];
+    if (!modifier) return false;
+
+    const modifierConfig = modifiers.find(m => m.id === modifierId);
+    if (!modifierConfig) return false;
+
+    if (modifierConfig.selectionType === 'quantity') {
+      return (modifier.quantities?.[optionId] || 0) > 0;
+    } else if (modifierConfig.selectionType === 'multi') {
+      return (modifier.selections || []).includes(optionId);
+    } else {
+      return modifier.selection === optionId;
+    }
+  };
+
+  const getOptionQuantity = (modifierId, optionId) => {
+    const modifier = selectedModifiers[modifierId];
+    return modifier?.quantities?.[optionId] || 0;
+  };
+
+  const renderModifier = (modifier) => {
+    return (
+      <div key={modifier.id} className="mb-8">
+        <div className="mb-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-1">
+            {modifier.title}
+            {modifier.required && <span className="text-red-500 ml-1">*</span>}
+          </h3>
+          {modifier.description && (
+            <p className="text-sm text-gray-600">{modifier.description}</p>
+          )}
+        </div>
+
+        <div className="space-y-3">
+          {modifier.options?.map((option) => {
+            const isSelected = isOptionSelected(modifier.id, option.id);
+            const quantity = getOptionQuantity(modifier.id, option.id);
+
+            if (modifier.selectionType === 'quantity') {
+              return (
+                <div key={option.id} className="border border-gray-200 rounded-lg p-4">
+                  <div className="flex items-center space-x-4">
+                    {option.image ? (
+                      <img
+                        src={option.image}
+                        alt={option.label}
+                        className="w-16 h-16 object-cover rounded"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center">
+                        <ImageIcon className="w-6 h-6 text-gray-400" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">{option.label}</div>
+                      {option.description && (
+                        <div className="text-sm text-gray-600">{option.description}</div>
+                      )}
+                      <div className="flex items-center space-x-2 mt-1">
+                        <span className="text-sm font-medium text-gray-900">${option.price}</span>
+                        {option.duration && (
+                          <span className="text-sm text-gray-500">
+                            {Math.floor(option.duration / 60)}h {option.duration % 60}m
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <button
+                        type="button"
+                        onClick={() => handleModifierChange(modifier.id, option.id, -1)}
+                        className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors"
+                      >
+                        <Minus className="w-3 h-3" />
+                      </button>
+                      <span className="w-8 text-center text-sm font-medium">{quantity}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleModifierChange(modifier.id, option.id, 1)}
+                        className="w-8 h-8 rounded-full border border-gray-300 flex items-center justify-center hover:bg-gray-100 transition-colors"
+                      >
+                        <Plus className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            } else {
+              return (
+                <label key={option.id} className="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                  <input
+                    type={modifier.selectionType === 'multi' ? 'checkbox' : 'radio'}
+                    name={modifier.id}
+                    checked={isSelected}
+                    onChange={(e) => handleModifierChange(modifier.id, option.id, e.target.checked ? 1 : -1)}
+                    required={modifier.required && modifier.selectionType === 'single'}
+                    className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                  />
+                  <div className="flex items-center space-x-4 ml-3 flex-1">
+                    {option.image ? (
+                      <img
+                        src={option.image}
+                        alt={option.label}
+                        className="w-12 h-12 object-cover rounded"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center">
+                        <ImageIcon className="w-4 h-4 text-gray-400" />
+                      </div>
+                    )}
+                    <div className="flex-1">
+                      <div className="font-medium text-gray-900">{option.label}</div>
+                      {option.description && (
+                        <div className="text-sm text-gray-600">{option.description}</div>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium text-gray-900">${option.price}</div>
+                      {option.duration && (
+                        <div className="text-sm text-gray-500">
+                          {Math.floor(option.duration / 60)}h {option.duration % 60}m
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </label>
+              );
+            }
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  if (!modifiers || modifiers.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-6">
+      {modifiers.map(renderModifier)}
+    </div>
+  );
+};
+
+export default ServiceModifiersForm;

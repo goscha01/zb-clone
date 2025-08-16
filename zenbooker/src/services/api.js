@@ -105,9 +105,12 @@ export const authAPI = {
 export const servicesAPI = {
   getAll: async (userId) => {
     try {
+      console.log('🌐 API: Fetching services for user:', userId)
       const response = await api.get(`/services?userId=${userId}`);
+      console.log('🌐 API: Services response:', response.data)
       return response.data;
     } catch (error) {
+      console.error('🌐 API: Services fetch error:', error)
       throw error;
     }
   },
@@ -397,6 +400,7 @@ export const userProfileAPI = {
   getProfile: async (userId) => {
     try {
       const response = await api.get(`/user/profile?userId=${userId}`);
+      console.log('🔍 userProfileAPI.getProfile response:', response.data);
       return response.data;
     } catch (error) {
       if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {

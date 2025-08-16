@@ -619,7 +619,7 @@ const ZenbookerDashboard = () => {
                 {/* Map Section */}
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                   <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                    <h3 className="text-lg font-semibold text-gray-900">Today's Jobs Map</h3>
+                    <h3 className="text-lg font-semibold text-gray-900">Business Overview</h3>
                     <div className="flex bg-gray-100 rounded-lg p-1">
                       <button className="px-3 py-1 bg-white text-gray-900 font-medium rounded-md shadow-sm text-sm">Map</button>
                       <button className="px-3 py-1 text-gray-600 hover:text-gray-900 transition-colors duration-200 text-sm">Satellite</button>
@@ -633,11 +633,11 @@ const ZenbookerDashboard = () => {
                         height="100%"
                         frameBorder="0"
                         style={{ border: 0 }}
-                        src="https://www.google.com/maps/embed/v1/view?key=AIzaSyB41DRUbKWJHPxaFjMAwdrzWzbVKartNGg&center=37.7749,-122.4194&zoom=10"
+                        src="https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=business+services&zoom=11"
                         allowFullScreen
                         loading="lazy"
                         referrerPolicy="no-referrer-when-downgrade"
-                        title="Today's Jobs Map"
+                        title="Business Overview Map"
                       />
                     ) : (
                       <div className="h-full flex items-center justify-center bg-gray-50">
@@ -645,8 +645,8 @@ const ZenbookerDashboard = () => {
                           <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center mb-3 mx-auto shadow-sm">
                             <Calendar className="w-6 h-6 text-gray-400" />
                           </div>
-                          <p className="text-gray-900 font-medium">No scheduled jobs</p>
-                          <p className="text-gray-600 text-sm mt-1">No jobs to display on map today</p>
+                          <p className="text-gray-900 font-medium">No jobs today</p>
+                          <p className="text-gray-600 text-sm mt-1">Create your first job to get started</p>
                         </div>
                       </div>
                     )}

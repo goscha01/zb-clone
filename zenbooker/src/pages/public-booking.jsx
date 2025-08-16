@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { useParams } from "react-router-dom"
 import { 
   MapPin, 
@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import axios from "axios"
 import IntakeQuestionsForm from "../components/intake-questions-form"
+import ServiceModifiersForm from "../components/service-modifiers-form"
 
 // Create axios instance for public API calls
 const publicApi = axios.create({
@@ -56,6 +57,8 @@ const PublicBooking = () => {
   const [showAddressSuggestions, setShowAddressSuggestions] = useState(false)
   const [intakeAnswers, setIntakeAnswers] = useState({})
   const [selectedServiceQuestions, setSelectedServiceQuestions] = useState([])
+  const [serviceModifiers, setServiceModifiers] = useState({})
+  const [modifiersError, setModifiersError] = useState("")
 
   // Get business slug from URL parameters
   const { userSlug } = useParams()
@@ -186,8 +189,12 @@ const PublicBooking = () => {
     setIntakeAnswers(answers)
   }
 
+  const handleModifiersChange = (modifiers) => {
+    setServiceModifiers(modifiers)
+  }
+
   const handleNextStep = () => {
-    if (currentStep < 6) {
+    if (currentStep < 7) {
       setCurrentStep(currentStep + 1)
     }
   }
@@ -198,11 +205,47 @@ const PublicBooking = () => {
     }
   }
 
+  const handleServiceSelect = (service) => {
+    handleInputChange('service', service.id)
+    
+    // Check if this service has modifiers or intake questions
+    let hasModifiers = false;
+    let hasIntakeQuestions = false;
+    
+    if (service.modifiers) {
+      try {
+        const modifiers = JSON.parse(service.modifiers);
+        hasModifiers = modifiers && modifiers.length > 0;
+      } catch (error) {
+        console.error('Error parsing modifiers:', error);
+      }
+    }
+    
+    if (service.intake_questions) {
+      try {
+        const questions = JSON.parse(service.intake_questions);
+        hasIntakeQuestions = questions && questions.length > 0;
+      } catch (error) {
+        console.error('Error parsing intake questions:', error);
+      }
+    }
+    
+    // Determine next step based on what the service has
+    if (hasModifiers) {
+      setCurrentStep(3); // Go to modifiers
+    } else if (hasIntakeQuestions) {
+      setCurrentStep(4); // Go to intake questions
+    } else {
+      setCurrentStep(5); // Skip to date/time
+    }
+  }
+
   const handleSubmit = async () => {
     try {
       const bookingData = {
         ...formData,
-        intakeAnswers: intakeAnswers
+        intakeAnswers: intakeAnswers,
+        serviceModifiers: serviceModifiers
       }
       const response = await publicApi.post(`/public/business/${businessSlug}/book`, bookingData)
       setCurrentStep(7) // Success step
@@ -411,25 +454,7 @@ const PublicBooking = () => {
                     {availableServices.map((service) => (
                       <div
                         key={service.id}
-                        onClick={() => {
-                          handleInputChange('service', service.id)
-                          // Check if this service has intake questions
-                          if (service.intake_questions) {
-                            try {
-                              const questions = JSON.parse(service.intake_questions)
-                              if (questions && questions.length > 0) {
-                                setSelectedServiceQuestions(questions)
-                                handleNextStep() // Go to intake questions
-                                return
-                              }
-                            } catch (error) {
-                              console.error('Error parsing intake questions:', error)
-                            }
-                          }
-                          // No questions or error parsing, skip to date/time
-                          setSelectedServiceQuestions([])
-                          setCurrentStep(4) // Skip to date/time
-                        }}
+                        onClick={() => handleServiceSelect(service)}
                         className="border border-gray-200 rounded-lg p-4 cursor-pointer hover:border-gray-300 transition-colors"
                       >
                         <div className="flex items-center justify-between">
@@ -450,12 +475,85 @@ const PublicBooking = () => {
                 </div>
               )}
 
-              {/* Step 3: Intake Questions */}
+              {/* Step 3: Service Modifiers */}
               {currentStep === 3 && (
                 <div>
+                  <h3 className="text-xl font-semibold mb-4">Customize Your Service</h3>
+                  <div className="mb-6">
+                    <p className="text-gray-600">Select any additional options to customize your service.</p>
+                  </div>
+                  
+                  {(() => {
+                    const selectedService = availableServices.find(s => s.id === formData.service);
+                    if (!selectedService?.modifiers) return null;
+                    
+                    try {
+                      const modifiers = JSON.parse(selectedService.modifiers);
+                      if (!modifiers || modifiers.length === 0) {
+                        setCurrentStep(4); // Skip to next step if no modifiers
+                        return null;
+                      }
+                      
+                      return (
+                        <ServiceModifiersForm 
+                          modifiers={modifiers}
+                          onModifiersChange={handleModifiersChange}
+                        />
+                      );
+                    } catch (error) {
+                      console.error('Error parsing modifiers:', error);
+                      setCurrentStep(4); // Skip to next step if error
+                      return null;
+                    }
+                  })()}
+                  
+                  <div className="flex space-x-4 mt-6">
+                    <button
+                      onClick={handlePrevStep}
+                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                    >
+                      <ArrowLeft className="w-4 h-4 inline mr-2" />
+                      Back
+                    </button>
+                    <button
+                      onClick={() => {
+                        // Check if next step should be intake questions or date/time
+                        const selectedService = availableServices.find(s => s.id === formData.service);
+                        if (selectedService?.intake_questions) {
+                          try {
+                            const questions = JSON.parse(selectedService.intake_questions);
+                            if (questions && questions.length > 0) {
+                              setSelectedServiceQuestions(questions);
+                              setCurrentStep(4); // Go to intake questions
+                              return;
+                            }
+                          } catch (error) {
+                            console.error('Error parsing intake questions:', error);
+                          }
+                        }
+                        setSelectedServiceQuestions([]);
+                        setCurrentStep(5); // Skip to date/time
+                      }}
+                      className="px-4 py-2 rounded-lg text-white font-medium"
+                      style={{ backgroundColor: settings?.branding?.primaryColor || '#4CAF50' }}
+                    >
+                      Continue
+                      <ChevronRight className="w-4 h-4 inline ml-2" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Intake Questions */}
+              {currentStep === 4 && (
+                <div>
+                  <h3 className="text-xl font-semibold mb-4">Additional Information</h3>
+                  <div className="mb-6">
+                    <p className="text-gray-600">Please provide additional details to help us serve you better.</p>
+                  </div>
+                  
                   {selectedServiceQuestions.length > 0 ? (
                     <>
-                      <h3 className="text-xl font-semibold mb-4">Additional Questions</h3>
                       <IntakeQuestionsForm 
                         questions={selectedServiceQuestions}
                         onAnswersChange={handleIntakeAnswersChange}
@@ -504,8 +602,8 @@ const PublicBooking = () => {
                 </div>
               )}
 
-              {/* Step 4: Date & Time */}
-              {currentStep === 4 && (
+              {/* Step 5: Date & Time Selection */}
+              {currentStep === 5 && (
                 <div>
                   <h3 className="text-xl font-semibold mb-4">Select Date & Time</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -560,72 +658,81 @@ const PublicBooking = () => {
                 </div>
               )}
 
-              {/* Step 5: Contact Information */}
-              {currentStep === 5 && (
+              {/* Step 6: Customer Information */}
+              {currentStep === 6 && (
                 <div>
-                  <h3 className="text-xl font-semibold mb-4">Contact Information</h3>
+                  <h3 className="text-xl font-semibold mb-4">Your Information</h3>
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Full Name <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="text"
                         value={formData.name}
                         onChange={(e) => handleInputChange('name', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none"
-                        style={{ '--tw-ring-color': settings?.branding?.primaryColor || '#4CAF50' }}
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter your full name"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Email Address <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="email"
                         value={formData.email}
                         onChange={(e) => handleInputChange('email', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none"
-                        style={{ '--tw-ring-color': settings?.branding?.primaryColor || '#4CAF50' }}
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter your email address"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phone Number <span className="text-red-500">*</span>
+                      </label>
                       <input
                         type="tel"
                         value={formData.phone}
                         onChange={(e) => handleInputChange('phone', e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none"
-                        style={{ '--tw-ring-color': settings?.branding?.primaryColor || '#4CAF50' }}
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter your phone number"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Address</label>
-                      <div className="relative">
-                        <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                          <MapPin className="w-4 h-4 text-gray-400" />
-                        </div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Service Address <span className="text-red-500">*</span>
+                      </label>
                         <input
                           type="text"
-                          placeholder="Enter your address"
                           value={formData.address}
-                          onChange={handleAddressChange}
-                          className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:outline-none"
-                          style={{ '--tw-ring-color': settings?.branding?.primaryColor || '#4CAF50' }}
-                        />
-                        {showAddressSuggestions && addressSuggestions.length > 0 && (
-                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                            {addressSuggestions.map((suggestion, index) => (
-                              <button
-                                key={index}
-                                type="button"
-                                onClick={() => handleAddressSelect(suggestion)}
-                                className="w-full px-4 py-2 text-left hover:bg-gray-50 border-b border-gray-100 last:border-b-0"
-                              >
-                                <div className="text-sm text-gray-900">{suggestion.description}</div>
-                              </button>
-                            ))}
+                        onChange={(e) => handleInputChange('address', e.target.value)}
+                        required
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter your service address"
+                      />
                           </div>
-                        )}
-                      </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Additional Notes
+                      </label>
+                      <textarea
+                        value={formData.notes}
+                        onChange={(e) => handleInputChange('notes', e.target.value)}
+                        rows={3}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Any additional information or special requests..."
+                      />
                     </div>
                   </div>
+
                   <div className="flex space-x-4 mt-6">
                     <button
                       onClick={handlePrevStep}
@@ -635,149 +742,18 @@ const PublicBooking = () => {
                       Back
                     </button>
                     <button
-                      onClick={handleNextStep}
-                      disabled={!formData.name || !formData.email || !formData.phone}
-                      className="px-4 py-2 rounded-lg text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-                      style={{ backgroundColor: settings?.branding?.primaryColor || '#4CAF50' }}
-                    >
-                      Continue
-                      <ChevronRight className="w-4 h-4 inline ml-2" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 6: Review & Confirm */}
-              {currentStep === 6 && (
-                <div>
-                  <h3 className="text-xl font-semibold mb-4">Review & Confirm</h3>
-                  
-                  {/* Pricing and Coupon Section */}
-                  {formData.service && (
-                    <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                      <h4 className="font-medium text-gray-900 mb-3">Pricing</h4>
-                      
-                      {/* Service Price */}
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-gray-600">
-                            {availableServices.find(s => s.id === formData.service)?.name}
-                          </span>
-                          <span className="font-medium">
-                            ${(getSelectedServicePrice() || 0).toFixed(2)}
-                          </span>
-                        </div>
-                        
-                        {/* Coupon Section */}
-                        {!couponDiscount ? (
-                          <div className="border-t pt-3">
-                            <div className="flex items-center space-x-2">
-                              <input
-                                type="text"
-                                value={couponCode}
-                                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                                placeholder="Enter coupon code"
-                                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:outline-none"
-                                style={{ '--tw-ring-color': settings?.branding?.primaryColor || '#4CAF50' }}
-                              />
-                              <button
-                                onClick={validateCoupon}
-                                disabled={validatingCoupon || !couponCode.trim()}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                {validatingCoupon ? 'Validating...' : 'Apply'}
-                              </button>
-                            </div>
-                            {couponError && (
-                              <p className="text-red-600 text-sm mt-1">{couponError}</p>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="border-t pt-3">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <span className="text-green-600 text-sm">✓ Coupon applied</span>
-                                <span className="text-sm text-gray-600">({couponCode})</span>
-                              </div>
-                              <button
-                                onClick={removeCoupon}
-                                className="text-red-600 text-sm hover:text-red-700"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                            <div className="flex justify-between items-center mt-2">
-                              <span className="text-gray-600 text-sm">Discount:</span>
-                              <span className="text-green-600 font-medium">
-                                -${(couponDiscount.calculatedDiscount || 0).toFixed(2)}
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Total */}
-                        <div className="border-t pt-3">
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium text-gray-900">Total:</span>
-                            <span className="text-xl font-bold text-gray-900">
-                              ${(getFinalPrice() || 0).toFixed(2)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Booking Summary */}
-                  <div className="bg-gray-50 rounded-lg p-4 mb-6">
-                    <h4 className="font-medium text-gray-900 mb-3">Booking Summary</h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Service:</span>
-                        <span className="font-medium">
-                          {availableServices.find(s => s.id === formData.service)?.name}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Date:</span>
-                        <span className="font-medium">{formData.date}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Time:</span>
-                        <span className="font-medium">{formData.time}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Name:</span>
-                        <span className="font-medium">{formData.name}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Email:</span>
-                        <span className="font-medium">{formData.email}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex space-x-4">
-                    <button
-                      onClick={handlePrevStep}
-                      className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                    >
-                      <ArrowLeft className="w-4 h-4 inline mr-2" />
-                      Back
-                    </button>
-                    <button
                       onClick={handleSubmit}
-                      className="px-6 py-2 rounded-lg text-white font-medium"
+                      className="px-4 py-2 rounded-lg text-white font-medium"
                       style={{ backgroundColor: settings?.branding?.primaryColor || '#4CAF50' }}
                     >
-                      Confirm Booking
+                      Book Appointment
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Step 6: Success */}
-              {currentStep === 6 && (
+              {/* Step 7: Success */}
+              {currentStep === 7 && (
                 <div className="text-center py-8">
                   <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <CheckCircle className="w-8 h-8 text-green-600" />

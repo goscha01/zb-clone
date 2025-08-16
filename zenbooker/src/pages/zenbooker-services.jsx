@@ -12,7 +12,7 @@ import { useAuth } from "../context/AuthContext"
 
 const ZenbookerServices = () => {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [categoriesEnabled, setCategoriesEnabled] = useState(true)
   const [createModalOpen, setCreateModalOpen] = useState(false)
@@ -23,6 +23,10 @@ const ZenbookerServices = () => {
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
   
+  // Drag and drop state
+  const [draggedService, setDraggedService] = useState(null)
+  const [dragOverCategory, setDragOverCategory] = useState(null)
+  
   // API State
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -31,8 +35,10 @@ const ZenbookerServices = () => {
 
   // Fetch services on component mount
   useEffect(() => {
+    if (user?.id && !authLoading) {
     fetchServices()
-  }, [])
+    }
+  }, [user?.id, authLoading])
 
   const fetchServices = async () => {
     if (!user?.id) return
@@ -40,11 +46,18 @@ const ZenbookerServices = () => {
     try {
       setLoading(true)
       setError("")
+      console.log('🔍 Fetching services for user:', user.id)
       const response = await servicesAPI.getAll(user.id)
-      setServices(response)
+      console.log('🔍 Services API response:', response)
       
-      // Extract unique categories from services
-      const uniqueCategories = [...new Set(response.map(service => service.category).filter(Boolean))]
+      // Sort services alphabetically by name
+      const sortedServices = response.sort((a, b) => a.name.localeCompare(b.name))
+      console.log('🔍 Sorted services:', sortedServices)
+      setServices(sortedServices)
+      
+      // Extract unique categories from services and add "Additional" for uncategorized services
+      const uniqueCategories = [...new Set(sortedServices.map(service => service.category).filter(Boolean))]
+      console.log('🔍 Unique categories:', uniqueCategories)
       setCategories(uniqueCategories)
     } catch (error) {
       console.error('Error fetching services:', error)
@@ -67,6 +80,33 @@ const ZenbookerServices = () => {
       console.log('Current user:', user);
       console.log('Service data:', serviceData);
       
+      // Upload image first if provided
+      let imageUrl = null;
+      if (serviceData.image) {
+        try {
+          const formData = new FormData();
+          formData.append('image', serviceData.image);
+          
+          const uploadResponse = await fetch('https://zenbookapi.now2code.online/api/upload-service-image', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            },
+            body: formData
+          });
+          
+          if (uploadResponse.ok) {
+            const uploadResult = await uploadResponse.json();
+            imageUrl = uploadResult.imageUrl;
+            console.log('Image uploaded successfully:', imageUrl);
+          } else {
+            console.error('Failed to upload image:', uploadResponse.statusText);
+          }
+        } catch (uploadError) {
+          console.error('Error uploading image:', uploadError);
+        }
+      }
+      
       // Convert duration to minutes for backend
       const durationInMinutes = (serviceData.duration.hours * 60) + serviceData.duration.minutes
       
@@ -78,7 +118,8 @@ const ZenbookerServices = () => {
         duration: durationInMinutes,
         category: serviceData.category || "",
         modifiers: JSON.stringify([]), // Initialize with empty modifiers array
-        isFree: serviceData.isFree
+        isFree: serviceData.isFree,
+        image: imageUrl // Include the uploaded image URL
       }
       
       console.log('Sending service data to backend:', newService);
@@ -206,8 +247,17 @@ const ZenbookerServices = () => {
       const service = services.find(s => s.id === serviceId)
       if (!service) return
       
+      // Only send the essential fields for the update
+      const updateData = {
+        name: service.name,
+        description: service.description,
+        price: service.price,
+        duration: service.duration,
+        category: newCategory
+      }
+      
       // Update the service in the backend
-      await servicesAPI.update(serviceId, { ...service, category: newCategory })
+      await servicesAPI.update(serviceId, updateData)
       
       // Update the service in the local state
       setServices(prev => prev.map(s => 
@@ -228,6 +278,47 @@ const ZenbookerServices = () => {
     })
     
     setCategories(prev => prev.filter(cat => cat !== categoryName))
+  }
+
+  // Drag and drop handlers
+  const handleDragStart = (e, service) => {
+    setDraggedService(service)
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/html', e.target.outerHTML)
+  }
+
+  const handleDragOver = (e, category) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    // Don't allow dropping on the same category
+    if (draggedService && draggedService.category === (category === 'Additional' ? '' : category)) {
+      return
+    }
+    setDragOverCategory(category)
+  }
+
+  const handleDragLeave = (e) => {
+    e.preventDefault()
+    setDragOverCategory(null)
+  }
+
+  const handleDrop = async (e, targetCategory) => {
+    e.preventDefault()
+    setDragOverCategory(null)
+    
+    if (!draggedService || draggedService.category === targetCategory) {
+      return
+    }
+
+    try {
+      // Convert "Additional" category to empty string for uncategorized services
+      const newCategory = targetCategory === 'Additional' ? '' : targetCategory
+      await handleMoveServiceToCategory(draggedService.id, newCategory)
+      setDraggedService(null)
+    } catch (error) {
+      console.error('Error moving service:', error)
+      setError("Failed to move service. Please try again.")
+    }
   }
 
   return (
@@ -269,6 +360,14 @@ const ZenbookerServices = () => {
         {/* Content Area */}
         <div className="flex-1 overflow-auto">
           <div className="max-w-4xl mx-auto p-6">
+            {/* Auth Loading */}
+            {authLoading ? (
+              <div className="p-8 text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                <p className="text-gray-600">Loading...</p>
+              </div>
+            ) : (
+              <>
             {/* Error Display */}
             {error && (
               <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
@@ -306,30 +405,54 @@ const ZenbookerServices = () => {
                 </div>
               ) : (
                 <div>
-                  {categoriesEnabled && categories.length > 0 ? (
-                    // Group services by category
-                    categories.map(category => {
-                      const categoryServices = services.filter(s => s.category === category)
+                      {categoriesEnabled ? (
+                        // Group services by category, including "Additional" for uncategorized services
+                        (() => {
+                          const categorizedServices = services.filter(s => s.category)
+                          const uncategorizedServices = services.filter(s => !s.category)
+                          
+                          // Get all categories and add "Additional" if there are uncategorized services
+                          const allCategories = [...categories]
+                          if (uncategorizedServices.length > 0) {
+                            allCategories.push('Additional')
+                          }
+                          
+                          return allCategories.map(category => {
+                            const categoryServices = category === 'Additional' 
+                              ? uncategorizedServices 
+                              : services.filter(s => s.category === category)
+                            
                       return (
                         <div key={category} className="border-b border-gray-200 last:border-b-0">
-                          <div className="bg-gray-50 px-4 py-3 flex items-center justify-between">
+                                <div 
+                                  className={`bg-gray-50 px-4 py-3 flex items-center justify-between ${
+                                    dragOverCategory === category ? 'bg-blue-50 border-2 border-blue-200' : ''
+                                  }`}
+                                  onDragOver={(e) => handleDragOver(e, category)}
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={(e) => handleDrop(e, category)}
+                                >
                             <h3 className="font-medium text-gray-900">{category}</h3>
                             <div className="flex items-center space-x-2">
                               <span className="text-sm text-gray-500">{categoryServices.length} service{categoryServices.length !== 1 ? 's' : ''}</span>
+                                    {category !== 'Additional' && (
                               <button
                                 onClick={() => handleRemoveCategory(category)}
                                 className="text-red-600 hover:text-red-700 text-sm"
                               >
                                 Remove
                               </button>
+                                    )}
                             </div>
                           </div>
                           {categoryServices.map((service, index) => (
                             <div
                               key={service.id}
+                                    draggable
+                                    onDragStart={(e) => handleDragStart(e, service)}
                               className={`flex items-center justify-between p-4 ${
                                 index !== categoryServices.length - 1 ? "border-b border-gray-100" : ""
-                              }`}
+                                    } ${draggedService?.id === service.id ? 'opacity-50' : ''}`}
                             >
                               <div 
                                 className="flex items-center space-x-4 flex-1 cursor-pointer hover:bg-gray-50 p-2 rounded"
@@ -389,14 +512,17 @@ const ZenbookerServices = () => {
                         </div>
                       )
                     })
+                        })()
                   ) : (
                     // Show all services without categories
                     services.map((service, index) => (
                       <div
                         key={service.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, service)}
                         className={`flex items-center justify-between p-4 ${
                           index !== services.length - 1 ? "border-b border-gray-200" : ""
-                        }`}
+                            } ${draggedService?.id === service.id ? 'opacity-50' : ''}`}
                       >
                         <div 
                           className="flex items-center space-x-4 flex-1 cursor-pointer hover:bg-gray-50 p-2 rounded"
@@ -521,6 +647,8 @@ const ZenbookerServices = () => {
                 </div>
               )}
             </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -534,6 +662,7 @@ const ZenbookerServices = () => {
           setCreateModalOpen(false)
           setTemplatesModalOpen(true)
         }}
+        existingCategories={categories}
       />
 
       <ServiceTemplatesModal

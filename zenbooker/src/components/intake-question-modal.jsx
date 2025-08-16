@@ -1,6 +1,6 @@
 "use client"
 import React, { useState, useEffect } from 'react';
-import { X, ChevronDown, ChevronUp, Plus, HelpCircle, FileText, Minus } from 'lucide-react';
+import { X, ChevronDown, ChevronUp, Plus, HelpCircle, FileText, Minus, Upload, Image as ImageIcon } from 'lucide-react';
 
 const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave, editingQuestion }) => {
   console.log('🔄 IntakeQuestionModal props:', { isOpen, selectedQuestionType, editingQuestion });
@@ -19,6 +19,7 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave, ed
   });
 
   const [showQuestionTypeDropdown, setShowQuestionTypeDropdown] = useState(false);
+  const [imageUploading, setImageUploading] = useState({});
 
   const questionTypes = [
     { value: 'dropdown', label: 'Dropdown', icon: '📋' },
@@ -27,10 +28,38 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave, ed
     { value: 'short_text', label: 'Short Text Answer', icon: '📝' },
     { value: 'long_text', label: 'Long Text Answer', icon: '📄' },
     { value: 'color_choice', label: 'Color Choice', icon: '🎨' },
-    { value: 'image_upload', label: 'Image Upload', icon: '📸' }
+    { value: 'image_upload', label: 'Image Upload', icon: '📸' },
+    { value: 'quantity_select', label: 'Quantity Select', icon: '🔢' }
   ];
 
-  const needsOptions = ['dropdown', 'multiple_choice', 'picture_choice', 'color_choice'].includes(formData.questionType);
+  const needsOptions = ['dropdown', 'multiple_choice', 'picture_choice', 'color_choice', 'quantity_select'].includes(formData.questionType);
+
+  // Predefined colors for color choice questions
+  const predefinedColors = [
+    '#FF0000', '#FF4500', '#FFA500', '#FFD700', '#FFFF00', // Reds, Oranges, Yellows
+    '#00FF00', '#32CD32', '#008000', '#006400', '#228B22', // Greens
+    '#0000FF', '#4169E1', '#1E90FF', '#00BFFF', '#87CEEB', // Blues
+    '#8A2BE2', '#9370DB', '#9932CC', '#BA55D3', '#DDA0DD', // Purples
+    '#FF69B4', '#FF1493', '#DC143C', '#FF6347', '#FF7F50', // Pinks, Reds
+    '#F5F5DC', '#F5DEB3', '#DEB887', '#D2B48C', '#BC8F8F', // Browns, Beiges
+    '#FFFFFF', '#F0F0F0', '#D3D3D3', '#A9A9A9', '#696969', // Grays, Whites
+    '#000000', '#2F4F4F', '#708090', '#778899', '#B0C4DE'  // Blacks, Dark Grays
+  ];
+
+  const addColorOption = (color) => {
+    const newOptionId = Math.max(...formData.options.map(o => o.id)) + 1;
+    setFormData(prev => ({
+      ...prev,
+      options: [
+        ...prev.options,
+        {
+          id: newOptionId,
+          text: color,
+          image: ''
+        }
+      ]
+    }));
+  };
 
   // Initialize form data when editing
   useEffect(() => {
@@ -45,7 +74,8 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave, ed
         options: editingQuestion.options && editingQuestion.options.length > 0 
           ? editingQuestion.options.map((option, index) => ({
               id: option.id || index + 1,
-              text: option.text || ''
+              text: option.text || '',
+              image: option.image || '' // Initialize image for editing
             }))
           : [{ id: 1, text: '' }]
       });
@@ -81,7 +111,8 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave, ed
         ...prev.options,
         {
           id: newOptionId,
-          text: ''
+          text: '',
+          image: '' // Add image field for new options
         }
       ]
     }));
@@ -93,6 +124,70 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave, ed
         ...prev,
         options: prev.options.filter(option => option.id !== optionId)
       }));
+    }
+  };
+
+  const handleImageUpload = async (optionId, file) => {
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert("Please select a valid image file.");
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert("Image file size must be less than 5MB.");
+      return;
+    }
+
+    try {
+      setImageUploading(prev => ({ ...prev, [optionId]: true }));
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      // Get auth token
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+
+      const response = await fetch('https://zenbookapi.now2code.online/api/upload-modifier-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Upload failed with status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.imageUrl) {
+        throw new Error('No image URL received from server');
+      }
+      
+      // Update the option with the image URL
+      setFormData(prev => ({
+        ...prev,
+        options: prev.options.map(option => 
+          option.id === optionId 
+            ? { ...option, image: data.imageUrl }
+            : option
+        )
+      }));
+
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      alert(error.message || "Failed to upload image. Please try again.");
+    } finally {
+      setImageUploading(prev => ({ ...prev, [optionId]: false }));
     }
   };
 
@@ -285,13 +380,88 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave, ed
                       placeholder="Enter an option..."
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
+                    {/* Color preview for color choice questions */}
+                    {formData.questionType === 'color_choice' && option.text && (
+                      <div 
+                        className="w-6 h-6 rounded border border-gray-300"
+                        style={{ backgroundColor: option.text }}
+                        title={option.text}
+                      />
+                    )}
                     <div className="flex items-center space-x-1">
+                      {/* Color picker for color choice questions */}
+                      {formData.questionType === 'color_choice' && (
+                        <div className="relative">
+                          <input
+                            type="color"
+                            value={option.text.startsWith('#') ? option.text : '#000000'}
+                            onChange={(e) => handleOptionChange(option.id, e.target.value)}
+                            className="w-8 h-8 border border-gray-300 rounded cursor-pointer"
+                            title="Choose color"
+                          />
+                        </div>
+                      )}
+                      {/* Image upload for picture choice questions */}
+                      {formData.questionType === 'picture_choice' && (
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={(e) => handleImageUpload(option.id, e.target.files[0])}
+                            disabled={imageUploading[option.id]}
+                            className="hidden"
+                            id={`image-upload-${option.id}`}
+                          />
+                          
+                          {option.image ? (
+                            // Show image preview when image is uploaded
+                            <div className="flex items-center space-x-2">
+                              <div className="relative group">
+                                <img
+                                  src={option.image}
+                                  alt={option.text}
+                                  className="w-16 h-16 object-cover rounded-lg border-2 border-gray-200 shadow-sm"
+                                />
+                                <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 rounded-lg flex items-center justify-center">
+                                  <label
+                                    htmlFor={`image-upload-${option.id}`}
+                                    className="opacity-0 group-hover:opacity-100 cursor-pointer p-1 bg-white rounded-full shadow-lg transition-opacity duration-200"
+                                  >
+                                    <Upload className="w-4 h-4 text-gray-600" />
+                                  </label>
+                                </div>
+                              </div>
                       <button
                         type="button"
-                        className="p-1 text-gray-400 hover:text-gray-600"
+                                onClick={() => handleOptionChange(option.id, { ...option, image: null })}
+                                className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                                title="Remove image"
                       >
-                        <FileText className="w-4 h-4" />
+                                <X className="w-4 h-4" />
                       </button>
+                            </div>
+                          ) : (
+                            // Show upload button when no image
+                            <label
+                              htmlFor={`image-upload-${option.id}`}
+                              className={`flex items-center justify-center w-16 h-16 border-2 border-dashed rounded-lg cursor-pointer transition-all duration-200 ${
+                                imageUploading[option.id] 
+                                  ? 'border-gray-300 bg-gray-50 cursor-not-allowed' 
+                                  : 'border-gray-300 hover:border-blue-400 hover:bg-blue-50'
+                              }`}
+                            >
+                              {imageUploading[option.id] ? (
+                                <div className="w-6 h-6 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+                              ) : (
+                                <div className="text-center">
+                                  <Upload className="w-5 h-5 text-gray-400 mx-auto mb-1" />
+                                  <span className="text-xs text-gray-500">Upload</span>
+                                </div>
+                              )}
+                            </label>
+                          )}
+                        </div>
+                      )}
                       {formData.options.length > 1 && (
                         <button
                           type="button"
@@ -315,6 +485,28 @@ const IntakeQuestionModal = ({ isOpen, onClose, selectedQuestionType, onSave, ed
                 <Plus className="w-4 h-4" />
                 <span>Add option</span>
               </button>
+
+              {/* Color Palette for Color Choice Questions */}
+              {formData.questionType === 'color_choice' && (
+                <div className="mt-6">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <h4 className="text-sm font-medium text-gray-700">Quick Add Colors</h4>
+                    <HelpCircle className="w-4 h-4 text-gray-400" />
+                  </div>
+                  <div className="grid grid-cols-8 gap-2">
+                    {predefinedColors.map((color, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => addColorOption(color)}
+                        className="w-8 h-8 rounded border border-gray-300 hover:scale-110 transition-transform"
+                        style={{ backgroundColor: color }}
+                        title={color}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

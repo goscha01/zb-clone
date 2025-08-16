@@ -1,6 +1,6 @@
 "use client"
 
-import { Users, UserX, Filter, Clock, CheckCircle, PlayCircle, XCircle, AlertCircle, Calendar } from "lucide-react"
+import { Users, UserX, Filter, Clock, CheckCircle, PlayCircle, XCircle, AlertCircle, Calendar, MapPin } from "lucide-react"
 
 const ScheduleSidebar = ({ filters, onFilterChange, teamMembers }) => {
   const statusOptions = [
@@ -19,12 +19,32 @@ const ScheduleSidebar = ({ filters, onFilterChange, teamMembers }) => {
     { id: "evening", label: "Evening (After 5 PM)", icon: Clock },
   ]
 
+  // Get unique territories from team members
+  const getTerritories = () => {
+    const territories = new Set()
+    teamMembers?.forEach(member => {
+      if (member.territory) {
+        territories.add(member.territory)
+      }
+    })
+    return Array.from(territories).sort()
+  }
+
+  const territoryOptions = [
+    { id: "all", label: "All Territories", icon: MapPin },
+    ...getTerritories().map(territory => ({
+      id: territory,
+      label: territory,
+      icon: MapPin
+    }))
+  ]
+
   const teamMemberOptions = [
-    { id: "all", label: "All Team Members", icon: Users },
+    { id: "all", label: "All Jobs", icon: Users },
     { id: "unassigned", label: "Unassigned", icon: UserX },
     ...(teamMembers || []).map(member => ({
       id: member.id,
-      label: member.name || member.email,
+      label: `${member.first_name?.charAt(0) || ''}${member.last_name?.charAt(0) || ''} ${member.first_name || ''} ${member.last_name || ''} ${member.territory || ''}`,
       icon: Users,
       color: member.color || "#2563EB"
     }))
@@ -59,7 +79,7 @@ const ScheduleSidebar = ({ filters, onFilterChange, teamMembers }) => {
 
         {/* Team Member Filter */}
         <div>
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">TEAM MEMBER</h3>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">JOBS ASSIGNED TO</h3>
           <nav className="space-y-1">
             {teamMemberOptions.map((option) => {
               const isActive = filters.teamMember === option.id
@@ -78,6 +98,30 @@ const ScheduleSidebar = ({ filters, onFilterChange, teamMembers }) => {
                   ) : (
                     <option.icon className="w-4 h-4 flex-shrink-0" />
                   )}
+                  <span className="truncate">{option.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+        </div>
+
+        {/* Territory Filter */}
+        <div>
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">TERRITORIES</h3>
+          <nav className="space-y-1">
+            {territoryOptions.map((option) => {
+              const isActive = filters.territory === option.id
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => onFilterChange('territory', option.id)}
+                  className={`w-full flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left ${
+                    isActive
+                      ? "bg-blue-50 text-blue-700 border border-blue-200"
+                      : "text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                  }`}
+                >
+                  <option.icon className="w-4 h-4 flex-shrink-0" />
                   <span className="truncate">{option.label}</span>
                 </button>
               )
@@ -110,13 +154,14 @@ const ScheduleSidebar = ({ filters, onFilterChange, teamMembers }) => {
         </div>
 
         {/* Clear Filters */}
-        {(filters.status !== 'all' || filters.teamMember !== 'all' || filters.timeRange !== 'all') && (
+        {(filters.status !== 'all' || filters.teamMember !== 'all' || filters.timeRange !== 'all' || filters.territory !== 'all') && (
           <div className="pt-4 border-t border-gray-200">
             <button
               onClick={() => {
                 onFilterChange('status', 'all')
                 onFilterChange('teamMember', 'all')
                 onFilterChange('timeRange', 'all')
+                onFilterChange('territory', 'all')
               }}
               className="w-full px-3 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
