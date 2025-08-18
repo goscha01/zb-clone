@@ -81,6 +81,7 @@ const ServiceDetails = () => {
     price: 0,
     duration: 0,
     category: "",
+    category_id: null,
     isFree: false,
     bookingType: "bookable",
     displayPrefix: "Estimated Total",
@@ -92,6 +93,10 @@ const ServiceDetails = () => {
     image: null
   })
 
+  // Add categories state
+  const [categories, setCategories] = useState([])
+  const [categoriesLoading, setCategoriesLoading] = useState(false)
+  
   // Load service data on component mount
   useEffect(() => {
     console.log('ServiceDetails useEffect - serviceId:', serviceId, 'user:', user?.id)
@@ -149,6 +154,11 @@ const ServiceDetails = () => {
       const service = await Promise.race([servicePromise, timeoutPromise])
       
       console.log('Service data received:', service)
+      console.log('Service data type:', typeof service)
+      console.log('Service data keys:', service ? Object.keys(service) : 'No service data')
+      console.log('Service ID:', service?.id)
+      console.log('Service name:', service?.name)
+      console.log('Service category:', service?.category)
       console.log('Service modifiers from backend:', service.modifiers)
       console.log('Service modifiers type:', typeof service.modifiers)
       if (service.modifiers) {
@@ -166,13 +176,14 @@ const ServiceDetails = () => {
       const hours = Math.floor(service.duration / 60)
       const minutes = service.duration % 60
       
-      setServiceData({
+      const newServiceData = {
         id: service.id,
         name: service.name,
         description: service.description || "",
         price: service.price || 0,
         duration: service.duration || 0,
         category: service.category || "",
+        category_id: service.category_id || null,
         image: service.image || null,
         isFree: service.price === 0,
         bookingType: "bookable",
@@ -182,11 +193,17 @@ const ServiceDetails = () => {
         modifiers: service.modifiers ? (typeof service.modifiers === 'string' ? JSON.parse(service.modifiers) : service.modifiers) : [],
         intakeQuestions: service.intake_questions ? (typeof service.intake_questions === 'string' ? JSON.parse(service.intake_questions) : service.intake_questions) : [],
         require_payment_method: !!service.require_payment_method
-      })
+      }
+      
+      console.log('Setting service data to:', newServiceData)
+      setServiceData(newServiceData)
       
       console.log('Parsed modifiers:', service.modifiers ? (typeof service.modifiers === 'string' ? JSON.parse(service.modifiers) : service.modifiers) : [])
       
       console.log('Service data set successfully')
+      
+      // Load categories
+      await loadCategories()
       
       // Load availability data
       await loadAvailabilityData()
@@ -230,6 +247,34 @@ const ServiceDetails = () => {
     }
   }
 
+  const loadCategories = async () => {
+    try {
+      console.log('🔄 Loading categories for user:', user.id)
+      setCategoriesLoading(true)
+      const categoriesData = await servicesAPI.getServiceCategories(user.id)
+      console.log('📋 Categories data received:', categoriesData)
+      console.log('📋 Categories data type:', typeof categoriesData)
+      console.log('📋 Is array?', Array.isArray(categoriesData))
+      
+      // Ensure categoriesData is always an array
+      const categoriesArray = Array.isArray(categoriesData) ? categoriesData : []
+      console.log('📋 Setting categories array:', categoriesArray)
+      console.log('📋 Categories array length:', categoriesArray.length)
+      
+      if (categoriesArray.length > 0) {
+        console.log('📋 First category:', categoriesArray[0])
+      }
+      
+      setCategories(categoriesArray)
+    } catch (error) {
+      console.error('❌ Error loading categories:', error)
+      // Don't show error for categories, just use empty array
+      setCategories([])
+    } finally {
+      setCategoriesLoading(false)
+    }
+  }
+
   const handleSaveAvailability = async () => {
     try {
       setAvailabilitySaving(true)
@@ -246,8 +291,24 @@ const ServiceDetails = () => {
 
   const handleSaveService = async (dataToSave = null) => {
     try {
+      console.log('💾 Current serviceData state:', serviceData);
+      console.log('💾 dataToSave parameter:', dataToSave);
+      
+      // Check if service data is loaded
+      if (loading) {
+        console.error('💾 Service data still loading');
+        setError("Service data is still loading. Please wait and try again.");
+        return;
+      }
+      
+      if (!serviceData.id) {
+        console.error('💾 Service data not loaded yet');
+        setError("Service data is still loading. Please wait and try again.");
+        return;
+      }
+      
       const data = dataToSave || serviceData;
-      console.log('💾 Saving service data:', data);
+      console.log('💾 Final data to save:', data);
       setSaving(true)
       setError("")
       setSuccessMessage("")
@@ -265,6 +326,8 @@ const ServiceDetails = () => {
       }
       
       console.log('💾 Update data being sent to backend:', updateData);
+      console.log('💾 Category being sent:', data.category);
+      console.log('💾 Category type:', typeof data.category);
       console.log('💾 Modifiers JSON:', JSON.stringify(serviceData.modifiers));
       
       await servicesAPI.update(serviceData.id, updateData)
@@ -615,6 +678,7 @@ const ServiceDetails = () => {
         price: updatedServiceData.isFree ? 0 : updatedServiceData.price,
         duration: updatedServiceData.duration,
         category: updatedServiceData.category,
+        category_id: updatedServiceData.category_id,
         modifiers: JSON.stringify(updatedServiceData.modifiers),
         intake_questions: JSON.stringify(updatedServiceData.intakeQuestions),
         require_payment_method: !!updatedServiceData.require_payment_method,
@@ -1474,13 +1538,77 @@ const ServiceDetails = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <input
-                  type="text"
-                  value={serviceData.category}
-                  onChange={(e) => setServiceData({ ...serviceData, category: e.target.value })}
-                  placeholder="e.g., Cleaning, Installation, Repair"
-                  className="w-full border border-gray-300 rounded-md px-3 py-2"
-                />
+                <div className="relative">
+                  <select
+                    value={serviceData.category_id || ""}
+                    onChange={(e) => {
+                      const selectedCategoryId = e.target.value;
+                      console.log('🔄 Category dropdown changed:', selectedCategoryId);
+                      console.log('🔄 Available categories:', categories);
+                      const selectedCategory = categories.find(cat => cat.id == selectedCategoryId);
+                      console.log('🔄 Selected category object:', selectedCategory);
+                      setServiceData({ 
+                        ...serviceData, 
+                        category: selectedCategory ? selectedCategory.name : "",
+                        category_id: selectedCategoryId || null
+                      });
+                      console.log('🔄 Updated serviceData.category:', selectedCategory ? selectedCategory.name : "");
+                    }}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2"
+                    disabled={categoriesLoading}
+                  >
+                    <option value="">Select a category</option>
+                    {Array.isArray(categories) && categories.length > 0 ? (
+                      categories.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="" disabled>
+                        {categoriesLoading ? 'Loading categories...' : 'No categories available'}
+                      </option>
+                    )}
+                  </select>
+                  {categoriesLoading && (
+                    <div className="absolute right-3 top-2.5">
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    </div>
+                  )}
+                </div>
+                {/* Category display/input */}
+                <div className="mt-2">
+                  {serviceData.category ? (
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        value={serviceData.category}
+                        onChange={(e) => setServiceData({ 
+                          ...serviceData, 
+                          category: e.target.value,
+                          category_id: null // Clear category_id when typing new category
+                        })}
+                        placeholder="Category name"
+                        className="flex-1 border border-gray-300 rounded-md px-3 py-2 text-sm"
+                      />
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {serviceData.category_id ? 'From dropdown' : 'Custom'}
+                      </span>
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      value={serviceData.category}
+                      onChange={(e) => setServiceData({ 
+                        ...serviceData, 
+                        category: e.target.value,
+                        category_id: null // Clear category_id when typing new category
+                      })}
+                      placeholder="Type a new category name"
+                      className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+                    />
+                  )}
+                </div>
               </div>
 
               <div className="flex gap-4 items-start">
@@ -1614,7 +1742,7 @@ const ServiceDetails = () => {
                   {/* Save Button */}
                   <div className="mt-8 pt-6 border-t border-gray-200">
                     <button
-                      onClick={handleSaveService}
+                      onClick={() => handleSaveService()}
                       disabled={saving}
                       className="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
                     >

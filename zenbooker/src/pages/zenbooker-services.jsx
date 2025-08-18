@@ -20,6 +20,7 @@ const ZenbookerServices = () => {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [serviceToDelete, setServiceToDelete] = useState(null)
   const [categories, setCategories] = useState([])
+  const [categoryObjects, setCategoryObjects] = useState([])
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
   
@@ -47,18 +48,35 @@ const ZenbookerServices = () => {
       setLoading(true)
       setError("")
       console.log('🔍 Fetching services for user:', user.id)
-      const response = await servicesAPI.getAll(user.id)
-      console.log('🔍 Services API response:', response)
+      
+      // Fetch services first
+      const servicesResponse = await servicesAPI.getAll(user.id)
+      console.log('🔍 Services API response:', servicesResponse)
       
       // Sort services alphabetically by name
-      const sortedServices = response.sort((a, b) => a.name.localeCompare(b.name))
+      const sortedServices = servicesResponse.sort((a, b) => a.name.localeCompare(b.name))
       console.log('🔍 Sorted services:', sortedServices)
       setServices(sortedServices)
       
-      // Extract unique categories from services and add "Additional" for uncategorized services
-      const uniqueCategories = [...new Set(sortedServices.map(service => service.category).filter(Boolean))]
-      console.log('🔍 Unique categories:', uniqueCategories)
-      setCategories(uniqueCategories)
+      // Try to fetch categories, but handle 404 gracefully
+      try {
+        const categoriesResponse = await servicesAPI.getServiceCategories(user.id)
+        console.log('🔍 Categories API response:', categoriesResponse)
+        
+        // Set categories from API response
+        const categoryNames = categoriesResponse.map(cat => cat.name)
+        console.log('🔍 Category names:', categoryNames)
+        setCategories(categoryNames)
+        setCategoryObjects(categoriesResponse)
+      } catch (categoriesError) {
+        console.log('🔍 Categories endpoint not available, using fallback:', categoriesError.message)
+        
+        // Fallback: Extract categories from services
+        const uniqueCategories = [...new Set(sortedServices.map(service => service.category).filter(Boolean))]
+        console.log('🔍 Fallback categories:', uniqueCategories)
+        setCategories(uniqueCategories)
+        setCategoryObjects([])
+      }
     } catch (error) {
       console.error('Error fetching services:', error)
       setError("Failed to load services. Please try again.")
@@ -230,10 +248,48 @@ const ZenbookerServices = () => {
   }
 
   const handleAddCategory = async () => {
-    if (!newCategoryName.trim()) return
+    if (!newCategoryName.trim() || !user?.id) return
+    
+    // Check if category name already exists
+    const trimmedName = newCategoryName.trim()
+    const categoryExists = categories.some(cat => cat.toLowerCase() === trimmedName.toLowerCase())
+    
+    if (categoryExists) {
+      setError(`Category "${trimmedName}" already exists. Please choose a different name.`)
+      return
+    }
     
     try {
-      setCategories(prev => [...prev, newCategoryName.trim()])
+      setError("")
+      
+      // Try to create category via API first
+      try {
+        const categoryData = {
+          userId: user.id,
+          name: trimmedName,
+          description: `${trimmedName} services`,
+          color: '#3B82F6'
+        }
+        
+        const newCategory = await servicesAPI.createCategory(categoryData)
+        console.log('Category created:', newCategory)
+        
+        // Add the new category to the list
+        setCategories(prev => [...prev, newCategory.name])
+        setCategoryObjects(prev => [...prev, newCategory])
+      } catch (apiError) {
+        console.log('Categories API not available, using local fallback:', apiError.message)
+        
+        // Check if it's a duplicate error from the API
+        if (apiError.response?.status === 400 && apiError.response?.data?.error?.includes('already exists')) {
+          setError(`Category "${trimmedName}" already exists. Please choose a different name.`)
+          return
+        }
+        
+        // Fallback: Add category locally only
+        setCategories(prev => [...prev, trimmedName])
+      }
+      
       setNewCategoryName("")
       setShowAddCategoryModal(false)
     } catch (error) {
@@ -278,6 +334,7 @@ const ZenbookerServices = () => {
     })
     
     setCategories(prev => prev.filter(cat => cat !== categoryName))
+    setCategoryObjects(prev => prev.filter(cat => cat.name !== categoryName)) // Remove full category object
   }
 
   // Drag and drop handlers
@@ -662,7 +719,7 @@ const ZenbookerServices = () => {
           setCreateModalOpen(false)
           setTemplatesModalOpen(true)
         }}
-        existingCategories={categories}
+        existingCategories={categoryObjects}
       />
 
       <ServiceTemplatesModal
@@ -718,6 +775,14 @@ const ZenbookerServices = () => {
                   <X className="w-5 h-5" />
                 </button>
               </div>
+              
+              {/* Error Message */}
+              {error && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800">{error}</p>
+                </div>
+              )}
+              
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Category Name
@@ -725,7 +790,11 @@ const ZenbookerServices = () => {
                 <input
                   type="text"
                   value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onChange={(e) => {
+                    setNewCategoryName(e.target.value)
+                    // Clear error when user starts typing
+                    if (error) setError("")
+                  }}
                   placeholder="Enter category name"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   onKeyPress={(e) => e.key === 'Enter' && handleAddCategory()}
@@ -733,7 +802,10 @@ const ZenbookerServices = () => {
               </div>
               <div className="flex justify-end space-x-2">
                 <button
-                  onClick={() => setShowAddCategoryModal(false)}
+                  onClick={() => {
+                    setShowAddCategoryModal(false)
+                    setError("") // Clear error when closing
+                  }}
                   className="px-4 py-2 rounded-lg text-gray-700 border border-gray-300 hover:bg-gray-100"
                 >
                   Cancel

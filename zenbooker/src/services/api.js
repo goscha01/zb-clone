@@ -135,13 +135,9 @@ export const servicesAPI = {
 
   update: async (id, serviceData) => {
     try {
-      console.log('🌐 API: Updating service with ID:', id);
-      console.log('🌐 API: Service data being sent:', serviceData);
       const response = await api.put(`/services/${id}`, serviceData);
-      console.log('🌐 API: Update response:', response.data);
       return response.data;
     } catch (error) {
-      console.error('🌐 API: Update error:', error);
       throw error;
     }
   },
@@ -173,9 +169,37 @@ export const servicesAPI = {
     }
   },
 
-  getServiceCategories: async () => {
+  getServiceCategories: async (userId) => {
     try {
-      const response = await api.get('/services/categories');
+      const response = await api.get(`/servi/categories?userId=${userId}`);
+      // The server returns { data: categories }, so we need to extract the data property
+      return response.data.data || response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  createCategory: async (categoryData) => {
+    try {
+      const response = await api.post('/services/categories', categoryData);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  updateCategory: async (id, categoryData) => {
+    try {
+      const response = await api.put(`/services/categories/${id}`, categoryData);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  deleteCategory: async (id) => {
+    try {
+      const response = await api.delete(`/services/categories/${id}`);
       return response.data;
     } catch (error) {
       throw error;

@@ -498,8 +498,8 @@ export default function CreateJobPage() {
       // Store service modifiers and intake questions for job creation
       serviceModifiers: serviceModifiers,
       serviceIntakeQuestions: serviceIntakeQuestions,
-      // Calculate time based on service duration - default to 9 AM if no time set
-      scheduledTime: prev.scheduledTime || "09:00"
+      // Keep existing time or default to 9 AM if no time set
+      scheduledTime: prev.scheduledTime && prev.scheduledTime.trim() !== "" ? prev.scheduledTime : "09:00"
     }));
     
     // Clear previous intake answers when selecting a new service
@@ -1668,7 +1668,6 @@ export default function CreateJobPage() {
                   <h3 className="text-sm font-medium text-gray-900">Schedule Now</h3>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Date *</label>
                     <div className="relative">
@@ -1681,25 +1680,6 @@ export default function CreateJobPage() {
                   />
                       <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     </div>
-                </div>
-                
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Time</label>
-                    <div className="relative">
-                  <input
-                        type="time"
-                        required
-                        value={formData.scheduledTime}
-                        onChange={(e) => setFormData(prev => ({ ...prev, scheduledTime: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        step="900"
-                        min="00:00"
-                        max="23:59"
-                  />
-                      <Clock className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    </div>
-                  </div>
-                </div>
                 </div>
                 
               {/* Recurring Options */}
@@ -1718,6 +1698,7 @@ export default function CreateJobPage() {
                   </select>
                 </div>
               )}
+              </div>
             </div>
 
             {/* Contact Information Section */}

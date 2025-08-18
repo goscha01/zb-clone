@@ -40,15 +40,24 @@ const ServicesSettings = () => {
   const loadServicesData = async () => {
     try {
       setLoading(true)
-      const [settingsData, categoriesData, servicesData] = await Promise.all([
+      
+      // Load settings and services first
+      const [settingsData, servicesData] = await Promise.all([
         servicesAPI.getServiceSettings(),
-        servicesAPI.getServiceCategories(),
         servicesAPI.getServices()
       ])
       
       setSettings(settingsData)
-      setServiceCategories(categoriesData)
       setServices(servicesData)
+      
+      // Try to load categories, but handle 404 gracefully
+      try {
+        const categoriesData = await servicesAPI.getServiceCategories(user.id)
+        setServiceCategories(categoriesData)
+      } catch (categoriesError) {
+        console.log('Categories endpoint not available:', categoriesError.message)
+        setServiceCategories([])
+      }
     } catch (error) {
       console.error('Error loading services data:', error)
       setMessage({ type: 'error', text: 'Failed to load services settings' })

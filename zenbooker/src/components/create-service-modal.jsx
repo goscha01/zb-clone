@@ -8,6 +8,7 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
     price: "",
     duration: { hours: 0, minutes: 30 },
     category: "",
+    category_id: null,
     isFree: false,
     image: null
   })
@@ -63,6 +64,7 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
       price: "",
       duration: { hours: 0, minutes: 30 },
       category: "",
+      category_id: null,
       isFree: false,
       image: null
     })
@@ -167,12 +169,13 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
                             key={index}
                             type="button"
                             onClick={() => {
-                              handleInputChange('category', category)
+                              handleInputChange('category', category.name)
+                              handleInputChange('category_id', category.id)
                               setShowCategoryDropdown(false)
                             }}
                             className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-md"
                           >
-                            {category}
+                            {category.name}
                           </button>
                         ))}
                       </div>
@@ -190,7 +193,18 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
                           className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           onKeyPress={(e) => {
                             if (e.key === 'Enter' && newCategory.trim()) {
-                              handleInputChange('category', newCategory.trim())
+                              const trimmedName = newCategory.trim()
+                              const categoryExists = existingCategories.some(cat => 
+                                cat.name && cat.name.toLowerCase() === trimmedName.toLowerCase()
+                              )
+                              
+                              if (categoryExists) {
+                                alert(`Category "${trimmedName}" already exists. Please choose a different name.`)
+                                return
+                              }
+                              
+                              handleInputChange('category', trimmedName)
+                              handleInputChange('category_id', null) // Will be created on server
                               setNewCategory("")
                               setShowCategoryDropdown(false)
                             }
@@ -200,7 +214,18 @@ const CreateServiceModal = ({ isOpen, onClose, onCreateService, onStartWithTempl
                           type="button"
                           onClick={() => {
                             if (newCategory.trim()) {
-                              handleInputChange('category', newCategory.trim())
+                              const trimmedName = newCategory.trim()
+                              const categoryExists = existingCategories.some(cat => 
+                                cat.name && cat.name.toLowerCase() === trimmedName.toLowerCase()
+                              )
+                              
+                              if (categoryExists) {
+                                alert(`Category "${trimmedName}" already exists. Please choose a different name.`)
+                                return
+                              }
+                              
+                              handleInputChange('category', trimmedName)
+                              handleInputChange('category_id', null) // Will be created on server
                               setNewCategory("")
                               setShowCategoryDropdown(false)
                             }
