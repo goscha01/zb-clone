@@ -7,6 +7,7 @@ import MobileHeader from "../../components/mobile-header"
 import { ChevronLeft, Plus, Edit, Trash2, Settings, Tag, Clock, DollarSign } from "lucide-react"
 import { servicesAPI } from "../../services/api"
 import { useAuth } from "../../context/AuthContext"
+import CategoryManagement from "../../components/category-management"
 
 const ServicesSettings = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -64,6 +65,11 @@ const ServicesSettings = () => {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCategoryChange = () => {
+    // Refresh categories when a category is deleted
+    loadServicesData()
   }
 
   const handleSaveSettings = async () => {
@@ -260,35 +266,11 @@ const ServicesSettings = () => {
 
             {/* Service Categories */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-              <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+              <div className="px-6 py-4 border-b border-gray-200">
                 <h2 className="text-lg font-semibold text-gray-900">Service Categories</h2>
-                <button
-                  onClick={() => navigate('/services')}
-                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Manage Services</span>
-                </button>
               </div>
               <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {serviceCategories.map((category) => (
-                    <div key={category.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-medium text-gray-900">{category.name}</h3>
-                        <span className="text-sm text-gray-500">{category.serviceCount} services</span>
-                      </div>
-                      <p className="text-sm text-gray-600">{category.description}</p>
-                    </div>
-                  ))}
-                </div>
-                {serviceCategories.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Tag className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                    <p>No service categories found</p>
-                    <p className="text-sm mt-1">Create categories to organize your services</p>
-                  </div>
-                )}
+                <CategoryManagement onCategoryChange={handleCategoryChange} />
               </div>
             </div>
 

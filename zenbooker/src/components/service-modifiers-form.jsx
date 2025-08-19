@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Plus, Minus, Image as ImageIcon } from 'lucide-react';
+import { Plus, Minus, Image as ImageIcon, Save } from 'lucide-react';
 
-const ServiceModifiersForm = ({ modifiers = [], onModifiersChange }) => {
+const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEditable = false, isSaving = false }) => {
   const [selectedModifiers, setSelectedModifiers] = useState({});
 
   const handleModifierChange = (modifierId, optionId, value) => {
@@ -200,6 +200,29 @@ const ServiceModifiersForm = ({ modifiers = [], onModifiersChange }) => {
   return (
     <div className="space-y-6">
       {modifiers.map(renderModifier)}
+      
+      {isEditable && onSave && (
+        <div className="flex justify-end pt-4 border-t border-gray-200">
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={isSaving}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                Save Modifiers
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

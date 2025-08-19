@@ -27,8 +27,8 @@ export default function ServiceModal({ isOpen, onClose, onSave }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (!formData.name || !formData.price || !formData.duration) {
-      setError("Name, price, and duration are required.");
+    if (!formData.name) {
+      setError("Service name is required.");
       return;
     }
     setLoading(true);
@@ -37,8 +37,8 @@ export default function ServiceModal({ isOpen, onClose, onSave }) {
       const payload = {
         ...formData,
         userId,
-        price: parseFloat(formData.price),
-        duration: parseInt(formData.duration, 10),
+        price: formData.price ? parseFloat(formData.price) : null,
+        duration: formData.duration ? parseInt(formData.duration, 10) : null,
       };
       console.log('Service creation payload:', payload);
       const response = await servicesAPI.create(payload);
@@ -93,7 +93,7 @@ export default function ServiceModal({ isOpen, onClose, onSave }) {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Price ($) *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
               <input
                 type="number"
                 name="price"
@@ -102,11 +102,11 @@ export default function ServiceModal({ isOpen, onClose, onSave }) {
                 min="0"
                 step="0.01"
                 className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                required
+                placeholder="0.00"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min) *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Duration (min)</label>
               <input
                 type="number"
                 name="duration"
@@ -115,7 +115,7 @@ export default function ServiceModal({ isOpen, onClose, onSave }) {
                 min="1"
                 step="1"
                 className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
-                required
+                placeholder="30"
               />
             </div>
           </div>

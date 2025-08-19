@@ -75,6 +75,12 @@ const ServiceDetails = () => {
   const [error, setError] = useState("")
   const [successMessage, setSuccessMessage] = useState("")
   
+  // Save state for modifiers and intake questions
+  const [savingModifiers, setSavingModifiers] = useState(false)
+  const [savingIntakeQuestions, setSavingIntakeQuestions] = useState(false)
+  const [modifiersChanged, setModifiersChanged] = useState(false)
+  const [intakeQuestionsChanged, setIntakeQuestionsChanged] = useState(false)
+  
   const [serviceData, setServiceData] = useState({
     name: "",
     description: "",
@@ -117,6 +123,20 @@ const ServiceDetails = () => {
     console.log('Starting to load service data...')
     loadServiceData()
   }, [serviceId, user?.id])
+
+  // Warn user about unsaved changes when navigating away
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (modifiersChanged || intakeQuestionsChanged) {
+        e.preventDefault()
+        e.returnValue = 'You have unsaved changes. Are you sure you want to leave?'
+        return 'You have unsaved changes. Are you sure you want to leave?'
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [modifiersChanged, intakeQuestionsChanged])
 
   const loadServiceData = async () => {
     try {
@@ -405,15 +425,11 @@ const ServiceDetails = () => {
       };
       
       setServiceData(updatedServiceData);
-      
-      // Save to backend with the updated data
-      console.log('🔄 About to save service with updated modifiers:', updatedServiceData.modifiers);
-      await handleSaveService(updatedServiceData)
-      console.log('🔄 Service saved successfully');
+      setModifiersChanged(true);
       
       setIsCreateModifierGroupModalOpen(false)
       setEditingModifier(null)
-      setSuccessMessage(editingModifier ? "Modifier group updated successfully!" : "Modifier group created successfully!")
+      setSuccessMessage(editingModifier ? "Modifier group updated! Click 'Save Modifiers' to save changes." : "Modifier group created! Click 'Save Modifiers' to save changes.")
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(""), 3000)
@@ -437,9 +453,10 @@ const ServiceDetails = () => {
         };
         
         setServiceData(updatedServiceData);
+        setModifiersChanged(true);
         
-        // Save to backend with the updated data
-        await handleSaveService(updatedServiceData)
+        setSuccessMessage("Modifier deleted! Click 'Save Modifiers' to save changes.")
+        setTimeout(() => setSuccessMessage(""), 3000)
       } catch (error) {
         console.error('Error deleting modifier:', error)
         setError("Failed to delete modifier. Please try again.")
@@ -499,24 +516,13 @@ const ServiceDetails = () => {
       
       // Update state
       setServiceData(updatedServiceData)
-      
-      // Save to backend with the updated data
-      const updateData = {
-        name: updatedServiceData.name,
-        description: updatedServiceData.description,
-        price: updatedServiceData.isFree ? 0 : updatedServiceData.price,
-        duration: updatedServiceData.duration,
-        category: updatedServiceData.category,
-        modifiers: JSON.stringify(updatedServiceData.modifiers),
-        intake_questions: JSON.stringify(updatedServiceData.intakeQuestions),
-        require_payment_method: !!updatedServiceData.require_payment_method
-      }
-      
-      await servicesAPI.update(updatedServiceData.id, updateData)
+      setIntakeQuestionsChanged(true);
       
       setIsIntakeModalOpen(false)
       setSelectedQuestionType(null)
       setEditingIntakeQuestion(null) // Clear editing state
+      
+      setSuccessMessage(editingIntakeQuestion ? "Intake question updated! Click 'Save Answers' to save changes." : "Intake question created! Click 'Save Answers' to save changes.")
       
       // Clear success message after 3 seconds
       setTimeout(() => setSuccessMessage(""), 3000)
@@ -525,6 +531,58 @@ const ServiceDetails = () => {
       console.error('Error saving intake question:', error)
       setError("Failed to save intake question. Please try again.")
     }
+  }
+
+  const handleSaveModifiers = async () => {
+    try {
+      setSavingModifiers(true)
+      setError("")
+      
+      await handleSaveService(serviceData)
+      
+      setModifiersChanged(false)
+      setSuccessMessage("Modifiers saved successfully!")
+      setTimeout(() => setSuccessMessage(""), 3000)
+    } catch (error) {
+      console.error('Error saving modifiers:', error)
+      setError("Failed to save modifiers. Please try again.")
+    } finally {
+      setSavingModifiers(false)
+    }
+  }
+
+  const handleSaveIntakeQuestions = async () => {
+    try {
+      setSavingIntakeQuestions(true)
+      setError("")
+      
+      await handleSaveService(serviceData)
+      
+      setIntakeQuestionsChanged(false)
+      setSuccessMessage("Intake questions saved successfully!")
+      setTimeout(() => setSuccessMessage(""), 3000)
+    } catch (error) {
+      console.error('Error saving intake questions:', error)
+      setError("Failed to save intake questions. Please try again.")
+    } finally {
+      setSavingIntakeQuestions(false)
+    }
+  }
+
+  const handleModifiersChange = (newModifiers) => {
+    setServiceData(prev => ({
+      ...prev,
+      modifiers: newModifiers
+    }))
+    setModifiersChanged(true)
+  }
+
+  const handleIntakeQuestionsChange = (newAnswers) => {
+    setServiceData(prev => ({
+      ...prev,
+      intakeQuestions: newAnswers
+    }))
+    setIntakeQuestionsChanged(true)
   }
 
   const handleDeleteIntakeQuestion = async (questionId) => {
@@ -541,22 +599,10 @@ const ServiceDetails = () => {
         
         // Update state
         setServiceData(updatedServiceData)
+        setIntakeQuestionsChanged(true);
         
-        // Save to backend with the updated data
-        const updateData = {
-          name: updatedServiceData.name,
-          description: updatedServiceData.description,
-          price: updatedServiceData.isFree ? 0 : updatedServiceData.price,
-          duration: updatedServiceData.duration,
-          category: updatedServiceData.category,
-          modifiers: JSON.stringify(updatedServiceData.modifiers),
-          intake_questions: JSON.stringify(updatedServiceData.intakeQuestions),
-          require_payment_method: !!updatedServiceData.require_payment_method
-        }
-        
-        await servicesAPI.update(updatedServiceData.id, updateData)
-        
-        setSuccessMessage("Intake question deleted successfully!")
+        setSuccessMessage("Intake question deleted! Click 'Save Answers' to save changes.")
+        setTimeout(() => setSuccessMessage(""), 3000)
         setTimeout(() => setSuccessMessage(""), 3000)
       } catch (error) {
         console.error('Error deleting intake question:', error)
@@ -944,7 +990,10 @@ const ServiceDetails = () => {
                 <div className="bg-gray-50 rounded-lg p-6">
                   <IntakeQuestionsForm 
                     questions={serviceData.intakeQuestions}
-                    onAnswersChange={() => {}} // Read-only preview
+                    onAnswersChange={handleIntakeQuestionsChange}
+                    onSave={handleSaveIntakeQuestions}
+                    isEditable={true}
+                    isSaving={savingIntakeQuestions}
                   />
                 </div>
               </div>
@@ -1892,7 +1941,10 @@ const ServiceDetails = () => {
                 <div className="bg-gray-50 rounded-lg p-6">
                   <ServiceModifiersForm 
                     modifiers={serviceData.modifiers}
-                    onModifiersChange={() => {}} // Read-only preview
+                    onModifiersChange={handleModifiersChange}
+                    onSave={handleSaveModifiers}
+                    isEditable={true}
+                    isSaving={savingModifiers}
                   />
                 </div>
               </div>
@@ -1935,13 +1987,14 @@ const ServiceDetails = () => {
       icon: Sliders,
       title: "Service Modifiers",
       description: "Add selectable options that can adjust this service's price and duration",
-      badge: "2 Modifier Groups"
+      badge: modifiersChanged ? "Unsaved Changes" : "2 Modifier Groups"
     },
     {
       id: "intake",
       icon: ListChecks,
       title: "Intake Questions",
-      description: "Add custom form fields to collect additional info"
+      description: "Add custom form fields to collect additional info",
+      badge: intakeQuestionsChanged ? "Unsaved Changes" : undefined
     },
     {
       id: "availability",

@@ -199,9 +199,23 @@ export const servicesAPI = {
 
   deleteCategory: async (id) => {
     try {
+      console.log('🔄 deleteCategory API called with id:', id);
+      console.log('🔄 Making DELETE request to:', `/services/categories/${id}`);
+      console.log('🔄 About to make API call...');
+      
       const response = await api.delete(`/services/categories/${id}`);
+      console.log('✅ DELETE response received:', response);
+      console.log('✅ DELETE response data:', response.data);
       return response.data;
     } catch (error) {
+      console.error('❌ DELETE request failed:', error);
+      console.error('❌ Error type:', typeof error);
+      console.error('❌ Error name:', error.name);
+      console.error('❌ Error message:', error.message);
+      if (error.response) {
+        console.error('❌ Response status:', error.response.status);
+        console.error('❌ Response data:', error.response.data);
+      }
       throw error;
     }
   },

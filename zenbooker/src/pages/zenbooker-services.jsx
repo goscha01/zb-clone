@@ -23,6 +23,9 @@ const ZenbookerServices = () => {
   const [categoryObjects, setCategoryObjects] = useState([])
   const [showAddCategoryModal, setShowAddCategoryModal] = useState(false)
   const [newCategoryName, setNewCategoryName] = useState("")
+  const [categoryDeleteModalOpen, setCategoryDeleteModalOpen] = useState(false)
+  const [categoryToDelete, setCategoryToDelete] = useState(null)
+  const [deletingCategory, setDeletingCategory] = useState(false)
   
   // Drag and drop state
   const [draggedService, setDraggedService] = useState(null)
@@ -326,15 +329,77 @@ const ZenbookerServices = () => {
   }
 
   const handleRemoveCategory = (categoryName) => {
-    // Move all services in this category to "Uncategorized"
-    const servicesInCategory = services.filter(s => s.category === categoryName)
+    console.log('🔄 handleRemoveCategory called with:', categoryName);
     
-    servicesInCategory.forEach(service => {
-      handleMoveServiceToCategory(service.id, "")
-    })
+    // Find the category object to get the ID
+    const categoryObject = categoryObjects.find(cat => cat.name === categoryName);
     
-    setCategories(prev => prev.filter(cat => cat !== categoryName))
-    setCategoryObjects(prev => prev.filter(cat => cat.name !== categoryName)) // Remove full category object
+    if (!categoryObject) {
+      console.error('❌ Category object not found for:', categoryName);
+      setError('Category not found. Please refresh the page and try again.');
+      return;
+    }
+    
+    console.log('🔄 Found category object:', categoryObject);
+    
+    // Set the category to delete and open the modal
+    setCategoryToDelete({ name: categoryName, object: categoryObject });
+    setCategoryDeleteModalOpen(true);
+  }
+
+  const handleConfirmCategoryDelete = async () => {
+    if (!categoryToDelete) return;
+    
+    console.log('✅ User confirmed category deletion');
+    
+    try {
+      setDeletingCategory(true);
+      setError('');
+      
+      const { name: categoryName, object: categoryObject } = categoryToDelete;
+      
+      // First, move all services in this category to "Uncategorized"
+      const servicesInCategory = services.filter(s => s.category === categoryName);
+      console.log(`🔄 Moving ${servicesInCategory.length} services to uncategorized`);
+      
+      for (const service of servicesInCategory) {
+        await handleMoveServiceToCategory(service.id, "");
+      }
+      
+      // Now delete the category from the database
+      console.log('🔄 Deleting category from database:', categoryObject.id);
+      const result = await servicesAPI.deleteCategory(categoryObject.id);
+      console.log('✅ Category deletion result:', result);
+      
+      // Update local state
+      setCategories(prev => prev.filter(cat => cat !== categoryName));
+      setCategoryObjects(prev => prev.filter(cat => cat.name !== categoryName));
+      
+      console.log('✅ Category removed successfully');
+      
+      // Close the modal
+      setCategoryDeleteModalOpen(false);
+      setCategoryToDelete(null);
+      
+    } catch (error) {
+      console.error('❌ Error removing category:', error);
+      console.error('❌ Error response:', error.response);
+      console.error('❌ Error data:', error.response?.data);
+      
+      if (error.response?.data?.error) {
+        setError(error.response.data.error);
+      } else {
+        setError('Failed to delete category. Please try again.');
+      }
+    } finally {
+      setDeletingCategory(false);
+    }
+  }
+
+  const handleCancelCategoryDelete = () => {
+    console.log('❌ User cancelled category deletion');
+    setCategoryDeleteModalOpen(false);
+    setCategoryToDelete(null);
   }
 
   // Drag and drop handlers
@@ -759,6 +824,56 @@ const ZenbookerServices = () => {
                     <Trash2 className="w-4 h-4 mr-2" />
                   )}
                   Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Category Delete Confirmation Modal */}
+        {categoryDeleteModalOpen && categoryToDelete && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">Delete Category</h3>
+                <button onClick={handleCancelCategoryDelete} className="text-gray-500 hover:text-gray-700">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="mb-4">
+                <p className="text-gray-800 mb-2">
+                  Are you sure you want to delete the category <strong>"{categoryToDelete.name}"</strong>?
+                </p>
+                <p className="text-sm text-gray-600">
+                  This action cannot be undone. All services in this category will be moved to "Uncategorized".
+                </p>
+              </div>
+              
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={handleCancelCategoryDelete}
+                  disabled={deletingCategory}
+                  className="px-4 py-2 rounded-lg text-gray-700 border border-gray-300 hover:bg-gray-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmCategoryDelete}
+                  disabled={deletingCategory}
+                  className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 flex items-center"
+                >
+                  {deletingCategory ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Category
+                    </>
+                  )}
                 </button>
               </div>
             </div>
