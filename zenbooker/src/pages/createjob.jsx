@@ -69,6 +69,7 @@ import { useNavigate } from 'react-router-dom';
 import { jobsAPI, customersAPI, servicesAPI, teamAPI, territoriesAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
+
 export default function CreateJobPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -93,7 +94,7 @@ export default function CreateJobPage() {
     notes: "",
     status: "pending",
     duration: 360, // Default 6 hours in minutes
-    workers: 1,
+    workers: 0,
     skillsRequired: 0,
     price: 0,
     discount: 0,
@@ -257,6 +258,7 @@ export default function CreateJobPage() {
         price: basePrice,
         total: total,
         serviceName: selectedService.name,
+        duration: selectedService.duration || 0,
         estimatedDuration: selectedService.duration || 0
       }));
     }
@@ -491,7 +493,7 @@ export default function CreateJobPage() {
       serviceId: service.id,
       price: service.price || 0,
       duration: durationInMinutes, // Store in minutes
-      workers: selectedTeamMembers.length > 0 ? selectedTeamMembers.length : (service.workers || 1),
+      workers: selectedTeamMembers.length > 0 ? selectedTeamMembers.length : (service.workers || 0),
       skillsRequired: service.skills || 0,
       serviceName: service.name,
       estimatedDuration: service.duration || 0,
@@ -513,7 +515,6 @@ export default function CreateJobPage() {
   const handleTeamMemberSelect = (member) => {
     setSelectedTeamMember(member);
     setFormData(prev => ({ ...prev, teamMemberId: member.id }));
-    setShowTeamDropdown(false);
   };
 
   const handleMultipleTeamMemberSelect = (member) => {
@@ -555,8 +556,8 @@ export default function CreateJobPage() {
 
   const clearAllTeamMembers = () => {
     setSelectedTeamMembers([]);
-    // Keep the current worker count when clearing team members
-    // This allows manual adjustment after clearing team members
+    // Reset worker count to 0 when clearing all team members
+    setFormData(prev => ({ ...prev, workers: 0 }));
   };
 
   const handleSubmit = async (e) => {
@@ -581,7 +582,11 @@ export default function CreateJobPage() {
       scheduledTimeLength: formData.scheduledTime ? formData.scheduledTime.length : 'null/undefined'
     });
     
-    if (!formData.customerId || !formData.serviceId || !formData.scheduledDate || !formData.scheduledTime) {
+    // Validate time format
+    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    const isValidTime = formData.scheduledTime && timeRegex.test(formData.scheduledTime);
+    
+    if (!formData.customerId || !formData.serviceId || !formData.scheduledDate || !formData.scheduledTime || !isValidTime) {
       console.log('Validation failed:', {
         customerId: formData.customerId,
         serviceId: formData.serviceId,
@@ -594,6 +599,7 @@ export default function CreateJobPage() {
       if (!formData.serviceId) missingFields.push('Service');
       if (!formData.scheduledDate) missingFields.push('Date');
       if (!formData.scheduledTime) missingFields.push('Time');
+      if (!isValidTime) missingFields.push('Valid Time');
       
       setError(`Please fill in the following required fields: ${missingFields.join(', ')}`);
       // Prevent any input from being focused
@@ -641,14 +647,14 @@ export default function CreateJobPage() {
         notes: formData.notes,
         internalNotes: formData.internalNotes,
         status: formData.status,
-        duration: parseInt(calculateTotalDuration() || 0) * 60 || 360, // Convert total hours to minutes
-        workers: parseInt(formData.workers) || 1,
+        duration: parseInt(calculateTotalDuration() || 0) || 360, // Duration already in minutes
+        workers: parseInt(formData.workers) || 0,
         skillsRequired: parseInt(formData.skillsRequired) || 0,
         price: parseFloat(calculateTotalPrice() || 0),
         discount: parseFloat(formData.discount) || 0,
         additionalFees: parseFloat(formData.additionalFees) || 0,
         taxes: parseFloat(formData.taxes) || 0,
-        total: parseFloat(formData.total) || 0,
+        total: parseFloat(calculateTotalPrice() || 0),
         paymentMethod: formData.paymentMethod,
         territory: formData.territory,
         territoryId: formData.territoryId || detectedTerritory?.id || null,
@@ -712,13 +718,16 @@ export default function CreateJobPage() {
         totalPrice: calculateTotalPrice()
       };
 
+      console.log('🕐 FRONTEND TIME DEBUG:');
+      console.log('  - Time being sent:', jobData.scheduledTime);
+      console.log('  - Time type:', typeof jobData.scheduledTime);
+      console.log('  - Time length:', jobData.scheduledTime ? jobData.scheduledTime.length : 'null/undefined');
+      console.log('  - Time validation:', timeRegex.test(jobData.scheduledTime));
+      
       console.log('Creating job with data:', jobData);
       console.log('🔄 Intake questions being sent:', jobData.intakeQuestionAnswers);
       console.log('🔄 Intake questions count being sent:', Object.keys(jobData.intakeQuestionAnswers || {}).length);
       console.log('🔄 Intake questions keys being sent:', Object.keys(jobData.intakeQuestionAnswers || {}));
-      console.log('Time value being sent:', jobData.scheduledTime);
-      console.log('Time value type:', typeof jobData.scheduledTime);
-      console.log('Time value length:', jobData.scheduledTime ? jobData.scheduledTime.length : 'null/undefined');
       const result = await jobsAPI.create(jobData);
       console.log('Job creation result:', result);
       
@@ -895,35 +904,65 @@ export default function CreateJobPage() {
       let basePrice = parseFloat(formData.price) || 0;
       let modifierPrice = 0;
       
+      console.log('🔄 Service modifiers available:', formData.serviceModifiers);
+      console.log('🔄 Selected modifiers structure:', selectedModifiers);
+      
       // Add prices from selected modifiers
       Object.entries(selectedModifiers).forEach(([modifierId, modifierData]) => {
+        console.log(`🔄 Processing modifier ${modifierId}:`, { modifierData, type: typeof modifierData });
+        console.log(`🔄 Looking for modifier with ID: ${modifierId}`);
+        console.log(`🔄 Available modifier IDs:`, formData.serviceModifiers?.map(m => m.id));
         const modifier = formData.serviceModifiers?.find(m => m.id == modifierId);
-        if (!modifier) return;
+        if (!modifier) {
+          console.log(`🔄 Modifier ${modifierId} not found in serviceModifiers`);
+          return;
+        }
         
         if (modifier.selectionType === 'quantity') {
+          console.log(`🔄 Processing quantity modifier ${modifierId}:`, modifierData);
           // Handle quantity selection - modifierData is { optionId: quantity }
           Object.entries(modifierData).forEach(([optionId, quantity]) => {
+            console.log(`🔄 Quantity option ${optionId}:`, { quantity, type: typeof quantity });
+            console.log(`🔄 Looking for option with ID: ${optionId}`);
+            console.log(`🔄 Available option IDs:`, modifier.options?.map(o => o.id));
             const option = modifier.options?.find(o => o.id == optionId);
+            console.log(`🔄 Found option:`, option);
             if (option && option.price && quantity > 0) {
               const optionPrice = parseFloat(option.price) || 0;
-              modifierPrice += optionPrice * quantity;
+              const optionTotal = optionPrice * quantity;
+              modifierPrice += optionTotal;
+              console.log(`🔄 Added to modifier price: ${optionPrice} * ${quantity} = ${optionTotal}`);
             }
           });
         } else {
+          console.log(`🔄 Processing single/multi modifier ${modifierId}:`, modifierData);
           // Handle single/multi selection - modifierData is array of optionIds
           const selectedOptionIds = Array.isArray(modifierData) ? modifierData : [modifierData];
+          console.log(`🔄 Selected option IDs:`, selectedOptionIds);
           selectedOptionIds.forEach(optionId => {
+            console.log(`🔄 Processing option ID:`, optionId);
+            console.log(`🔄 Looking for option with ID: ${optionId}`);
+            console.log(`🔄 Available option IDs:`, modifier.options?.map(o => o.id));
             const option = modifier.options?.find(o => o.id == optionId);
+            console.log(`🔄 Found option:`, option);
             if (option && option.price) {
               const optionPrice = parseFloat(option.price) || 0;
               modifierPrice += optionPrice;
+              console.log(`🔄 Added to modifier price: ${optionPrice}`);
             }
           });
         }
       });
       
       const totalPrice = basePrice + modifierPrice;
-      console.log('🔄 Price calculation:', { basePrice, modifierPrice, totalPrice, selectedModifiers });
+      console.log('🔄 Price calculation:', { 
+        basePrice, 
+        modifierPrice, 
+        totalPrice, 
+        selectedModifiers,
+        selectedModifiersKeys: Object.keys(selectedModifiers),
+        selectedModifiersValues: Object.values(selectedModifiers)
+      });
       return totalPrice;
     } catch (error) {
       console.error('Error calculating total price:', error);
@@ -991,7 +1030,7 @@ export default function CreateJobPage() {
         selectedModifiersCount: Object.keys(selectedModifiers).length,
         selectedModifiers
       });
-      return totalDurationInHours; // Return in hours for display
+      return totalDurationInMinutes; // Return in minutes for backend
     } catch (error) {
       console.error('Error calculating total duration:', error);
       return 0;
@@ -1394,10 +1433,10 @@ export default function CreateJobPage() {
                       <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
                         <Clock className="w-4 h-4 text-gray-600" />
                         <span className="text-sm font-medium text-gray-700" key={`duration-${calculationTrigger}`}>
-                          {(calculateTotalDuration() || 0).toFixed(1)} hr
-                          {(calculateTotalDuration() || 0) !== ((parseFloat(formData.duration) || 0) / 60) && (
+                          {((calculateTotalDuration() || 0) / 60).toFixed(1)} hr
+                          {(calculateTotalDuration() || 0) !== (parseFloat(formData.duration) || 0) && (
                             <span className="text-xs text-blue-600 ml-1">
-                              (base: {((parseFloat(formData.duration) || 0) / 60).toFixed(1)} + modifiers: {((calculateTotalDuration() || 0) - ((parseFloat(formData.duration) || 0) / 60)).toFixed(1)})
+                              (base: {((parseFloat(formData.duration) || 0) / 60).toFixed(1)} + modifiers: {(((calculateTotalDuration() || 0) - (parseFloat(formData.duration) || 0)) / 60).toFixed(1)})
                             </span>
                           )}
                         </span>
@@ -1570,13 +1609,13 @@ export default function CreateJobPage() {
                                       <div>
                                         <p className="font-medium">{member.first_name} {member.last_name}</p>
                                         <p className="text-sm text-gray-600">{member.role || 'Team Member'}</p>
-                    </div>
+                                      </div>
                                       {isSelected && (
                                         <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
                                           <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                                         </svg>
                                       )}
-                  </div>
+                                    </div>
                                   </button>
                                 );
                               })}

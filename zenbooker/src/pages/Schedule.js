@@ -28,7 +28,21 @@ const ZenbookerSchedule = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [teamMembers, setTeamMembers] = useState([])
+  const [expandedDays, setExpandedDays] = useState(new Set())
   const navigate = useNavigate()
+
+  // Function to handle expanding/collapsing days
+  const toggleDayExpansion = (dateString) => {
+    setExpandedDays(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(dateString)) {
+        newSet.delete(dateString)
+      } else {
+        newSet.add(dateString)
+      }
+      return newSet
+    })
+  }
 
   // Get current user with useMemo to prevent infinite re-renders
   const currentUser = useMemo(() => user, [user])
@@ -442,12 +456,16 @@ const ZenbookerSchedule = () => {
         {/* Job list below map with numbered markers */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {jobsWithLocation.slice(0, 6).map((job, index) => (
-            <div key={job.id} className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer border-l-4 border-blue-500">
+            <div 
+              key={job.id} 
+              className="p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer border-l-4 border-blue-500"
+              onClick={() => navigate(`/job/${job.id}`)}
+            >
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-6 h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
                   {index + 1}
                 </div>
-                <div className="font-medium text-sm text-gray-900">{job.service_name}</div>
+                <div className="font-medium text-sm text-gray-900">{job.service_name || 'Service placeholder'}</div>
               </div>
               <div className="text-xs text-gray-600 truncate mt-1">
                 {job.customer_address || `${job.service_address_street}, ${job.service_address_city}`}
@@ -456,17 +474,26 @@ const ZenbookerSchedule = () => {
                 {new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                {job.customer_first_name} {job.customer_last_name}
+                {job.customer_first_name && job.customer_last_name 
+                  ? `${job.customer_first_name} ${job.customer_last_name}`
+                  : job.customer_first_name || job.customer_last_name || 'Client placeholder'
+                }
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                Status: {job.status || 'pending'}
+                Status: {job.status || 'Status placeholder'}
               </div>
             </div>
           ))}
         </div>
         
         {jobsWithLocation.length > 6 && (
-          <div className="text-center text-sm text-gray-500 mt-3">
+          <div 
+            className="text-center text-sm text-blue-600 mt-3 cursor-pointer hover:text-blue-800 hover:underline transition-colors"
+            onClick={() => {
+              // For now, just show all jobs - could be enhanced to show a modal or expand the map
+              console.log('Show all jobs with locations:', jobsWithLocation.length)
+            }}
+          >
             +{jobsWithLocation.length - 6} more jobs with locations
           </div>
         )}
@@ -518,7 +545,11 @@ const ZenbookerSchedule = () => {
               const teamMember = teamMembers.find(tm => tm.id === job.team_member_id)
               const memberColor = teamMember?.color || '#2563EB'
               return (
-                <div key={job.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-200">
+                <div 
+                  key={job.id} 
+                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6 hover:shadow-lg hover:border-blue-300 transition-all duration-200 cursor-pointer"
+                  onClick={() => navigate(`/job/${job.id}`)}
+                >
                   <div className="flex flex-col space-y-4 sm:flex-row sm:items-start sm:justify-between sm:space-y-0">
                     <div className="flex-1">
                       <div className="flex flex-col space-y-3 sm:flex-row sm:items-center sm:space-y-0 sm:space-x-3 mb-4">
@@ -531,26 +562,36 @@ const ZenbookerSchedule = () => {
                           <h3 className="text-lg font-semibold text-gray-900 mb-1 truncate">
                             {job.service_name || 'Service'}
                           </h3>
-                          <button
-                            onClick={() => handleViewCustomer(job.customer_id)}
-                            className="text-sm text-gray-600 hover:text-blue-600 hover:underline cursor-pointer transition-colors duration-200 truncate block"
-                          >
-                            {job.customer_first_name} {job.customer_last_name}
-                          </button>
+                          <div className="text-sm text-gray-600 truncate block">
+                            {job.customer_first_name && job.customer_last_name 
+                              ? `${job.customer_first_name} ${job.customer_last_name}`
+                              : job.customer_first_name || job.customer_last_name || 'Client name placeholder'
+                            }
+                          </div>
                         </div>
                         <span className={`px-3 py-1 text-xs font-medium rounded-full border ${getStatusColor(job.status)} flex-shrink-0`}>
-                          {job.status.replace('_', ' ')}
+                          {job.status ? job.status.replace('_', ' ') : 'Status placeholder'}
                         </span>
                       </div>
                       
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm">
                         <div className="flex items-center space-x-2 text-gray-600">
                           <Clock className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">{new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span className="truncate">
+                            {job.scheduled_date 
+                              ? new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                              : 'Time placeholder'
+                            }
+                          </span>
                         </div>
                         <div className="flex items-center space-x-2 text-gray-600">
                           <User className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">{job.team_member_first_name} {job.team_member_last_name}</span>
+                          <span className="truncate">
+                            {job.team_member_first_name && job.team_member_last_name 
+                              ? `${job.team_member_first_name} ${job.team_member_last_name}`
+                              : job.team_member_first_name || job.team_member_last_name || 'Team placeholder'
+                            }
+                          </span>
                         </div>
                         <div className="flex items-center space-x-2 text-gray-600 sm:col-span-2">
                           <MapPin className="w-4 h-4 flex-shrink-0" />
@@ -648,13 +689,23 @@ const ZenbookerSchedule = () => {
                   
                   <div className="space-y-2">
                     {dayJobs.map(job => (
-                      <div key={job.id} className="p-2 bg-gray-50 rounded text-xs">
-                        <div className="font-medium truncate">{job.service_name}</div>
+                      <div 
+                        key={job.id} 
+                        className="p-2 bg-gray-50 rounded text-xs cursor-pointer hover:bg-gray-100 transition-colors"
+                        onClick={() => navigate(`/job/${job.id}`)}
+                      >
+                        <div className="font-medium truncate">{job.service_name || 'Service placeholder'}</div>
                         <div className="text-gray-600 truncate">
-                          {job.customer_first_name} {job.customer_last_name}
+                          {job.customer_first_name && job.customer_last_name 
+                            ? `${job.customer_first_name} ${job.customer_last_name}`
+                            : job.customer_first_name || job.customer_last_name || 'Client placeholder'
+                          }
                         </div>
                         <div className="text-gray-500">
-                          {new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {job.scheduled_date 
+                            ? new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : 'Time placeholder'
+                          }
                         </div>
                       </div>
                     ))}
@@ -723,17 +774,41 @@ const ZenbookerSchedule = () => {
                     </div>
                     
                     <div className="space-y-1">
-                      {dayJobs.slice(0, 3).map(job => (
-                        <div key={job.id} className="p-1 bg-blue-50 rounded text-xs truncate">
-                          <div className="font-medium truncate">{job.service_name}</div>
+                      {dayJobs.slice(0, expandedDays.has(date.toISOString().split('T')[0]) ? dayJobs.length : 3).map(job => (
+                        <div 
+                          key={job.id} 
+                          className="p-1 bg-blue-50 rounded text-xs truncate cursor-pointer hover:bg-blue-100 transition-colors"
+                          onClick={() => navigate(`/job/${job.id}`)}
+                        >
+                          <div className="font-medium truncate">{job.service_name || 'Service placeholder'}</div>
                           <div className="text-gray-600 truncate">
-                            {job.customer_first_name} {job.customer_last_name}
+                            {job.customer_first_name && job.customer_last_name 
+                              ? `${job.customer_first_name} ${job.customer_last_name}`
+                              : job.customer_first_name || job.customer_last_name || 'Client placeholder'
+                            }
                           </div>
                         </div>
                       ))}
-                      {dayJobs.length > 3 && (
-                        <div className="text-xs text-gray-500 text-center">
+                      {dayJobs.length > 3 && !expandedDays.has(date.toISOString().split('T')[0]) && (
+                        <div 
+                          className="text-xs text-blue-600 text-center cursor-pointer hover:text-blue-800 hover:underline transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleDayExpansion(date.toISOString().split('T')[0])
+                          }}
+                        >
                           +{dayJobs.length - 3} more
+                        </div>
+                      )}
+                      {expandedDays.has(date.toISOString().split('T')[0]) && (
+                        <div 
+                          className="text-xs text-gray-500 text-center cursor-pointer hover:text-gray-700 hover:underline transition-colors"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            toggleDayExpansion(date.toISOString().split('T')[0])
+                          }}
+                        >
+                          Show less
                         </div>
                       )}
                     </div>

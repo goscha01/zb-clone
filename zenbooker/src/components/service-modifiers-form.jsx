@@ -4,11 +4,20 @@ import { Plus, Minus, Image as ImageIcon, Save } from 'lucide-react';
 const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEditable = false, isSaving = false }) => {
   const [selectedModifiers, setSelectedModifiers] = useState({});
 
+  console.log('🔄 ServiceModifiersForm render:', { 
+    modifiersCount: modifiers?.length, 
+    selectedModifiers, 
+    isEditable 
+  });
+
   const handleModifierChange = (modifierId, optionId, value) => {
     const currentModifier = selectedModifiers[modifierId] || {};
     let newValue;
 
-    if (modifiers.find(m => m.id === modifierId)?.selectionType === 'quantity') {
+    const modifierConfig = modifiers.find(m => m.id === modifierId);
+    if (!modifierConfig) return;
+
+    if (modifierConfig.selectionType === 'quantity') {
       // Handle quantity selection
       const currentQuantities = currentModifier.quantities || {};
       const currentQuantity = currentQuantities[optionId] || 0;
@@ -21,7 +30,7 @@ const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEdi
           [optionId]: newQuantity
         }
       };
-    } else if (modifiers.find(m => m.id === modifierId)?.selectionType === 'multi') {
+    } else if (modifierConfig.selectionType === 'multi') {
       // Handle multi-selection
       const currentSelections = currentModifier.selections || [];
       if (value > 0) {
@@ -42,10 +51,10 @@ const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEdi
         };
       }
     } else {
-      // Handle single selection
+      // Handle single selection - always set the selected option
       newValue = {
         ...currentModifier,
-        selection: value > 0 ? optionId : null
+        selection: optionId
       };
     }
 
@@ -54,6 +63,7 @@ const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEdi
       [modifierId]: newValue
     };
 
+    console.log('🔄 Modifier change:', { modifierId, optionId, value, newValue, updatedModifiers });
     setSelectedModifiers(updatedModifiers);
     onModifiersChange(updatedModifiers);
   };
@@ -153,7 +163,14 @@ const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEdi
                     type={modifier.selectionType === 'multi' ? 'checkbox' : 'radio'}
                     name={modifier.id}
                     checked={isSelected}
-                    onChange={(e) => handleModifierChange(modifier.id, option.id, e.target.checked ? 1 : -1)}
+                    onChange={(e) => {
+                      if (modifier.selectionType === 'multi') {
+                        handleModifierChange(modifier.id, option.id, e.target.checked ? 1 : -1);
+                      } else {
+                        // For single selection, always select the option
+                        handleModifierChange(modifier.id, option.id, 1);
+                      }
+                    }}
                     required={modifier.required && modifier.selectionType === 'single'}
                     className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                   />
@@ -192,6 +209,12 @@ const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEdi
       </div>
     );
   };
+
+  console.log('🔄 ServiceModifiersForm render:', { 
+    modifiersCount: modifiers?.length, 
+    selectedModifiers, 
+    isEditable 
+  });
 
   if (!modifiers || modifiers.length === 0) {
     return null;

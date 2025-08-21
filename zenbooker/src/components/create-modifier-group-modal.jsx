@@ -389,7 +389,7 @@ const CreateModifierGroupModal = ({ isOpen, onClose, onSave, editingModifier = n
             </div>
 
             <div className="space-y-4">
-              {formData.options.map((option) => (
+              {formData.options.map((option, index) => (
                 <div key={option.id} className="border border-gray-200 rounded-lg">
                   <div
                     className="p-4 cursor-pointer"
@@ -406,7 +406,7 @@ const CreateModifierGroupModal = ({ isOpen, onClose, onSave, editingModifier = n
                           type="text"
                           value={option.name}
                           onChange={(e) => handleOptionChange(option.id, 'name', e.target.value)}
-                          placeholder="Option 1 name"
+                          placeholder={`Option ${index + 1} name`}
                           className="text-sm font-medium text-gray-900 bg-transparent border-none focus:ring-0 focus:outline-none"
                           onClick={(e) => e.stopPropagation()}
                         />

@@ -407,6 +407,22 @@ const ZenbookerServices = () => {
     setDraggedService(service)
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.setData('text/html', e.target.outerHTML)
+    
+    // Add visual feedback
+    e.target.style.opacity = '0.5'
+    e.target.style.transform = 'scale(0.95)'
+    
+    // Set a custom drag image
+    const dragImage = e.target.cloneNode(true)
+    dragImage.style.opacity = '0.8'
+    dragImage.style.transform = 'scale(0.9)'
+    document.body.appendChild(dragImage)
+    e.dataTransfer.setDragImage(dragImage, 0, 0)
+    
+    // Remove the drag image after a short delay
+    setTimeout(() => {
+      document.body.removeChild(dragImage)
+    }, 0)
   }
 
   const handleDragOver = (e, category) => {
@@ -421,6 +437,14 @@ const ZenbookerServices = () => {
 
   const handleDragLeave = (e) => {
     e.preventDefault()
+    setDragOverCategory(null)
+  }
+
+  const handleDragEnd = (e) => {
+    // Clean up visual feedback
+    e.target.style.opacity = ''
+    e.target.style.transform = ''
+    setDraggedService(null)
     setDragOverCategory(null)
   }
 
@@ -539,24 +563,72 @@ const ZenbookerServices = () => {
                             allCategories.push('Additional')
                           }
                           
-                          return allCategories.map(category => {
+                          // Smart sorting: categories with services first, then empty categories
+                          // This ensures new categories (with 0 services) appear at the bottom
+                          // and move up when they get their first service
+                          const sortedCategories = allCategories.sort((a, b) => {
+                            const aServices = a === 'Additional' 
+                              ? uncategorizedServices 
+                              : services.filter(s => s.category === a)
+                            const bServices = b === 'Additional' 
+                              ? uncategorizedServices 
+                              : services.filter(s => s.category === b)
+                            
+                            const aCount = aServices.length
+                            const bCount = bServices.length
+                            
+                            // If both have services or both are empty, maintain original order
+                            if ((aCount > 0 && bCount > 0) || (aCount === 0 && bCount === 0)) {
+                              return allCategories.indexOf(a) - allCategories.indexOf(b)
+                            }
+                            
+                            // Categories with services come first
+                            if (aCount > 0 && bCount === 0) return -1
+                            if (aCount === 0 && bCount > 0) return 1
+                            
+                            return 0
+                          })
+                          
+                          return sortedCategories.map(category => {
                             const categoryServices = category === 'Additional' 
                               ? uncategorizedServices 
                               : services.filter(s => s.category === category)
                             
                       return (
-                        <div key={category} className="border-b border-gray-200 last:border-b-0">
                                 <div 
-                                  className={`bg-gray-50 px-4 py-3 flex items-center justify-between ${
+                          key={category} 
+                          className={`border-b border-gray-200 last:border-b-0 transition-all duration-200 relative ${
                                     dragOverCategory === category ? 'bg-blue-50 border-2 border-blue-200' : ''
-                                  }`}
+                          } ${draggedService && draggedService.category !== (category === 'Additional' ? '' : category) ? 'hover:bg-blue-25' : ''}`}
                                   onDragOver={(e) => handleDragOver(e, category)}
                                   onDragLeave={handleDragLeave}
                                   onDrop={(e) => handleDrop(e, category)}
                                 >
-                            <h3 className="font-medium text-gray-900">{category}</h3>
+                          {/* Drop zone indicator */}
+                          {dragOverCategory === category && (
+                            <div className="absolute inset-0 bg-blue-100 bg-opacity-20 border-2 border-dashed border-blue-300 rounded-lg pointer-events-none z-10 flex items-center justify-center">
+                              <div className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg">
+                                <span className="font-medium">Drop service here</span>
+                              </div>
+                            </div>
+                          )}
+                                <div 
+                                  className={`px-4 py-3 flex items-center justify-between ${
+                                    categoryServices.length === 0 
+                                      ? 'bg-gray-100' 
+                                      : 'bg-gray-50'
+                                  }`}
+                                >
+                                                        <h3 className={`font-medium ${categoryServices.length === 0 ? 'text-gray-400' : 'text-gray-900'}`}>
+                              {category}
+                              {categoryServices.length === 0 && (
+                                <span className="ml-2 text-xs text-gray-400 font-normal">(empty)</span>
+                              )}
+                            </h3>
                             <div className="flex items-center space-x-2">
-                              <span className="text-sm text-gray-500">{categoryServices.length} service{categoryServices.length !== 1 ? 's' : ''}</span>
+                              <span className={`text-sm ${categoryServices.length === 0 ? 'text-gray-400' : 'text-gray-500'}`}>
+                                {categoryServices.length} service{categoryServices.length !== 1 ? 's' : ''}
+                              </span>
                                     {category !== 'Additional' && (
                               <button
                                 onClick={() => handleRemoveCategory(category)}
@@ -572,15 +644,16 @@ const ZenbookerServices = () => {
                               key={service.id}
                                     draggable
                                     onDragStart={(e) => handleDragStart(e, service)}
-                              className={`flex items-center justify-between p-4 ${
+                              onDragEnd={handleDragEnd}
+                              className={`flex items-center justify-between p-4 transition-all duration-200 ${
                                 index !== categoryServices.length - 1 ? "border-b border-gray-100" : ""
-                                    } ${draggedService?.id === service.id ? 'opacity-50' : ''}`}
+                              } ${draggedService?.id === service.id ? 'opacity-50 scale-95' : 'hover:bg-gray-50'} cursor-move`}
                             >
                               <div 
                                 className="flex items-center space-x-4 flex-1 cursor-pointer hover:bg-gray-50 p-2 rounded"
                                 onClick={() => handleServiceClick(service.id)}
                               >
-                                <GripVertical className="w-5 h-5 text-gray-400 cursor-move" />
+                                <GripVertical className="w-5 h-5 text-gray-400 cursor-move hover:text-gray-600 transition-colors" title="Drag to move service" />
                                 {service.image ? (
                                   <img 
                                     src={service.image} 
@@ -749,7 +822,7 @@ const ZenbookerServices = () => {
                     </button>
                   </div>
                   
-                  {categories.length > 0 ? (
+                  {/* {categories.length > 0 ? (
                     <div className="space-y-2">
                       {categories.map(category => (
                         <div key={category} className="flex items-center justify-between bg-white p-3 rounded border">
@@ -765,7 +838,7 @@ const ZenbookerServices = () => {
                     </div>
                   ) : (
                     <p className="text-gray-500 text-sm">No categories created yet. Add your first category to get started.</p>
-                  )}
+                  )} */}
                 </div>
               )}
             </div>

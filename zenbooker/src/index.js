@@ -79,6 +79,7 @@ import JobAssignmentTeam from "./pages/settings/job-assignment-team"
 import TeamMemberLogin from "./pages/team-member-login"
 import TeamMemberDashboard from "./pages/team-member-dashboard"
 import TeamMemberFieldApp from "./pages/team-member-field-app"
+import DropdownMultiselectDemo from "./pages/dropdown-multiselect-demo"
 import { TeamMemberAuthProvider } from "./context/TeamMemberAuthContext"
 
 const root = ReactDOM.createRoot(document.getElementById("root"))
@@ -170,6 +171,9 @@ root.render(
       <Route path="team-member/login" element={<TeamMemberLogin />} />
       <Route path="team-member/dashboard" element={<TeamMemberDashboard />} />
       <Route path="team-member/field-app" element={<TeamMemberFieldApp />} />
+      
+      {/* Demo Routes */}
+      <Route path="dropdown-demo" element={<DropdownMultiselectDemo />} />
       
       {/* Catch-all route - redirect to dashboard for any unmatched routes */}
       <Route path="*" element={<ProtectedRoute><ZenbookerDashboard /></ProtectedRoute>} />

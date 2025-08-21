@@ -42,7 +42,22 @@ const IntakeAnswersDisplay = ({ intakeAnswers = [] }) => {
   };
 
   const formatAnswer = (answer, questionType) => {
+    console.log('🔄 Formatting answer:', { answer, questionType, answerType: typeof answer, isArray: Array.isArray(answer) });
     if (!answer) return 'No answer provided';
+    
+    // Parse JSON strings back to arrays/objects for multiple choice and dropdown questions
+    let parsedAnswer = answer;
+    if (typeof answer === 'string' && (questionType === 'multiple_choice' || questionType === 'dropdown')) {
+      try {
+        const parsed = JSON.parse(answer);
+        if (Array.isArray(parsed)) {
+          parsedAnswer = parsed;
+          console.log('🔄 Parsed JSON string to array:', parsedAnswer);
+        }
+      } catch (e) {
+        console.log('🔄 Failed to parse answer as JSON, treating as string:', e);
+      }
+    }
     
     // Handle picture choice - parse JSON if it's a string
     if (questionType === 'picture_choice') {
@@ -76,8 +91,10 @@ const IntakeAnswersDisplay = ({ intakeAnswers = [] }) => {
       }
     }
     
-    if (questionType === 'multiple_choice' && Array.isArray(answer)) {
-      return answer.join(', ');
+    // Handle multiple choice and dropdown questions with multiple selections
+    if ((questionType === 'multiple_choice' || questionType === 'dropdown') && Array.isArray(parsedAnswer)) {
+      console.log('🔄 Processing multiple selection answer:', { questionType, parsedAnswer });
+      return parsedAnswer.join(', ');
     }
     
     if (questionType === 'image_upload' && answer.startsWith('http')) {

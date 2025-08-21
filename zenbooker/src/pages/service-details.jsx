@@ -81,6 +81,9 @@ const ServiceDetails = () => {
   const [modifiersChanged, setModifiersChanged] = useState(false)
   const [intakeQuestionsChanged, setIntakeQuestionsChanged] = useState(false)
   
+  // Hidden sections state - not needed when sections are commented out
+  // const [hiddenSections, setHiddenSections] = useState([])
+  
   const [serviceData, setServiceData] = useState({
     name: "",
     description: "",
@@ -367,6 +370,19 @@ const ServiceDetails = () => {
     setExpandedSection(expandedSection === sectionId ? null : sectionId)
   }
 
+  // Section visibility functions - not needed when sections are commented out
+  // const toggleSectionVisibility = (sectionId) => {
+  //   setHiddenSections(prev => 
+  //     prev.includes(sectionId) 
+  //       ? prev.filter(id => id !== sectionId)
+  //       : [...prev, sectionId]
+  //   )
+  // }
+
+  // const isSectionHidden = (sectionId) => {
+  //   return hiddenSections.includes(sectionId)
+  // }
+
   const handleEditModifier = (modifier) => {
     setEditingModifier(modifier)
     setIsCreateModifierGroupModalOpen(true)
@@ -569,11 +585,11 @@ const ServiceDetails = () => {
     }
   }
 
-  const handleModifiersChange = (newModifiers) => {
-    setServiceData(prev => ({
-      ...prev,
-      modifiers: newModifiers
-    }))
+  const handleModifiersChange = (selectedModifiers) => {
+    // selectedModifiers is the user's selections, not the modifier definitions
+    // We don't need to update serviceData.modifiers here since that contains the definitions
+    // We just need to track that there are unsaved changes
+    console.log('🔄 Modifiers selection changed:', selectedModifiers);
     setModifiersChanged(true)
   }
 
@@ -1975,7 +1991,7 @@ const ServiceDetails = () => {
     setTerritoryRules(prev => [...prev, rule])
   }
 
-  const sections = [
+  const allSections = [
     {
       id: "details",
       icon: Settings,
@@ -1987,64 +2003,76 @@ const ServiceDetails = () => {
       icon: Sliders,
       title: "Service Modifiers",
       description: "Add selectable options that can adjust this service's price and duration",
-      badge: modifiersChanged ? "Unsaved Changes" : "2 Modifier Groups"
+      badge: modifiersChanged ? "Unsaved Changes" : `${serviceData.modifiers?.length || 0} Modifier Group${serviceData.modifiers?.length !== 1 ? 's' : ''}`
     },
     {
       id: "intake",
       icon: ListChecks,
       title: "Intake Questions",
       description: "Add custom form fields to collect additional info",
-      badge: intakeQuestionsChanged ? "Unsaved Changes" : undefined
+      badge: intakeQuestionsChanged ? "Unsaved Changes" : `${serviceData.intakeQuestions?.length || 0} Question${serviceData.intakeQuestions?.length !== 1 ? 's' : ''}`
     },
-    {
-      id: "availability",
-      icon: Clock,
-      title: "Availability",
-      description: "Use your business's default hours, or show custom timeslots for this service"
-    },
-    {
-      id: "team",
-      icon: ClipboardList,
-      title: "Team Requirements & Assignment Options",
-      description: "Add required skills and customize how jobs should be assigned for this service"
-    },
-    {
-      id: "recurring",
-      icon: RefreshCw,
-      title: "Recurring Options",
-      description: "Give customers the option to book this service as a recurring appointment"
-    },
-    {
-      id: "territory",
-      icon: ArrowUpDown,
-      title: "Territory Adjustments",
-      description: "Customize pricing for this service based on which territory it's booked in"
-    },
-    {
-      id: "payments",
-      icon: CreditCard,
-      title: "Payments",
-      description: "No payment method required"
-    },
-    {
-      id: "howItWorks",
-      icon: FileText,
-      title: "How it Works, FAQ, Testimonials, & Highlights",
-      description: "Showcase attributes about this service or your business when customers book online"
-    },
-    {
-      id: "bookingPage",
-      icon: Globe,
-      title: "Booking Page",
-      description: "Hidden on booking page • Default confirmation message"
-    },
-    {
-      id: "bookingLink",
-      icon: ExternalLink,
-      title: "Booking Link & Widgets",
-      description: "Embed this service in a booking widget or link directly to it"
-    }
+    // TODO: Integrate availability functionality
+    // {
+    //   id: "availability",
+    //   icon: Clock,
+    //   title: "Availability",
+    //   description: "Use your business's default hours, or show custom timeslots for this service"
+    // },
+    // TODO: Integrate team requirements functionality
+    // {
+    //   id: "team",
+    //   icon: ClipboardList,
+    //   title: "Team Requirements & Assignment Options",
+    //   description: "Add required skills and customize how jobs should be assigned for this service"
+    // },
+    // TODO: Integrate recurring options functionality
+    // {
+    //   id: "recurring",
+    //   icon: RefreshCw,
+    //   title: "Recurring Options",
+    //   description: "Give customers the option to book this service as a recurring appointment"
+    // },
+    // TODO: Integrate territory adjustments functionality
+    // {
+    //   id: "territory",
+    //   icon: ArrowUpDown,
+    //   title: "Territory Adjustments",
+    //   description: "Customize pricing for this service based on which territory it's booked in"
+    // },
+    // TODO: Integrate payments functionality
+    // {
+    //   id: "payments",
+    //   icon: CreditCard,
+    //   title: "Payments",
+    //   description: "No payment method required"
+    // },
+    // TODO: Integrate how it works, FAQ, testimonials functionality
+    // {
+    //   id: "howItWorks",
+    //   icon: FileText,
+    //   title: "How it Works, FAQ, Testimonials, & Highlights",
+    //   description: "Showcase attributes about this service or your business when customers book online"
+    // },
+    // TODO: Integrate booking page functionality
+    // {
+    //   id: "bookingPage",
+    //   icon: Globe,
+    //   title: "Booking Page",
+    //   description: "Hidden on booking page • Default confirmation message"
+    // },
+    // TODO: Integrate booking link & widgets functionality
+    // {
+    //   id: "bookingLink",
+    //   icon: ExternalLink,
+    //   title: "Booking Link & Widgets",
+    //   description: "Embed this service in a booking widget or link directly to it"
+    // }
   ]
+
+  // Filter out hidden sections - not needed when sections are commented out
+  // const sections = allSections.filter(section => !isSectionHidden(section.id))
+  const sections = allSections
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden">

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, X } from 'lucide-react';
 
-const DropdownMultiselect = ({
+const DropdownMultiselectFixed = ({
   options = [],
   selectedValues = [],
   onSelectionChange,
@@ -12,7 +12,6 @@ const DropdownMultiselect = ({
   searchable = false,
   clearable = true
 }) => {
-
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const dropdownRef = useRef(null);
@@ -30,8 +29,6 @@ const DropdownMultiselect = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-
-
   // Filter options based on search term
   const filteredOptions = searchable 
     ? options.filter(option => 
@@ -45,7 +42,6 @@ const DropdownMultiselect = ({
       : [...selectedValues, value];
     
     onSelectionChange(newSelection);
-    // Keep dropdown open for multiselect functionality
   };
 
   const handleClearAll = (e) => {
@@ -79,11 +75,7 @@ const DropdownMultiselect = ({
       {/* Main Dropdown Button */}
       <button
         type="button"
-        onClick={() => {
-          if (!disabled) {
-            setIsOpen(!isOpen);
-          }
-        }}
+        onClick={() => !disabled && setIsOpen(!isOpen)}
         disabled={disabled}
         className={`
           w-full px-3 py-2 text-left border border-gray-300 rounded-lg shadow-sm
@@ -139,7 +131,7 @@ const DropdownMultiselect = ({
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute z-[9999] w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-hidden" style={{top: '100%'}}>
+        <div className="absolute z-[9999] w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-hidden">
           {/* Search Input (if searchable) */}
           {searchable && (
             <div className="p-2 border-b border-gray-200">
@@ -161,31 +153,31 @@ const DropdownMultiselect = ({
                 {searchable && searchTerm ? 'No options found' : 'No options available'}
               </div>
             ) : (
-                             filteredOptions.map((option) => {
-                 const isSelected = selectedValues.includes(option.value);
-                 return (
-                   <button
-                     key={option.value}
-                     type="button"
-                     onClick={(e) => {
-                       e.preventDefault();
-                       e.stopPropagation();
-                       handleToggleOption(option.value);
-                     }}
-                     className={`
-                       w-full px-3 py-2 text-left text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors
-                       ${isSelected ? 'bg-blue-600 text-white' : 'text-gray-900'}
-                     `}
-                   >
-                     <span className="flex-1">{option.label}</span>
-                     {isSelected && (
-                       <span className="ml-2 text-xs bg-white bg-opacity-20 px-2 py-1 rounded">
-                         Selected
-                       </span>
-                     )}
-                   </button>
-                 );
-               })
+              filteredOptions.map((option) => {
+                const isSelected = selectedValues.includes(option.value);
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleToggleOption(option.value);
+                    }}
+                    className={`
+                      w-full px-3 py-2 text-left text-sm hover:bg-gray-100 focus:bg-gray-100 focus:outline-none transition-colors
+                      ${isSelected ? 'bg-blue-600 text-white' : 'text-gray-900'}
+                    `}
+                  >
+                    <span className="flex-1">{option.label}</span>
+                    {isSelected && (
+                      <span className="ml-2 text-xs bg-white bg-opacity-20 px-2 py-1 rounded">
+                        Selected
+                      </span>
+                    )}
+                  </button>
+                );
+              })
             )}
           </div>
 
@@ -201,4 +193,4 @@ const DropdownMultiselect = ({
   );
 };
 
-export default DropdownMultiselect;
+export default DropdownMultiselectFixed;

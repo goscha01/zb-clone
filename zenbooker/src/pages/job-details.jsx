@@ -439,6 +439,92 @@ const JobDetails = () => {
     })
   }
 
+  // Calculate total price including modifiers based on job answers
+  const calculateTotalPrice = () => {
+    try {
+      let basePrice = parseFloat(job.service_price) || 0;
+      let modifierPrice = 0;
+      
+      // Get service modifiers
+      const serviceModifiers = job.service_modifiers || [];
+      const jobAnswers = job.intake_answers || [];
+      
+      console.log('🔄 Calculating total price:', { basePrice, serviceModifiers, jobAnswers });
+      
+      // Process each job answer to find modifier selections
+      jobAnswers.forEach(answer => {
+        console.log('🔄 Processing answer:', answer);
+        
+        // Find the corresponding modifier
+        const modifier = serviceModifiers.find(m => m.id == answer.question_id);
+        if (!modifier) {
+          console.log('🔄 No modifier found for question_id:', answer.question_id);
+          return;
+        }
+        
+        console.log('🔄 Found modifier:', modifier);
+        
+        // Parse the answer
+        let parsedAnswer = answer.answer;
+        if (typeof answer.answer === 'string') {
+          try {
+            const parsed = JSON.parse(answer.answer);
+            if (Array.isArray(parsed)) {
+              parsedAnswer = parsed;
+            }
+          } catch (e) {
+            console.log('🔄 Failed to parse answer as JSON:', e);
+          }
+        }
+        
+        console.log('🔄 Parsed answer:', parsedAnswer);
+        
+        if (modifier.selectionType === 'quantity') {
+          // Handle quantity selection
+          if (typeof parsedAnswer === 'object' && parsedAnswer.quantities) {
+            Object.entries(parsedAnswer.quantities).forEach(([optionId, quantity]) => {
+              const option = modifier.options?.find(o => o.id == optionId);
+              if (option && option.price && quantity > 0) {
+                const optionPrice = parseFloat(option.price) || 0;
+                modifierPrice += optionPrice * quantity;
+                console.log(`🔄 Quantity modifier: ${optionPrice} * ${quantity} = ${optionPrice * quantity}`);
+              }
+            });
+          }
+        } else if (modifier.selectionType === 'multi') {
+          // Handle multi-selection
+          if (Array.isArray(parsedAnswer)) {
+            parsedAnswer.forEach(optionId => {
+              const option = modifier.options?.find(o => o.id == optionId);
+              if (option && option.price) {
+                const optionPrice = parseFloat(option.price) || 0;
+                modifierPrice += optionPrice;
+                console.log(`🔄 Multi modifier: ${optionPrice}`);
+              }
+            });
+          }
+        } else {
+          // Handle single selection
+          if (parsedAnswer) {
+            const option = modifier.options?.find(o => o.id == parsedAnswer);
+            if (option && option.price) {
+              const optionPrice = parseFloat(option.price) || 0;
+              modifierPrice += optionPrice;
+              console.log(`🔄 Single modifier: ${optionPrice}`);
+            }
+          }
+        }
+      });
+      
+      const totalPrice = basePrice + modifierPrice;
+      console.log('🔄 Total price calculation:', { basePrice, modifierPrice, totalPrice });
+      return totalPrice;
+    } catch (error) {
+      console.error('Error calculating total price:', error);
+      return parseFloat(job.service_price) || 0;
+    }
+  }
+
   const getCustomerInitials = () => {
     const firstName = job?.customer_first_name || ''
     const lastName = job?.customer_last_name || ''
@@ -592,7 +678,7 @@ const JobDetails = () => {
                   style={{ minWidth: 140 }}
                 >
                   <span className={`inline-block w-2 h-2 rounded-full mr-2 ${statusOptions.find(s => s.key === job.status)?.color || 'bg-gray-300'}`}></span>
-                  <span>{statusOptions.find(s => s.key === job.status)?.label || job.status}</span>
+                                          <span>{statusOptions.find(s => s.key === job.status)?.label || job.status || 'Status placeholder'}</span>
                   <ChevronDown className="w-4 h-4 ml-2 text-gray-400" />
                 </button>
                 {editingField === 'status' && (
@@ -719,9 +805,9 @@ const JobDetails = () => {
                     <Calendar className="w-5 h-5 text-gray-400 flex-shrink-0" />
                     <div>
                       <p className="text-lg sm:text-xl font-semibold text-gray-900">
-                        {formatTime(job.scheduled_date)}
+                        {formatTime(job.scheduled_date) || 'Time placeholder'}
                       </p>
-                      <p className="text-gray-600 text-sm sm:text-base">{formatDate(job.scheduled_date)}</p>
+                      <p className="text-gray-600 text-sm sm:text-base">{formatDate(job.scheduled_date) || 'Date placeholder'}</p>
                     </div>
                   </div>
                 </div>
@@ -1001,7 +1087,7 @@ const JobDetails = () => {
               <div className="space-y-4">
                 <div className="flex justify-between">
                   <span className="text-lg font-semibold">$0.00</span>
-                  <span className="text-lg font-semibold">${job.total_amount || job.service_price || 0}</span>
+                  <span className="text-lg font-semibold">${calculateTotalPrice().toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm text-gray-600">
                   <span>Amount paid</span>
@@ -1013,11 +1099,92 @@ const JobDetails = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span>{job.service_name}</span>
-                    <span>${job.service_price || 0}</span>
+                    <span>${(parseFloat(job.service_price) || 0).toFixed(2)}</span>
                   </div>
                   <div className="text-sm text-gray-600">
-                    Service (${job.service_price || 0})
+                    Base Service
                   </div>
+                  
+                  {/* Show modifier breakdown if there are any */}
+                  {(() => {
+                    const serviceModifiers = job.service_modifiers || [];
+                    const jobAnswers = job.intake_answers || [];
+                    let hasModifiers = false;
+                    
+                    return (
+                      <>
+                        {jobAnswers.map(answer => {
+                          const modifier = serviceModifiers.find(m => m.id == answer.question_id);
+                          if (!modifier) return null;
+                          
+                          let parsedAnswer = answer.answer;
+                          if (typeof answer.answer === 'string') {
+                            try {
+                              const parsed = JSON.parse(answer.answer);
+                              if (Array.isArray(parsed)) {
+                                parsedAnswer = parsed;
+                              }
+                            } catch (e) {
+                              // Ignore parsing errors
+                            }
+                          }
+                          
+                          if (modifier.selectionType === 'quantity') {
+                            if (typeof parsedAnswer === 'object' && parsedAnswer.quantities) {
+                              return Object.entries(parsedAnswer.quantities).map(([optionId, quantity]) => {
+                                const option = modifier.options?.find(o => o.id == optionId);
+                                if (option && option.price && quantity > 0) {
+                                  hasModifiers = true;
+                                  return (
+                                    <div key={`${answer.question_id}-${optionId}`} className="flex justify-between text-sm">
+                                      <span className="text-gray-600">• {option.label} (x{quantity})</span>
+                                      <span>${(parseFloat(option.price) * quantity).toFixed(2)}</span>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              });
+                            }
+                          } else if (modifier.selectionType === 'multi') {
+                            if (Array.isArray(parsedAnswer)) {
+                              return parsedAnswer.map(optionId => {
+                                const option = modifier.options?.find(o => o.id == optionId);
+                                if (option && option.price) {
+                                  hasModifiers = true;
+                                  return (
+                                    <div key={`${answer.question_id}-${optionId}`} className="flex justify-between text-sm">
+                                      <span className="text-gray-600">• {option.label}</span>
+                                      <span>${parseFloat(option.price).toFixed(2)}</span>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              });
+                            }
+                          } else {
+                            if (parsedAnswer) {
+                              const option = modifier.options?.find(o => o.id == parsedAnswer);
+                              if (option && option.price) {
+                                hasModifiers = true;
+                                return (
+                                  <div key={`${answer.question_id}-${parsedAnswer}`} className="flex justify-between text-sm">
+                                    <span className="text-gray-600">• {option.label}</span>
+                                    <span>${parseFloat(option.price).toFixed(2)}</span>
+                                  </div>
+                                );
+                              }
+                            }
+                          }
+                          return null;
+                        })}
+                        {!hasModifiers && (
+                          <div className="text-sm text-gray-500 italic">
+                            No modifiers selected
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <button className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center">
@@ -1034,7 +1201,7 @@ const JobDetails = () => {
                   </div>
                   <div className="flex justify-between font-semibold">
                     <span>Total</span>
-                    <span>${job.total_amount || job.service_price || 0}</span>
+                    <span>${calculateTotalPrice().toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Amount paid</span>
@@ -1042,7 +1209,7 @@ const JobDetails = () => {
                   </div>
                   <div className="flex justify-between font-semibold text-lg">
                     <span>Total due</span>
-                    <span>${job.total_amount || job.service_price || 0}</span>
+                    <span>${calculateTotalPrice().toFixed(2)}</span>
                   </div>
                 </div>
 
@@ -1074,7 +1241,10 @@ const JobDetails = () => {
                 </div>
                 <div>
                   <p className="font-semibold text-gray-900">
-                    {job.customer_first_name} {job.customer_last_name}
+                    {job.customer_first_name && job.customer_last_name 
+                      ? `${job.customer_first_name} ${job.customer_last_name}`
+                      : job.customer_first_name || job.customer_last_name || 'Client name placeholder'
+                    }
                   </p>
                 </div>
               </div>
@@ -1083,13 +1253,13 @@ const JobDetails = () => {
                 <div className="flex items-center space-x-2 text-sm">
                   <Phone className="w-4 h-4 text-gray-400" />
                   <a href={`tel:${job.customer_phone}`} className="text-blue-600 hover:text-blue-700">
-                    {formatPhoneNumber(job.customer_phone)}
+                    {job.customer_phone ? formatPhoneNumber(job.customer_phone) : 'Phone placeholder'}
                   </a>
                 </div>
                 <div className="flex items-center space-x-2 text-sm">
                   <Mail className="w-4 h-4 text-gray-400" />
                   <a href={`mailto:${job.customer_email}`} className="text-blue-600 hover:text-blue-700 truncate">
-                    {job.customer_email}
+                    {job.customer_email || 'Email placeholder'}
                   </a>
                 </div>
               </div>
