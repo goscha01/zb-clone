@@ -12,6 +12,20 @@ import { jobsAPI, customersAPI, servicesAPI, invoicesAPI } from "../services/api
 const ZenbookerDashboard = () => {
   const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  
+  // Function to get time-based greeting
+  const getGreeting = () => {
+    const hour = new Date().getHours()
+    if (hour < 12) return 'Good morning'
+    if (hour < 17) return 'Good afternoon'
+    return 'Good evening'
+  }
+  
+  // Function to get user's display name
+  const getUserDisplayName = () => {
+    if (!user) return 'User'
+    return user.firstName || user.name || user.email?.split('@')[0] || 'User'
+  }
   const [isLoading, setIsLoading] = useState(true)
   const [dateRange, setDateRange] = useState('7') // days
   const [showNewMenu, setShowNewMenu] = useState(false)
@@ -437,8 +451,8 @@ const ZenbookerDashboard = () => {
         <div className="hidden lg:block bg-white border-b border-gray-200 px-6 py-5">
           <div className="max-w-7xl mx-auto flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-display font-semibold text-gray-900">Good evening, Just.</h1>
-              <p className="text-sm text-gray-600 mt-1">Here's how Just web Agency is doing today.</p>
+              <h1 className="text-2xl font-display font-semibold text-gray-900">{getGreeting()}, {getUserDisplayName()}.</h1>
+              <p className="text-sm text-gray-600 mt-1">Here's how your business is doing today.</p>
             </div>
             <div className="relative" ref={newMenuRef}>
               <button
@@ -475,8 +489,8 @@ const ZenbookerDashboard = () => {
         <div className="lg:hidden bg-white border-b border-gray-200 px-4 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-display font-semibold text-gray-900">Good evening, Just.</h1>
-              <p className="text-sm text-gray-600 mt-1">Here's how Just web Agency is doing today.</p>
+              <h1 className="text-xl font-display font-semibold text-gray-900">{getGreeting()}, {getUserDisplayName()}.</h1>
+              <p className="text-sm text-gray-600 mt-1">Here's how your business is doing today.</p>
             </div>
             <div className="relative" ref={newMenuRef}>
               <button

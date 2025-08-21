@@ -81,6 +81,10 @@ const ServiceDetails = () => {
   const [modifiersChanged, setModifiersChanged] = useState(false)
   const [intakeQuestionsChanged, setIntakeQuestionsChanged] = useState(false)
   
+  // Interactive preview state
+  const [previewAnswers, setPreviewAnswers] = useState({})
+  const [previewQuantities, setPreviewQuantities] = useState({})
+  
   // Hidden sections state - not needed when sections are commented out
   // const [hiddenSections, setHiddenSections] = useState([])
   
@@ -594,12 +598,29 @@ const ServiceDetails = () => {
   }
 
   const handleIntakeQuestionsChange = (newAnswers) => {
-    setServiceData(prev => ({
-      ...prev,
-      intakeQuestions: newAnswers
-    }))
-    setIntakeQuestionsChanged(true)
+    // This function should not be called in service details context
+    // IntakeQuestionsForm is being used incorrectly here
+    console.warn('handleIntakeQuestionsChange called in service details - this should not happen');
   }
+
+  // Interactive preview handlers
+  const handlePreviewAnswerChange = (questionId, value) => {
+    setPreviewAnswers(prev => ({
+      ...prev,
+      [questionId]: value
+    }));
+  };
+
+  const handlePreviewQuantityChange = (questionId, delta) => {
+    setPreviewQuantities(prev => {
+      const current = prev[questionId] || 0;
+      const newValue = Math.max(0, current + delta);
+      return {
+        ...prev,
+        [questionId]: newValue
+      };
+    });
+  };
 
   const handleDeleteIntakeQuestion = async (questionId) => {
     if (window.confirm("Are you sure you want to delete this intake question?")) {
@@ -1001,22 +1022,234 @@ const ServiceDetails = () => {
                 <div className="mb-4">
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Customer Preview</h3>
                   <p className="text-sm text-gray-600">This is how your intake questions will appear to customers during booking.</p>
+                  <div className="mt-2 flex items-center space-x-2">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span className="text-xs text-green-600 font-medium">INTERACTIVE PREVIEW - Test your questions</span>
+                  </div>
                 </div>
                 
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <IntakeQuestionsForm 
-                    questions={serviceData.intakeQuestions}
-                    onAnswersChange={handleIntakeQuestionsChange}
-                    onSave={handleSaveIntakeQuestions}
-                    isEditable={true}
-                    isSaving={savingIntakeQuestions}
-                  />
+                <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm relative">
+                  <div className="space-y-6">
+                    {serviceData.intakeQuestions.map((question, index) => (
+                      <div key={index} className="space-y-3">
+                        <div>
+                          <label className="block text-lg font-medium text-gray-900 mb-1">
+                            {question.question}
+                            {question.required && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          {question.description && (
+                            <p className="text-sm text-gray-600 mb-3">{question.description}</p>
+                          )}
+                        </div>
+                        
+                        {/* Preview based on question type */}
+                        {question.questionType === 'multiple_choice' && (
+                          <div className="space-y-2">
+                            {question.options?.map((option, optionIndex) => (
+                              <label key={optionIndex} className="flex items-center p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
+                                <input
+                                  type={question.selectionType === 'multi' ? 'checkbox' : 'radio'}
+                                  name={`question-${question.id}`}
+                                  value={option.id}
+                                  checked={question.selectionType === 'multi' 
+                                    ? (previewAnswers[question.id] || []).includes(option.id)
+                                    : previewAnswers[question.id] === option.id
+                                  }
+                                  onChange={(e) => {
+                                    if (question.selectionType === 'multi') {
+                                      const currentValues = previewAnswers[question.id] || [];
+                                      const newValues = e.target.checked
+                                        ? [...currentValues, option.id]
+                                        : currentValues.filter(id => id !== option.id);
+                                      handlePreviewAnswerChange(question.id, newValues);
+                                    } else {
+                                      handlePreviewAnswerChange(question.id, e.target.checked ? option.id : null);
+                                    }
+                                  }}
+                                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                                />
+                                <span className="ml-3 text-sm text-gray-700">{option.text}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+
+                        {question.questionType === 'dropdown' && (
+                          <div className="relative">
+                            <select
+                              value={previewAnswers[question.id] || ""}
+                              onChange={(e) => handlePreviewAnswerChange(question.id, e.target.value)}
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-700 appearance-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select an option</option>
+                              {question.options?.map((option, optionIndex) => (
+                                <option key={optionIndex} value={option.id}>
+                                  {option.text}
+                                </option>
+                              ))}
+                            </select>
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                              <svg className="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                        )}
+
+                        {question.questionType === 'short_text' && (
+                          <input
+                            type="text"
+                            value={previewAnswers[question.id] || ""}
+                            onChange={(e) => handlePreviewAnswerChange(question.id, e.target.value)}
+                            placeholder="Type your answer here"
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        )}
+
+                        {question.questionType === 'long_text' && (
+                          <textarea
+                            value={previewAnswers[question.id] || ""}
+                            onChange={(e) => handlePreviewAnswerChange(question.id, e.target.value)}
+                            placeholder="Type your answer here"
+                            rows={3}
+                            className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                          />
+                        )}
+
+                        {question.questionType === 'picture_choice' && (
+                          <div className="grid grid-cols-2 gap-3">
+                            {question.options?.map((option, optionIndex) => (
+                              <div key={optionIndex} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 cursor-pointer">
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type={question.selectionType === 'multi' ? 'checkbox' : 'radio'}
+                                    name={`question-${question.id}`}
+                                    value={option.id}
+                                    checked={question.selectionType === 'multi' 
+                                      ? (previewAnswers[question.id] || []).includes(option.id)
+                                      : previewAnswers[question.id] === option.id
+                                    }
+                                    onChange={(e) => {
+                                      if (question.selectionType === 'multi') {
+                                        const currentValues = previewAnswers[question.id] || [];
+                                        const newValues = e.target.checked
+                                          ? [...currentValues, option.id]
+                                          : currentValues.filter(id => id !== option.id);
+                                        handlePreviewAnswerChange(question.id, newValues);
+                                      } else {
+                                        handlePreviewAnswerChange(question.id, e.target.checked ? option.id : null);
+                                      }
+                                    }}
+                                    className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                                  />
+                                  <span className="text-sm text-gray-700">{option.text}</span>
+                                </div>
+                                {option.image && (
+                                  <div className="mt-2 w-full h-24 bg-gray-100 rounded flex items-center justify-center">
+                                    <span className="text-xs text-gray-500">Image preview</span>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {question.questionType === 'color_choice' && (
+                          <div className="flex flex-wrap gap-3">
+                            {question.options?.map((option, optionIndex) => (
+                              <div key={optionIndex} className="flex items-center space-x-2 p-2 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer">
+                                <input
+                                  type={question.selectionType === 'multi' ? 'checkbox' : 'radio'}
+                                  name={`question-${question.id}`}
+                                  value={option.id}
+                                  checked={question.selectionType === 'multi' 
+                                    ? (previewAnswers[question.id] || []).includes(option.id)
+                                    : previewAnswers[question.id] === option.id
+                                  }
+                                  onChange={(e) => {
+                                    if (question.selectionType === 'multi') {
+                                      const currentValues = previewAnswers[question.id] || [];
+                                      const newValues = e.target.checked
+                                        ? [...currentValues, option.id]
+                                        : currentValues.filter(id => id !== option.id);
+                                      handlePreviewAnswerChange(question.id, newValues);
+                                    } else {
+                                      handlePreviewAnswerChange(question.id, e.target.checked ? option.id : null);
+                                    }
+                                  }}
+                                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                                />
+                                <div className="w-6 h-6 rounded-full border border-gray-300" style={{ backgroundColor: option.color || '#ccc' }}></div>
+                                <span className="text-sm text-gray-700">{option.text}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {question.questionType === 'image_upload' && (
+                          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 cursor-pointer transition-colors">
+                            <div className="flex flex-col items-center">
+                              <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                              </svg>
+                              <p className="text-sm text-gray-500">Click to upload an image</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {question.questionType === 'quantity_select' && (
+                          <div className="flex items-center space-x-3">
+                            <button
+                              onClick={() => handlePreviewQuantityChange(question.id, -1)}
+                              className="w-8 h-8 border border-gray-300 rounded-full flex items-center justify-center text-gray-600 bg-white hover:bg-gray-50 transition-colors"
+                            >
+                              -
+                            </button>
+                            <span className="text-lg font-medium text-gray-700">{previewQuantities[question.id] || 0}</span>
+                            <button
+                              onClick={() => handlePreviewQuantityChange(question.id, 1)}
+                              className="w-8 h-8 border border-gray-300 rounded-full flex items-center justify-center text-gray-600 bg-white hover:bg-gray-50 transition-colors"
+                            >
+                              +
+                            </button>
+                            <span className="text-sm text-gray-500 ml-2">of {question.options?.[0]?.text || 'items'}</span>
+                          </div>
+                        )}
+
+                        {!['multiple_choice', 'dropdown', 'short_text', 'long_text', 'picture_choice', 'color_choice', 'image_upload', 'quantity_select'].includes(question.questionType) && (
+                          <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg">
+                            Preview for {question.questionType} question type
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
 
             <div className="bg-gray-50 rounded-lg p-6 flex flex-col items-center justify-center text-center">
               <IntakeQuestionDropdown />
+              
+              {/* Save button for intake questions */}
+              {intakeQuestionsChanged && (
+                <div className="mt-4 pt-4 border-t border-gray-200">
+                  <button
+                    onClick={handleSaveIntakeQuestions}
+                    disabled={savingIntakeQuestions}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    {savingIntakeQuestions ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : (
+                      <span>Save Intake Questions</span>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )
