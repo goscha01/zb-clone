@@ -56,8 +56,12 @@ const ZenbookerServices = () => {
       const servicesResponse = await servicesAPI.getAll(user.id)
       console.log('🔍 Services API response:', servicesResponse)
       
+      // Extract services array from response (backend returns { services: [...], pagination: {...} })
+      const servicesArray = servicesResponse.services || servicesResponse || []
+      console.log('🔍 Services array:', servicesArray)
+      
       // Sort services alphabetically by name
-      const sortedServices = servicesResponse.sort((a, b) => a.name.localeCompare(b.name))
+      const sortedServices = servicesArray.sort((a, b) => a.name.localeCompare(b.name))
       console.log('🔍 Sorted services:', sortedServices)
       setServices(sortedServices)
       

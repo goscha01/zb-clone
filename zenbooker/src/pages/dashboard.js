@@ -182,7 +182,7 @@ const ZenbookerDashboard = () => {
       // Fetch services data
       console.log('🔧 Fetching services...')
       const servicesResponse = await retryAPI(() => servicesAPI.getAll(user.id))
-      const services = servicesResponse || []
+      const services = servicesResponse.services || servicesResponse || []
       console.log('✅ Services loaded:', services.length)
       
       // Add delay to prevent rate limiting

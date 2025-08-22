@@ -827,9 +827,31 @@ const ServiceDetails = () => {
       setIsIntakeDropdownOpen(false)
     }
 
+    // Handle clicks outside the dropdown
+    useEffect(() => {
+      const handleClickOutside = (event) => {
+        const dropdownContainer = document.getElementById('intake-dropdown-container');
+        const dropdownButton = document.getElementById('intake-dropdown-button');
+        
+        if (isIntakeDropdownOpen && 
+            dropdownContainer && 
+            !dropdownContainer.contains(event.target) &&
+            dropdownButton &&
+            !dropdownButton.contains(event.target)) {
+          setIsIntakeDropdownOpen(false);
+        }
+      };
+
+      if (isIntakeDropdownOpen) {
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+      }
+    }, [isIntakeDropdownOpen]);
+
     return (
       <div className="relative">
         <button
+          id="intake-dropdown-button"
           onClick={() => {
             console.log('🔄 Intake dropdown button clicked, current state:', isIntakeDropdownOpen);
             setIsIntakeDropdownOpen(!isIntakeDropdownOpen);
@@ -840,24 +862,21 @@ const ServiceDetails = () => {
         </button>
         
         {isIntakeDropdownOpen && (
-          <>
-            <div 
-              className="fixed inset-0" 
-              onClick={() => setIsIntakeDropdownOpen(false)}
-            />
-            <div className="absolute left-0 mt-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50">
-              {questionTypes.map((type) => (
-                <button
-                  key={type.value}
-                  onClick={() => handleQuestionTypeSelect(type.value)}
-                  className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center space-x-3"
-                >
-                  <span className="text-xl">{type.icon}</span>
-                  <span className="text-sm text-gray-900">{type.label}</span>
-                </button>
-              ))}
-            </div>
-          </>
+          <div 
+            id="intake-dropdown-container"
+            className="absolute left-0 bottom-full mb-2 w-64 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 max-h-60 overflow-y-auto"
+          >
+            {questionTypes.map((type) => (
+              <button
+                key={type.value}
+                onClick={() => handleQuestionTypeSelect(type.value)}
+                className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center space-x-3 transition-colors"
+              >
+                <span className="text-xl">{type.icon}</span>
+                <span className="text-sm text-gray-900">{type.label}</span>
+              </button>
+            ))}
+          </div>
         )}
       </div>
     )

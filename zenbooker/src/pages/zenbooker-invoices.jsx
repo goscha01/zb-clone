@@ -96,7 +96,8 @@ const ZenbookerInvoices = () => {
     
     try {
       const response = await servicesAPI.getAll(user.id)
-      setServices(Array.isArray(response) ? response : [])
+      const servicesArray = response.services || response || []
+      setServices(Array.isArray(servicesArray) ? servicesArray : [])
     } catch (error) {
       console.error('Error fetching services:', error)
       setServices([])

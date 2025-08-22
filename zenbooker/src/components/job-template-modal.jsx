@@ -76,8 +76,9 @@ const JobTemplateModal = ({ isOpen, onClose, onSave, editingTemplate, userId }) 
   const loadServices = async () => {
     try {
       const servicesData = await servicesAPI.getAll(userId)
-      setServices(servicesData)
-      setFilteredServices(servicesData)
+      const servicesArray = servicesData.services || servicesData || []
+      setServices(servicesArray)
+      setFilteredServices(servicesArray)
     } catch (error) {
       console.error('Error loading services:', error)
       setError('Failed to load services.')
