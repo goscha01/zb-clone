@@ -6,6 +6,9 @@ const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEdi
 
   console.log('🔄 ServiceModifiersForm render:', { 
     modifiersCount: modifiers?.length, 
+    modifiers: modifiers,
+    modifiersType: typeof modifiers,
+    modifiersIsArray: Array.isArray(modifiers),
     selectedModifiers, 
     isEditable 
   });
@@ -90,6 +93,12 @@ const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEdi
   };
 
   const renderModifier = (modifier) => {
+    // Safety check for modifier
+    if (!modifier || !modifier.id) {
+      console.warn('Invalid modifier:', modifier);
+      return null;
+    }
+    
     return (
       <div key={modifier.id} className="mb-8">
         <div className="mb-4">
@@ -103,7 +112,13 @@ const ServiceModifiersForm = ({ modifiers = [], onModifiersChange, onSave, isEdi
         </div>
 
         <div className="space-y-3">
-          {modifier.options?.map((option) => {
+          {(modifier.options && Array.isArray(modifier.options) ? modifier.options : []).map((option) => {
+            // Safety check for option
+            if (!option || !option.id) {
+              console.warn('Invalid option:', option);
+              return null;
+            }
+            
             const isSelected = isOptionSelected(modifier.id, option.id);
             const quantity = getOptionQuantity(modifier.id, option.id);
 

@@ -139,7 +139,11 @@ export default function CreateJobPage() {
     autoReminders: true,
     customerSignature: false,
     photosRequired: false,
-    qualityCheck: true
+    qualityCheck: true,
+    // Service modifiers and intake questions
+    serviceModifiers: [],
+    serviceIntakeQuestions: [],
+    intakeQuestionIdMapping: {}
   });
 
   // Data lists
@@ -276,6 +280,16 @@ export default function CreateJobPage() {
     console.log('🔄 Current duration calculation:', calculateTotalDuration());
   }, [selectedModifiers, calculationTrigger]);
 
+  // Monitor formData.serviceModifiers changes for debugging
+  useEffect(() => {
+    console.log('🔄 formData.serviceModifiers changed:', {
+      serviceModifiers: formData.serviceModifiers,
+      isArray: Array.isArray(formData.serviceModifiers),
+      length: formData.serviceModifiers?.length,
+      hasModifiers: formData.serviceModifiers && formData.serviceModifiers.length > 0
+    });
+  }, [formData.serviceModifiers]);
+
   const loadData = async () => {
     if (!user?.id) return;
     
@@ -380,6 +394,10 @@ export default function CreateJobPage() {
   const handleServiceSelect = (service) => {
     setSelectedService(service);
     
+    console.log('🔄 Service selected:', service);
+    console.log('🔄 Service modifiers raw:', service.modifiers);
+    console.log('🔄 Service modifiers type:', typeof service.modifiers);
+    
     // Handle duration properly - services store duration in MINUTES
     let durationInMinutes = 60; // Default 1 hour
     if (service.duration) {
@@ -415,9 +433,43 @@ export default function CreateJobPage() {
     
     if (service.modifiers) {
       try {
-        serviceModifiers = typeof service.modifiers === 'string' 
-          ? JSON.parse(service.modifiers) 
-          : service.modifiers;
+        console.log('🔄 Attempting to parse modifiers...');
+        let parsedModifiers;
+        
+        if (typeof service.modifiers === 'string') {
+          // Try to parse as regular JSON first
+          try {
+            const firstParse = JSON.parse(service.modifiers);
+            console.log('🔄 First parse result:', firstParse);
+            console.log('🔄 First parse type:', typeof firstParse);
+            console.log('🔄 First parse is array?', Array.isArray(firstParse));
+            
+            // If first parse is still a string, it's double-encoded
+            if (typeof firstParse === 'string') {
+              console.log('🔄 First parse is still string, attempting second parse...');
+              const secondParse = JSON.parse(firstParse);
+              console.log('🔄 Second parse result:', secondParse);
+              console.log('🔄 Second parse type:', typeof secondParse);
+              console.log('🔄 Second parse is array?', Array.isArray(secondParse));
+              
+              parsedModifiers = Array.isArray(secondParse) ? secondParse : [];
+            } else {
+              // First parse was successful and returned an object/array
+              parsedModifiers = Array.isArray(firstParse) ? firstParse : [];
+            }
+          } catch (firstError) {
+            console.log('🔄 First parse failed:', firstError.message);
+            parsedModifiers = [];
+          }
+        } else {
+          parsedModifiers = service.modifiers;
+        }
+        
+        serviceModifiers = parsedModifiers;
+        
+        console.log('🔄 Parsed modifiers:', serviceModifiers);
+        console.log('🔄 Parsed modifiers type:', typeof serviceModifiers);
+        console.log('🔄 Parsed modifiers is array?', Array.isArray(serviceModifiers));
         
         // Ensure serviceModifiers is an array
         if (!Array.isArray(serviceModifiers)) {
@@ -450,15 +502,38 @@ export default function CreateJobPage() {
         });
       } catch (error) {
         console.error('Error parsing service modifiers:', error);
+        console.error('Raw modifiers string:', service.modifiers);
         serviceModifiers = [];
       }
+    } else {
+      console.log('🔄 No modifiers found in service');
     }
     
     if (service.intake_questions) {
       try {
-        const originalQuestions = typeof service.intake_questions === 'string' 
-          ? JSON.parse(service.intake_questions) 
-          : service.intake_questions;
+        let parsedQuestions;
+        
+        if (typeof service.intake_questions === 'string') {
+          // Try to parse as regular JSON first
+          try {
+            parsedQuestions = JSON.parse(service.intake_questions);
+            console.log('🔄 First parse successful for intake questions:', parsedQuestions);
+          } catch (firstError) {
+            console.log('🔄 First parse failed for intake questions, trying double parse');
+            // If first parse fails, try parsing again (double-escaped)
+            try {
+              parsedQuestions = JSON.parse(JSON.parse(service.intake_questions));
+              console.log('🔄 Double parse successful for intake questions:', parsedQuestions);
+            } catch (secondError) {
+              console.error('🔄 Both parse attempts failed for intake questions:', { firstError, secondError });
+              throw secondError;
+            }
+          }
+        } else {
+          parsedQuestions = service.intake_questions;
+        }
+        
+        const originalQuestions = parsedQuestions;
         
         // Ensure originalQuestions is an array
         if (!Array.isArray(originalQuestions)) {
@@ -502,6 +577,9 @@ export default function CreateJobPage() {
     } else {
       console.log('🔄 No intake questions found for service');
     }
+    
+    console.log('🔄 Setting formData with serviceModifiers:', serviceModifiers);
+    console.log('🔄 Setting formData with serviceIntakeQuestions:', serviceIntakeQuestions);
     
     setFormData(prev => ({
       ...prev,
@@ -1250,7 +1328,16 @@ export default function CreateJobPage() {
                 </div>
 
                 {/* Service Modifiers - Right after service selection */}
-                {formData.serviceModifiers && formData.serviceModifiers.length > 0 && (
+                {(() => {
+                  const hasModifiers = formData.serviceModifiers && formData.serviceModifiers.length > 0;
+                  console.log('🔄 ServiceModifiers display condition check:', {
+                    serviceModifiers: formData.serviceModifiers,
+                    isArray: Array.isArray(formData.serviceModifiers),
+                    length: formData.serviceModifiers?.length,
+                    hasModifiers: hasModifiers
+                  });
+                  return hasModifiers;
+                })() && (
                   <div className="space-y-6">
                     <div>
                       <h3 className="text-lg font-medium text-gray-900 mb-2">Service Options</h3>

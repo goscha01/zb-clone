@@ -117,9 +117,13 @@ export const servicesAPI = {
 
   getById: async (id) => {
     try {
+      console.log('🔍 API: Getting service by ID:', id);
       const response = await api.get(`/services/${id}`);
+      console.log('🔍 API: Service response:', response.data);
+      console.log('🔍 API: Service modifiers:', response.data.modifiers);
       return response.data;
     } catch (error) {
+      console.error('🔍 API: Error getting service:', error);
       throw error;
     }
   },

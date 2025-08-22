@@ -145,6 +145,17 @@ const ServiceDetails = () => {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [modifiersChanged, intakeQuestionsChanged])
 
+  // Debug serviceData changes
+  useEffect(() => {
+    console.log('🔄 serviceData changed:', {
+      name: serviceData.name,
+      modifiers: serviceData.modifiers,
+      modifiersType: typeof serviceData.modifiers,
+      modifiersIsArray: Array.isArray(serviceData.modifiers),
+      modifiersLength: Array.isArray(serviceData.modifiers) ? serviceData.modifiers.length : 'not an array'
+    })
+  }, [serviceData])
+
   const loadServiceData = async () => {
     try {
       console.log('Loading service data for ID:', serviceId)
@@ -188,8 +199,49 @@ const ServiceDetails = () => {
       console.log('Service category:', service?.category)
       console.log('Service modifiers from backend:', service.modifiers)
       console.log('Service modifiers type:', typeof service.modifiers)
+      console.log('Service modifiers is null?', service.modifiers === null)
+      console.log('Service modifiers is undefined?', service.modifiers === undefined)
+      console.log('Service modifiers raw value:', JSON.stringify(service.modifiers))
+      console.log('Service modifiers length:', service.modifiers ? service.modifiers.length : 'null/undefined')
+      
+      // Test the parsing logic step by step
       if (service.modifiers) {
-        console.log('Parsed modifiers:', typeof service.modifiers === 'string' ? JSON.parse(service.modifiers) : service.modifiers)
+        console.log('🔍 Testing modifiers parsing step by step:');
+        console.log('🔍 Step 1 - Raw modifiers:', service.modifiers);
+        console.log('🔍 Step 1 - Type:', typeof service.modifiers);
+        
+        try {
+          // Step 2 - First parse attempt
+          let firstParse;
+          try {
+            firstParse = JSON.parse(service.modifiers);
+            console.log('🔍 Step 2 - First parse successful:', firstParse);
+            console.log('🔍 Step 2 - First parse type:', typeof firstParse);
+            console.log('🔍 Step 2 - Is array?', Array.isArray(firstParse));
+          } catch (firstError) {
+            console.log('🔍 Step 2 - First parse failed:', firstError.message);
+            
+            // Step 3 - Second parse attempt (double-escaped)
+            try {
+              firstParse = JSON.parse(JSON.parse(service.modifiers));
+              console.log('🔍 Step 3 - Double parse successful:', firstParse);
+              console.log('🔍 Step 3 - Double parse type:', typeof firstParse);
+              console.log('🔍 Step 3 - Is array?', Array.isArray(firstParse));
+            } catch (secondError) {
+              console.log('🔍 Step 3 - Double parse failed:', secondError.message);
+              throw secondError;
+            }
+          }
+          
+          console.log('🔍 Final parsed modifiers:', firstParse);
+          console.log('🔍 Final modifiers is array?', Array.isArray(firstParse));
+          console.log('🔍 Final modifiers length:', Array.isArray(firstParse) ? firstParse.length : 'not an array');
+          
+        } catch (error) {
+          console.error('🔍 Error in step-by-step parsing:', error);
+        }
+      } else {
+        console.log('No modifiers data from backend')
       }
       
       if (!service) {
@@ -217,15 +269,106 @@ const ServiceDetails = () => {
         displayPrefix: "Estimated Total",
         isTaxable: false,
         hidePrice: false,
-        modifiers: service.modifiers ? (typeof service.modifiers === 'string' ? JSON.parse(service.modifiers) : service.modifiers) : [],
-        intakeQuestions: service.intake_questions ? (typeof service.intake_questions === 'string' ? JSON.parse(service.intake_questions) : service.intake_questions) : [],
+        modifiers: (() => {
+          console.log('🔍 Starting modifiers parsing function...');
+          console.log('🔍 Input service.modifiers:', service.modifiers);
+          console.log('🔍 Input type:', typeof service.modifiers);
+          
+          try {
+            if (!service.modifiers) {
+              console.log('🔍 No modifiers, returning empty array');
+              return [];
+            }
+            if (typeof service.modifiers === 'string') {
+              console.log('🔍 Modifiers is string, attempting to parse...');
+              
+              // Try to parse as regular JSON first
+              try {
+                const firstParse = JSON.parse(service.modifiers);
+                console.log('🔍 First parse result:', firstParse);
+                console.log('🔍 First parse type:', typeof firstParse);
+                console.log('🔍 First parse is array?', Array.isArray(firstParse));
+                
+                // If first parse is still a string, it's double-encoded
+                if (typeof firstParse === 'string') {
+                  console.log('🔍 First parse is still string, attempting second parse...');
+                  const secondParse = JSON.parse(firstParse);
+                  console.log('🔍 Second parse result:', secondParse);
+                  console.log('🔍 Second parse type:', typeof secondParse);
+                  console.log('🔍 Second parse is array?', Array.isArray(secondParse));
+                  
+                  const result = Array.isArray(secondParse) ? secondParse : [];
+                  console.log('🔍 Returning result from double parse:', result);
+                  return result;
+                } else {
+                  // First parse was successful and returned an object/array
+                  const result = Array.isArray(firstParse) ? firstParse : [];
+                  console.log('🔍 Returning result from single parse:', result);
+                  return result;
+                }
+              } catch (firstError) {
+                console.log('🔍 First parse failed:', firstError.message);
+                return [];
+              }
+            }
+            console.log('🔍 Modifiers is not string, checking if array...');
+            const result = Array.isArray(service.modifiers) ? service.modifiers : [];
+            console.log('🔍 Returning result:', result);
+            return result;
+          } catch (error) {
+            console.error('🔍 Error in modifiers parsing function:', error);
+            console.log('🔍 Returning empty array due to error');
+            return [];
+          }
+        })(),
+        intakeQuestions: (() => {
+          try {
+            if (!service.intake_questions) return [];
+            if (typeof service.intake_questions === 'string') {
+              // Try to parse as regular JSON first
+              try {
+                const parsed = JSON.parse(service.intake_questions);
+                return Array.isArray(parsed) ? parsed : [];
+              } catch (firstError) {
+                // If first parse fails, try parsing again (double-escaped)
+                try {
+                  const parsed = JSON.parse(JSON.parse(service.intake_questions));
+                  return Array.isArray(parsed) ? parsed : [];
+                } catch (secondError) {
+                  console.error('Both parse attempts failed for intake questions:', { firstError, secondError });
+                  return [];
+                }
+              }
+            }
+            return Array.isArray(service.intake_questions) ? service.intake_questions : [];
+          } catch (error) {
+            console.error('Error parsing intake questions:', error);
+            return [];
+          }
+        })(),
         require_payment_method: !!service.require_payment_method
       }
       
       console.log('Setting service data to:', newServiceData)
+      console.log('Final modifiers in serviceData:', newServiceData.modifiers)
+      console.log('Final modifiers type:', typeof newServiceData.modifiers)
+      console.log('Final modifiers is array?', Array.isArray(newServiceData.modifiers))
+      console.log('Final modifiers length:', Array.isArray(newServiceData.modifiers) ? newServiceData.modifiers.length : 'not an array')
       setServiceData(newServiceData)
       
-      console.log('Parsed modifiers:', service.modifiers ? (typeof service.modifiers === 'string' ? JSON.parse(service.modifiers) : service.modifiers) : [])
+      console.log('Parsed modifiers:', (() => {
+        try {
+          if (!service.modifiers) return [];
+          if (typeof service.modifiers === 'string') {
+            const parsed = JSON.parse(service.modifiers);
+            return Array.isArray(parsed) ? parsed : [];
+          }
+          return Array.isArray(service.modifiers) ? service.modifiers : [];
+        } catch (error) {
+          console.error('Error parsing modifiers for logging:', error);
+          return [];
+        }
+      })())
       
       console.log('Service data set successfully')
       
@@ -2123,6 +2266,12 @@ const ServiceDetails = () => {
         )
 
       case "modifiers":
+        console.log('🔍 Rendering modifiers section')
+        console.log('🔍 serviceData.modifiers:', serviceData.modifiers)
+        console.log('🔍 serviceData.modifiers type:', typeof serviceData.modifiers)
+        console.log('🔍 serviceData.modifiers is array?', Array.isArray(serviceData.modifiers))
+        console.log('🔍 serviceData.modifiers length:', Array.isArray(serviceData.modifiers) ? serviceData.modifiers.length : 'not an array')
+        console.log('🔍 serviceData:', serviceData)
         return (
           <div className="p-4 space-y-6">
             <p className="text-sm text-gray-600">Service modifiers are groups of options that can adjust this service's price and duration when selected.</p>
@@ -2132,8 +2281,17 @@ const ServiceDetails = () => {
             </a>
 
             <div className="space-y-4">
-              {serviceData.modifiers && serviceData.modifiers.length > 0 ? (
-                serviceData.modifiers.map((modifier, index) => (
+              {(() => {
+                const hasModifiers = serviceData.modifiers && Array.isArray(serviceData.modifiers) && serviceData.modifiers.length > 0;
+                console.log('🔍 Modifiers condition check:', {
+                  hasModifiers,
+                  modifiers: serviceData.modifiers,
+                  isArray: Array.isArray(serviceData.modifiers),
+                  length: Array.isArray(serviceData.modifiers) ? serviceData.modifiers.length : 'not an array'
+                });
+                return hasModifiers;
+              })() ? (
+                serviceData.modifiers.filter(modifier => modifier && modifier.id).map((modifier, index) => (
                 <div key={modifier.id} className="border border-gray-200 rounded-lg">
                   <div className="flex items-center justify-between p-4">
                     <div className="flex items-center space-x-3">
@@ -2173,7 +2331,7 @@ const ServiceDetails = () => {
                   </div>
                   <div className="px-4 pb-4">
                     <div className="flex flex-wrap gap-2">
-                        {modifier.options && modifier.options.map((option, optionIndex) => (
+                        {(modifier.options && Array.isArray(modifier.options) ? modifier.options : []).map((option, optionIndex) => (
                         <div key={optionIndex} className="bg-gray-100 rounded-full px-3 py-1 text-sm flex items-center space-x-2">
                           {option.image && (
                             <img
@@ -2199,7 +2357,7 @@ const ServiceDetails = () => {
             </div>
 
             {/* Customer Preview Section */}
-            {serviceData.modifiers && serviceData.modifiers.length > 0 && (
+            {serviceData.modifiers && Array.isArray(serviceData.modifiers) && serviceData.modifiers.length > 0 && (
               <div className="border-t border-gray-200 pt-6">
                 <div className="mb-4">
                   <h3 className="text-lg font-medium text-gray-900 mb-2">Customer Preview</h3>
@@ -2255,14 +2413,14 @@ const ServiceDetails = () => {
       icon: Sliders,
       title: "Service Modifiers",
       description: "Add selectable options that can adjust this service's price and duration",
-      badge: modifiersChanged ? "Unsaved Changes" : `${serviceData.modifiers?.length || 0} Modifier Group${serviceData.modifiers?.length !== 1 ? 's' : ''}`
+      badge: modifiersChanged ? "Unsaved Changes" : `${(serviceData.modifiers && Array.isArray(serviceData.modifiers) ? serviceData.modifiers.length : 0)} Modifier Group${(serviceData.modifiers && Array.isArray(serviceData.modifiers) ? serviceData.modifiers.length : 0) !== 1 ? 's' : ''}`
     },
     {
       id: "intake",
       icon: ListChecks,
       title: "Intake Questions",
       description: "Add custom form fields to collect additional info",
-      badge: intakeQuestionsChanged ? "Unsaved Changes" : `${serviceData.intakeQuestions?.length || 0} Question${serviceData.intakeQuestions?.length !== 1 ? 's' : ''}`
+      badge: intakeQuestionsChanged ? "Unsaved Changes" : `${(serviceData.intakeQuestions && Array.isArray(serviceData.intakeQuestions) ? serviceData.intakeQuestions.length : 0)} Question${(serviceData.intakeQuestions && Array.isArray(serviceData.intakeQuestions) ? serviceData.intakeQuestions.length : 0) !== 1 ? 's' : ''}`
     },
     // TODO: Integrate availability functionality
     // {

@@ -151,12 +151,15 @@ const ZenbookerServices = () => {
       
       const response = await servicesAPI.create(newService)
       
+      // Extract the service from the response (backend returns { message, service })
+      const newServiceData = response.service || response
+      
       // Add the new service to the list
-      setServices(prev => [response, ...prev])
+      setServices(prev => [newServiceData, ...prev])
       setCreateModalOpen(false)
       
       // Navigate to the new service details
-      navigate(`/services/${response.id}`)
+      navigate(`/services/${newServiceData.id}`)
     } catch (error) {
       console.error('Error creating service:', error)
       
