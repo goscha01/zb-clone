@@ -55,7 +55,7 @@ const ZenbookerSchedule = () => {
       console.log('❌ No authenticated user, redirecting to signin')
       navigate('/signin')
     }
-  }, [currentUser, currentView, currentDate, navigate])
+  }, [currentUser, currentView, currentDate, filters, navigate])
 
   const loadTeamMembers = async () => {
     if (!currentUser?.id) return
@@ -120,9 +120,29 @@ const ZenbookerSchedule = () => {
       
       console.log('📅 Date range:', { startDate, endDate, currentView })
       
-      const response = await jobsAPI.getAll(currentUser.id, "", "", 1, 1000, "future", "", "scheduled_date", "ASC", undefined, undefined, undefined, undefined)
+      // For scheduling view, we need to get ALL jobs regardless of date to show them in calendar
+      // The date filtering will be done client-side based on the current view
+      // Apply filters for status and team member
+      const statusFilter = filters.status === "all" ? "" : filters.status
+      const teamMemberFilter = filters.teamMember === "all" ? undefined : filters.teamMember
       
-      // Filter jobs by date range
+      const response = await jobsAPI.getAll(
+        currentUser.id, 
+        statusFilter, 
+        "", // search
+        1, // page
+        1000, // limit
+        "", // dateFilter (empty to get all dates)
+        "", // dateRange
+        "scheduled_date", // sortBy
+        "ASC", // sortOrder
+        teamMemberFilter, // teamMember
+        undefined, // invoiceStatus
+        undefined, // customerId
+        undefined // territoryId
+      )
+      
+      // Filter jobs by date range based on current view
       const filteredJobs = (response.jobs || response || []).filter(job => {
         const jobDate = new Date(job.scheduled_date)
         console.log('🔍 Checking job:', job.id, jobDate, 'against range:', startDate, 'to', endDate)
