@@ -419,6 +419,12 @@ export default function CreateJobPage() {
           ? JSON.parse(service.modifiers) 
           : service.modifiers;
         
+        // Ensure serviceModifiers is an array
+        if (!Array.isArray(serviceModifiers)) {
+          console.warn('🔄 Service modifiers is not an array, converting to empty array:', serviceModifiers);
+          serviceModifiers = [];
+        }
+        
         // Debug modifier durations
         console.log('🔄 Service modifiers loaded:', serviceModifiers);
         serviceModifiers.forEach(modifier => {
@@ -428,7 +434,7 @@ export default function CreateJobPage() {
             selectionType: modifier.selectionType,
             options: modifier.options?.length || 0
           });
-          if (modifier.options) {
+          if (modifier.options && Array.isArray(modifier.options)) {
             modifier.options.forEach(option => {
               console.log(`🔄 Modifier option "${option.label || option.title || option.id}":`, {
                 id: option.id,
@@ -454,32 +460,41 @@ export default function CreateJobPage() {
           ? JSON.parse(service.intake_questions) 
           : service.intake_questions;
         
-        // Create a mapping from normalized IDs to original IDs
-        const idMapping = {};
-        serviceIntakeQuestions = originalQuestions.map((question, index) => {
-          const normalizedId = index + 1;
-          idMapping[normalizedId] = question.id; // Map normalized ID to original ID
-          return {
-            ...question,
-            id: normalizedId // Use normalized ID for frontend
-          };
-        });
-        
-        // Store the ID mapping for later use when sending to backend
-        setFormData(prev => ({ ...prev, intakeQuestionIdMapping: idMapping }));
-        
-        console.log('🔄 Service intake questions loaded:', serviceIntakeQuestions);
-        console.log('🔄 ID mapping created:', idMapping);
-        console.log('🔄 Service intake questions count:', serviceIntakeQuestions.length);
-        serviceIntakeQuestions.forEach((q, index) => {
-          console.log(`🔄 Question ${index + 1}:`, {
-            id: q.id,
-            originalId: idMapping[q.id],
-            question: q.question,
-            questionType: q.questionType,
-            required: q.required
+        // Ensure originalQuestions is an array
+        if (!Array.isArray(originalQuestions)) {
+          console.warn('🔄 Service intake questions is not an array, converting to empty array:', originalQuestions);
+          serviceIntakeQuestions = [];
+        } else {
+          // Create a mapping from normalized IDs to original IDs
+          const idMapping = {};
+          serviceIntakeQuestions = originalQuestions.map((question, index) => {
+            const normalizedId = index + 1;
+            idMapping[normalizedId] = question.id; // Map normalized ID to original ID
+            return {
+              ...question,
+              id: normalizedId // Use normalized ID for frontend
+            };
           });
-        });
+          
+          // Store the ID mapping for later use when sending to backend
+          setFormData(prev => ({ ...prev, intakeQuestionIdMapping: idMapping }));
+          
+          console.log('🔄 Service intake questions loaded:', serviceIntakeQuestions);
+          console.log('🔄 ID mapping created:', idMapping);
+          console.log('🔄 Service intake questions count:', serviceIntakeQuestions.length);
+          
+          if (Array.isArray(serviceIntakeQuestions)) {
+            serviceIntakeQuestions.forEach((q, index) => {
+              console.log(`🔄 Question ${index + 1}:`, {
+                id: q.id,
+                originalId: idMapping[q.id],
+                question: q.question,
+                questionType: q.questionType,
+                required: q.required
+              });
+            });
+          }
+        }
       } catch (error) {
         console.error('Error parsing service intake questions:', error);
         serviceIntakeQuestions = [];
