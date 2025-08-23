@@ -640,7 +640,7 @@ export const publicBookingAPI = {
 
 // Jobs API functions
 export const jobsAPI = {
-  getAll: async (userId, status, search, page = 1, limit = 20, dateFilter, dateRange, sortBy, sortOrder, teamMember, invoiceStatus, customerId, territoryId) => {
+  getAll: async (userId, status, search, page = 1, limit = 20, dateFilter, dateRange, sortBy, sortOrder, teamMember, invoiceStatus, customerId, territoryId, signal) => {
     try {
       const params = new URLSearchParams({ userId });
       if (status) params.append('status', status);
@@ -655,7 +655,9 @@ export const jobsAPI = {
       if (invoiceStatus) params.append('invoiceStatus', invoiceStatus);
       if (customerId) params.append('customerId', customerId);
       if (territoryId) params.append('territoryId', territoryId);
-      const response = await api.get(`/jobs?${params}`);
+      
+      const config = signal ? { signal } : {};
+      const response = await api.get(`/jobs?${params}`, config);
       return response.data;
     } catch (error) {
       throw error;

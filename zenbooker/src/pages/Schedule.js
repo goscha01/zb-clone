@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Plus, ChevronLeft, ChevronRight, Calendar, Grid3X3, MapPin, Clock, DollarSign, User, Filter, AlertTriangle, RefreshCw, Map, BarChart3, Users, UserX, CheckCircle, PlayCircle, XCircle } from "lucide-react"
 import Sidebar from "../components/sidebar"
 import MobileHeader from "../components/mobile-header"
@@ -29,7 +29,12 @@ const ZenbookerSchedule = () => {
   const [error, setError] = useState("")
   const [teamMembers, setTeamMembers] = useState([])
   const [expandedDays, setExpandedDays] = useState(new Set())
+  const [isDebouncing, setIsDebouncing] = useState(false)
   const navigate = useNavigate()
+
+  // Request cancellation and debouncing
+  const abortControllerRef = useRef(null)
+  const debounceTimeoutRef = useRef(null)
 
   // Function to handle expanding/collapsing days
   const toggleDayExpansion = (dateString) => {
@@ -49,11 +54,35 @@ const ZenbookerSchedule = () => {
 
   useEffect(() => {
     if (currentUser?.id) {
-      loadJobs()
+      // Clear any existing debounce timeout
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+      }
+      
+      // Show debouncing state
+      setIsDebouncing(true)
+      
+      // Debounce the loadJobs call to prevent rapid requests
+      debounceTimeoutRef.current = setTimeout(() => {
+        setIsDebouncing(false)
+        loadJobs()
+      }, 300) // 300ms debounce delay
+      
       loadTeamMembers()
     } else if (!currentUser) {
       console.log('❌ No authenticated user, redirecting to signin')
       navigate('/signin')
+    }
+    
+    // Cleanup function to clear timeout and abort requests
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current)
+        setIsDebouncing(false)
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort()
+      }
     }
   }, [currentUser, currentView, currentDate, filters, navigate])
 
@@ -89,6 +118,14 @@ const ZenbookerSchedule = () => {
 
   const loadJobs = async () => {
     if (!currentUser?.id) return
+    
+    // Cancel any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    
+    // Create new abort controller for this request
+    abortControllerRef.current = new AbortController()
     
     try {
       setLoading(true)
@@ -139,7 +176,8 @@ const ZenbookerSchedule = () => {
         teamMemberFilter, // teamMember
         undefined, // invoiceStatus
         undefined, // customerId
-        undefined // territoryId
+        undefined, // territoryId
+        abortControllerRef.current.signal // signal for request cancellation
       )
       
       // Filter jobs by date range based on current view
@@ -152,10 +190,18 @@ const ZenbookerSchedule = () => {
       console.log('✅ Jobs loaded:', filteredJobs.length, 'for', currentView, 'view')
       setJobs(filteredJobs)
     } catch (error) {
+      // Don't show error for aborted requests
+      if (error.name === 'AbortError') {
+        console.log('🔄 Request was aborted')
+        return
+      }
+      
       console.error('❌ Error loading jobs:', error)
       if (error.response?.status === 403) {
         setError("Authentication required. Please log in again.")
         navigate('/signin')
+      } else if (error.response?.status === 404) {
+        setError("Jobs not found. Please try again.")
       } else {
         setError("Failed to load jobs. Please try again.")
       }
