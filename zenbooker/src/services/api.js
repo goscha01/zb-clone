@@ -31,6 +31,12 @@ api.interceptors.response.use(
     return response;
   },
   (error) => {
+    // Don't log canceled requests as errors - they're expected behavior
+    if (error.message === 'canceled' || error.code === 'ERR_CANCELED') {
+      console.log('🔄 Request was canceled - this is expected behavior');
+      return Promise.reject(error);
+    }
+    
     console.error('API Error:', error.response?.status, error.response?.config?.url, error.message);
     
     if (error.response) {

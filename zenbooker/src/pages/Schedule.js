@@ -15,7 +15,8 @@ const ZenbookerSchedule = () => {
   const [activeFilter, setActiveFilter] = useState("all")
   const [currentView, setCurrentView] = useState("day") // day, week, month
   const [currentDate, setCurrentDate] = useState(new Date()) // Current date
-  const [jobs, setJobs] = useState([])
+  const [allJobs, setAllJobs] = useState([]) // Store ALL jobs
+  const [jobs, setJobs] = useState([]) // Filtered jobs for current view
   const [showMap, setShowMap] = useState(false)
   const [filters, setFilters] = useState({
     status: "all",
@@ -29,12 +30,13 @@ const ZenbookerSchedule = () => {
   const [error, setError] = useState("")
   const [teamMembers, setTeamMembers] = useState([])
   const [expandedDays, setExpandedDays] = useState(new Set())
-  const [isDebouncing, setIsDebouncing] = useState(false)
+  const [isNavigating, setIsNavigating] = useState(false)
   const navigate = useNavigate()
 
-  // Request cancellation and debouncing
+  // Request cancellation and navigation timeout
   const abortControllerRef = useRef(null)
-  const debounceTimeoutRef = useRef(null)
+  const navigationTimeoutRef = useRef(null)
+  const silentRefreshIntervalRef = useRef(null)
 
   // Function to handle expanding/collapsing days
   const toggleDayExpansion = (dateString) => {
@@ -54,37 +56,35 @@ const ZenbookerSchedule = () => {
 
   useEffect(() => {
     if (currentUser?.id) {
-      // Clear any existing debounce timeout
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current)
+      // Only fetch all jobs once when user changes or on initial load
+      if (allJobs.length === 0) {
+        loadAllJobs()
       }
-      
-      // Show debouncing state
-      setIsDebouncing(true)
-      
-      // Debounce the loadJobs call to prevent rapid requests
-      debounceTimeoutRef.current = setTimeout(() => {
-        setIsDebouncing(false)
-        loadJobs()
-      }, 300) // 300ms debounce delay
-      
       loadTeamMembers()
+      
+      // Start silent refresh every 30 seconds
+      silentRefreshIntervalRef.current = setInterval(() => {
+        refreshJobsSilently()
+      }, 30000) // 30 seconds
+      
+      // Cleanup interval on unmount
+      return () => {
+        if (silentRefreshIntervalRef.current) {
+          clearInterval(silentRefreshIntervalRef.current)
+        }
+      }
     } else if (!currentUser) {
       console.log('❌ No authenticated user, redirecting to signin')
       navigate('/signin')
     }
-    
-    // Cleanup function to clear timeout and abort requests
-    return () => {
-      if (debounceTimeoutRef.current) {
-        clearTimeout(debounceTimeoutRef.current)
-        setIsDebouncing(false)
-      }
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
+  }, [currentUser, navigate])
+
+  // Separate useEffect for filtering jobs when view/date/filters change
+  useEffect(() => {
+    if (allJobs.length > 0) {
+      filterJobsForCurrentView()
     }
-  }, [currentUser, currentView, currentDate, filters, navigate])
+  }, [allJobs, currentView, currentDate, filters])
 
   const loadTeamMembers = async () => {
     if (!currentUser?.id) return
@@ -116,56 +116,19 @@ const ZenbookerSchedule = () => {
     return Array.from(territories).sort()
   }
 
-  const loadJobs = async () => {
+  const loadAllJobs = async () => {
     if (!currentUser?.id) return
-    
-    // Cancel any ongoing request
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort()
-    }
-    
-    // Create new abort controller for this request
-    abortControllerRef.current = new AbortController()
     
     try {
       setLoading(true)
       setError("")
       
-      console.log('🔄 Loading jobs for user:', currentUser.id)
+      console.log('🔄 Loading ALL jobs for user:', currentUser.id)
       
-      // Calculate date range based on current view
-      let startDate, endDate
-      if (currentView === 'day') {
-        // For day view, get jobs for the specific day
-        startDate = new Date(currentDate)
-        startDate.setHours(0, 0, 0, 0)
-        endDate = new Date(currentDate)
-        endDate.setHours(23, 59, 59, 999)
-      } else if (currentView === 'week') {
-        startDate = new Date(currentDate)
-        startDate.setDate(currentDate.getDate() - currentDate.getDay())
-        startDate.setHours(0, 0, 0, 0)
-        endDate = new Date(startDate)
-        endDate.setDate(startDate.getDate() + 6)
-        endDate.setHours(23, 59, 59, 999)
-      } else {
-        startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
-        startDate.setHours(0, 0, 0, 0)
-        endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
-        endDate.setHours(23, 59, 59, 999)
-      }
-      
-      console.log('📅 Date range:', { startDate, endDate, currentView })
-      
-      // For scheduling view, we need to get ALL jobs regardless of date to show them in calendar
-      // The date filtering will be done client-side based on the current view
-      // Apply filters for status and team member
-      const statusFilter = filters.status === "all" ? "" : filters.status
-      const teamMemberFilter = filters.teamMember === "all" ? undefined : filters.teamMember
-      
+      // Get ALL jobs without date filtering - we'll filter client-side
       const response = await jobsAPI.getAll(
         currentUser.id, 
-        statusFilter, 
+        "", // status (empty to get all)
         "", // search
         1, // page
         1000, // limit
@@ -173,30 +136,17 @@ const ZenbookerSchedule = () => {
         "", // dateRange
         "scheduled_date", // sortBy
         "ASC", // sortOrder
-        teamMemberFilter, // teamMember
+        undefined, // teamMember (empty to get all)
         undefined, // invoiceStatus
         undefined, // customerId
         undefined, // territoryId
-        abortControllerRef.current.signal // signal for request cancellation
       )
       
-      // Filter jobs by date range based on current view
-      const filteredJobs = (response.jobs || response || []).filter(job => {
-        const jobDate = new Date(job.scheduled_date)
-        console.log('🔍 Checking job:', job.id, jobDate, 'against range:', startDate, 'to', endDate)
-        return jobDate >= startDate && jobDate <= endDate
-      })
-      
-      console.log('✅ Jobs loaded:', filteredJobs.length, 'for', currentView, 'view')
-      setJobs(filteredJobs)
+      const allJobsData = response.jobs || response || []
+      console.log('✅ All jobs loaded:', allJobsData.length, 'total jobs')
+      setAllJobs(allJobsData)
     } catch (error) {
-      // Don't show error for aborted requests
-      if (error.name === 'AbortError') {
-        console.log('🔄 Request was aborted')
-        return
-      }
-      
-      console.error('❌ Error loading jobs:', error)
+      console.error('❌ Error loading all jobs:', error)
       if (error.response?.status === 403) {
         setError("Authentication required. Please log in again.")
         navigate('/signin')
@@ -205,10 +155,67 @@ const ZenbookerSchedule = () => {
       } else {
         setError("Failed to load jobs. Please try again.")
       }
-      setJobs([])
+      setAllJobs([])
     } finally {
       setLoading(false)
     }
+  }
+
+  const filterJobsForCurrentView = () => {
+    if (allJobs.length === 0) return
+    
+    console.log('🔍 Filtering jobs for current view:', currentView, currentDate)
+    
+    // Calculate date range based on current view
+    let startDate, endDate
+    if (currentView === 'day') {
+      startDate = new Date(currentDate)
+      startDate.setHours(0, 0, 0, 0)
+      endDate = new Date(currentDate)
+      endDate.setHours(23, 59, 59, 999)
+    } else if (currentView === 'week') {
+      startDate = new Date(currentDate)
+      startDate.setDate(currentDate.getDate() - currentDate.getDay())
+      startDate.setHours(0, 0, 0, 0)
+      endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + 6)
+      endDate.setHours(23, 59, 59, 999)
+    } else {
+      startDate = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1)
+      startDate.setHours(0, 0, 0, 0)
+      endDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0)
+      endDate.setHours(23, 59, 59, 999)
+    }
+    
+    // Filter jobs by date range
+    let filteredJobs = allJobs.filter(job => {
+      const jobDate = new Date(job.scheduled_date)
+      return jobDate >= startDate && jobDate <= endDate
+    })
+    
+    // Apply status filter
+    if (filters.status !== "all") {
+      filteredJobs = filteredJobs.filter(job => job.status === filters.status)
+    }
+    
+    // Apply team member filter
+    if (filters.teamMember !== "all") {
+      if (filters.teamMember === "assigned") {
+        filteredJobs = filteredJobs.filter(job => job.team_member_id !== null)
+      } else if (filters.teamMember === "unassigned") {
+        filteredJobs = filteredJobs.filter(job => job.team_member_id === null)
+      } else {
+        filteredJobs = filteredJobs.filter(job => job.team_member_id === parseInt(filters.teamMember))
+      }
+    }
+    
+    // Apply territory filter
+    if (filters.territory !== "all") {
+      filteredJobs = filteredJobs.filter(job => job.territory_id === parseInt(filters.territory))
+    }
+    
+    console.log('✅ Filtered jobs:', filteredJobs.length, 'for', currentView, 'view')
+    setJobs(filteredJobs)
   }
 
   const formatDate = (date, view) => {
@@ -233,6 +240,19 @@ const ZenbookerSchedule = () => {
   }
 
   const navigateDate = (direction) => {
+    // Prevent rapid navigation clicks
+    if (isNavigating) {
+      console.log('🚫 Navigation blocked - already navigating')
+      return
+    }
+    
+    setIsNavigating(true)
+    
+    // Clear any existing navigation timeout
+    if (navigationTimeoutRef.current) {
+      clearTimeout(navigationTimeoutRef.current)
+    }
+    
     const newDate = new Date(currentDate)
     
     if (currentView === 'day') {
@@ -244,6 +264,42 @@ const ZenbookerSchedule = () => {
     }
     
     setCurrentDate(newDate)
+    
+    // Allow navigation again after 500ms (faster since no API call)
+    navigationTimeoutRef.current = setTimeout(() => {
+      setIsNavigating(false)
+    }, 500)
+  }
+
+  // Function to refresh jobs silently in background
+  const refreshJobsSilently = async () => {
+    if (!currentUser?.id) return
+    
+    try {
+      console.log('🔄 Silently refreshing jobs...')
+      const response = await jobsAPI.getAll(
+        currentUser.id, 
+        "", // status (empty to get all)
+        "", // search
+        1, // page
+        1000, // limit
+        "", // dateFilter (empty to get all dates)
+        "", // dateRange
+        "scheduled_date", // sortBy
+        "ASC", // sortOrder
+        undefined, // teamMember (empty to get all)
+        undefined, // invoiceStatus
+        undefined, // customerId
+        undefined, // territoryId
+      )
+      
+      const allJobsData = response.jobs || response || []
+      console.log('✅ Jobs refreshed silently:', allJobsData.length, 'total jobs')
+      setAllJobs(allJobsData)
+    } catch (error) {
+      console.log('⚠️ Silent refresh failed:', error.message)
+      // Don't show error to user for silent refresh
+    }
   }
 
   const handleCreateJob = () => {
@@ -588,7 +644,7 @@ const ZenbookerSchedule = () => {
               <h3 className="text-lg font-medium text-gray-900 mb-2">Error: {error}</h3>
               <p className="text-gray-500 mb-6">Failed to load jobs. Please try again later.</p>
               <button 
-                onClick={loadJobs}
+                onClick={loadAllJobs}
                 className="w-10 h-10 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 transition-all duration-200 transform hover:scale-[1.02] focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 <RefreshCw className="w-5 h-5" />
@@ -931,18 +987,32 @@ const ZenbookerSchedule = () => {
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => navigateDate(-1)}
-                      className="p-1 rounded hover:bg-gray-100"
+                      disabled={isNavigating}
+                      className={`p-1 rounded transition-colors ${
+                        isNavigating 
+                          ? 'text-gray-300 cursor-not-allowed' 
+                          : 'hover:bg-gray-100 text-gray-500'
+                      }`}
+                      title={isNavigating ? 'Please wait...' : 'Previous'}
                     >
-                      <ChevronLeft className="w-5 h-5 text-gray-500" />
+                      <ChevronLeft className="w-5 h-5" />
                     </button>
                     
-                    <span className="font-medium text-sm sm:text-base">{formatDate(currentDate, currentView)}</span>
+                    <span className="font-medium text-sm sm:text-base">
+                      {formatDate(currentDate, currentView)}
+                    </span>
                     
                     <button
                       onClick={() => navigateDate(1)}
-                      className="p-1 rounded hover:bg-gray-100"
+                      disabled={isNavigating}
+                      className={`p-1 rounded transition-colors ${
+                        isNavigating 
+                          ? 'text-gray-300 cursor-not-allowed' 
+                          : 'hover:bg-gray-100 text-gray-500'
+                      }`}
+                      title={isNavigating ? 'Please wait...' : 'Next'}
                     >
-                      <ChevronRight className="w-5 h-5 text-gray-500" />
+                      <ChevronRight className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
