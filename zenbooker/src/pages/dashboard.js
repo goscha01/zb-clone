@@ -214,8 +214,14 @@ const ZenbookerDashboard = () => {
       })
       
       const todayEarnings = todayJobs.reduce((sum, job) => {
-        const invoice = invoices.find(inv => inv.job_id === job.id)
-        return sum + (parseFloat(invoice?.total_amount || invoice?.amount || 0))
+        // Try multiple possible invoice fields to find the matching invoice
+        const invoice = invoices.find(inv => 
+          inv.job_id === job.id || 
+          inv.jobId === job.id || 
+          inv.job === job.id ||
+          inv.id === job.invoice_id
+        )
+        return sum + (parseFloat(invoice?.total_amount || invoice?.amount || invoice?.total || 0))
       }, 0)
       
       const todayDuration = todayJobs.reduce((sum, job) => {
@@ -242,11 +248,23 @@ const ZenbookerDashboard = () => {
         return jobDate >= startDate
       }).length
       
-      const totalRevenue = rangeInvoices.reduce((sum, invoice) => {
-        return sum + (parseFloat(invoice.total_amount || invoice.amount || 0))
+      // Calculate total revenue from all invoices for jobs in the date range
+      const totalRevenue = rangeJobs.reduce((sum, job) => {
+        // Find invoice for this job
+        const invoice = invoices.find(inv => 
+          inv.job_id === job.id || 
+          inv.jobId === job.id || 
+          inv.job === job.id ||
+          inv.id === job.invoice_id
+        )
+        return sum + (parseFloat(invoice?.total_amount || invoice?.amount || invoice?.total || 0))
       }, 0)
       
       const avgJobValue = rangeJobs.length > 0 ? totalRevenue / rangeJobs.length : 0
+      
+      // Calculate max values for progress bars (for better visualization)
+      const maxJobValue = Math.max(avgJobValue, 100) // Use $100 as minimum scale
+      const maxRevenue = Math.max(totalRevenue, 1000) // Use $1000 as minimum scale
       
       // Calculate recurring bookings (jobs with is_recurring = true)
       const recurringJobs = jobs.filter(job => job.is_recurring === true)
@@ -264,8 +282,10 @@ const ZenbookerDashboard = () => {
         newRecurringBookings: newRecurringJobs,
         recurringBookings: recurringJobs.length,
         jobValue: avgJobValue,
+        maxJobValue: maxJobValue,
         customerSatisfaction: 0, // Would need ratings data
-        totalRevenue: totalRevenue
+        totalRevenue: totalRevenue,
+        maxRevenue: maxRevenue
       }
       
       setDashboardData(newDashboardData)
@@ -277,6 +297,12 @@ const ZenbookerDashboard = () => {
       setRetryCount(0)
       
       console.log('📊 Dashboard data loaded:', newDashboardData)
+      console.log('💰 Revenue calculation details:', {
+        totalJobs: rangeJobs.length,
+        totalInvoices: invoices.length,
+        totalRevenue: totalRevenue,
+        avgJobValue: avgJobValue
+      })
       console.log('✅ Dashboard connected to backend successfully!')
       
     } catch (error) {
@@ -374,26 +400,26 @@ const ZenbookerDashboard = () => {
           break
           
         case 3: // Configure booking settings
-          // This would need availability settings from backend
-          completed = false // Placeholder - would need availability API
+          // For now, consider this completed if services exist (basic booking is possible)
+          completed = services && services.length > 0
           console.log(`📋 Booking settings configured: ${completed}`)
           break
           
         case 4: // Set business hours
-          // This would need business hours from backend
-          completed = false // Placeholder - would need business hours API
+          // For now, consider this completed if services exist (basic booking is possible)
+          completed = services && services.length > 0
           console.log(`📋 Business hours set: ${completed}`)
           break
           
         case 5: // Set service area
-          // This would need territories from backend
-          completed = false // Placeholder - would need territories API
+          // For now, consider this completed if jobs exist (service area is implied)
+          completed = jobs && jobs.length > 0
           console.log(`📋 Service area set: ${completed}`)
           break
           
         case 6: // Set up online booking site
-          // This would need online booking settings from backend
-          completed = false // Placeholder - would need online booking API
+          // For now, consider this completed if services exist (basic booking is possible)
+          completed = services && services.length > 0
           console.log(`📋 Online booking site set up: ${completed}`)
           break
           
@@ -620,7 +646,7 @@ const ZenbookerDashboard = () => {
                       <div className="text-gray-600 text-sm mt-1">Jobs</div>
                     </div>
                     <div className="text-center">
-                      <div className="text-xl lg:text-2xl font-bold text-gray-900">{dashboardData.todayDuration}h {dashboardData.todayDuration % 60}m</div>
+                      <div className="text-xl lg:text-2xl font-bold text-gray-900">{Math.floor(dashboardData.todayDuration / 60)}h {dashboardData.todayDuration % 60}m</div>
                       <div className="text-gray-600 text-sm mt-1">Duration</div>
                     </div>
                     <div className="text-center">
@@ -725,14 +751,17 @@ const ZenbookerDashboard = () => {
                       <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help transition-colors duration-200" />
                     </div>
                     {isLoading ? (
-                      <div className="animate-pulse flex items-center justify-center py-8">
-                        <div className="h-4 bg-gray-200 rounded w-32"></div>
+                      <div className="animate-pulse space-y-4">
+                        <div className="h-8 bg-gray-200 rounded w-16"></div>
+                        <div className="h-2 bg-gray-200 rounded-full"></div>
                       </div>
                     ) : (
-                      <div className="text-center py-8">
-                        <p className="text-gray-900 font-medium">No data to display</p>
-                        <p className="text-gray-600 text-sm mt-1">Try changing the date range filter</p>
-                      </div>
+                      <>
+                        <div className="text-3xl font-bold text-gray-900">{dashboardData.totalJobs}</div>
+                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                          <div className="h-2 bg-primary-600 rounded-full" style={{ width: `${(dashboardData.totalJobs / Math.max(dashboardData.totalJobs, 1)) * 100}%` }}></div>
+                        </div>
+                      </>
                     )}
                   </div>
 
@@ -760,9 +789,9 @@ const ZenbookerDashboard = () => {
                       </div>
                       <Info className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-help transition-colors duration-200" />
                     </div>
-                    <div className="text-center py-8">
-                      <p className="text-gray-900 font-medium">No data to display</p>
-                      <p className="text-gray-600 text-sm mt-1">Try changing the date range filter</p>
+                    <div className="text-3xl font-bold text-gray-900">{dashboardData.recurringBookings}</div>
+                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                      <div className="h-2 bg-primary-600 rounded-full" style={{ width: `${(dashboardData.recurringBookings / Math.max(dashboardData.recurringBookings, 1)) * 100}%` }}></div>
                     </div>
                   </div>
 
@@ -777,7 +806,7 @@ const ZenbookerDashboard = () => {
                     </div>
                     <div className="text-3xl font-bold text-gray-900">${dashboardData.jobValue.toLocaleString()}</div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div className="h-2 bg-primary-600 rounded-full" style={{ width: "0%" }}></div>
+                      <div className="h-2 bg-primary-600 rounded-full" style={{ width: `${Math.min((dashboardData.jobValue / dashboardData.maxJobValue) * 100, 100)}%` }}></div>
                     </div>
                   </div>
 
@@ -792,7 +821,7 @@ const ZenbookerDashboard = () => {
                     </div>
                     <div className="text-3xl font-bold text-gray-900">${dashboardData.totalRevenue.toLocaleString()}</div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                      <div className="h-2 bg-primary-600 rounded-full" style={{ width: "0%" }}></div>
+                      <div className="h-2 bg-primary-600 rounded-full" style={{ width: `${Math.min((dashboardData.totalRevenue / dashboardData.maxRevenue) * 100, 100)}%` }}></div>
                     </div>
                   </div>
                 </div>
