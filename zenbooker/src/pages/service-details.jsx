@@ -327,8 +327,8 @@ const ServiceDetails = () => {
             if (typeof service.intake_questions === 'string') {
               // Try to parse as regular JSON first
               try {
-                const parsed = JSON.parse(service.intake_questions);
-                return Array.isArray(parsed) ? parsed : [];
+              const parsed = JSON.parse(service.intake_questions);
+              return Array.isArray(parsed) ? parsed : [];
               } catch (firstError) {
                 // If first parse fails, try parsing again (double-escaped)
                 try {

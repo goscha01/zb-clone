@@ -439,90 +439,78 @@ const JobDetails = () => {
     })
   }
 
-  // Calculate total price including modifiers based on job answers
+  // Calculate total price including modifiers
   const calculateTotalPrice = () => {
     try {
-      let basePrice = parseFloat(job.service_price) || 0;
-      let modifierPrice = 0;
+      // Use the total price that was calculated and saved during job creation
+      const savedTotal = parseFloat(job.total) || 0;
+      const basePrice = parseFloat(job.service_price) || 0;
       
-      // Get service modifiers
-      const serviceModifiers = job.service_modifiers || [];
-      const jobAnswers = job.intake_answers || [];
-      
-      console.log('🔄 Calculating total price:', { basePrice, serviceModifiers, jobAnswers });
-      
-      // Process each job answer to find modifier selections
-      jobAnswers.forEach(answer => {
-        console.log('🔄 Processing answer:', answer);
-        
-        // Find the corresponding modifier
-        const modifier = serviceModifiers.find(m => m.id == answer.question_id);
-        if (!modifier) {
-          console.log('🔄 No modifier found for question_id:', answer.question_id);
-          return;
-        }
-        
-        console.log('🔄 Found modifier:', modifier);
-        
-        // Parse the answer
-        let parsedAnswer = answer.answer;
-        if (typeof answer.answer === 'string') {
-          try {
-            const parsed = JSON.parse(answer.answer);
-            if (Array.isArray(parsed)) {
-              parsedAnswer = parsed;
-            }
-          } catch (e) {
-            console.log('🔄 Failed to parse answer as JSON:', e);
-          }
-        }
-        
-        console.log('🔄 Parsed answer:', parsedAnswer);
-        
-        if (modifier.selectionType === 'quantity') {
-          // Handle quantity selection
-          if (typeof parsedAnswer === 'object' && parsedAnswer.quantities) {
-            Object.entries(parsedAnswer.quantities).forEach(([optionId, quantity]) => {
-              const option = modifier.options?.find(o => o.id == optionId);
-              if (option && option.price && quantity > 0) {
-                const optionPrice = parseFloat(option.price) || 0;
-                modifierPrice += optionPrice * quantity;
-                console.log(`🔄 Quantity modifier: ${optionPrice} * ${quantity} = ${optionPrice * quantity}`);
-              }
-            });
-          }
-        } else if (modifier.selectionType === 'multi') {
-          // Handle multi-selection
-          if (Array.isArray(parsedAnswer)) {
-            parsedAnswer.forEach(optionId => {
-              const option = modifier.options?.find(o => o.id == optionId);
-              if (option && option.price) {
-                const optionPrice = parseFloat(option.price) || 0;
-                modifierPrice += optionPrice;
-                console.log(`🔄 Multi modifier: ${optionPrice}`);
-              }
-            });
-          }
-        } else {
-          // Handle single selection
-          if (parsedAnswer) {
-            const option = modifier.options?.find(o => o.id == parsedAnswer);
-            if (option && option.price) {
-              const optionPrice = parseFloat(option.price) || 0;
-              modifierPrice += optionPrice;
-              console.log(`🔄 Single modifier: ${optionPrice}`);
-            }
-          }
-        }
+      console.log('🔄 Price calculation:', { 
+        savedTotal, 
+        basePrice, 
+        serviceModifiers: job.service_modifiers,
+        serviceIntakeQuestions: job.service_intake_questions
       });
       
-      const totalPrice = basePrice + modifierPrice;
-      console.log('🔄 Total price calculation:', { basePrice, modifierPrice, totalPrice });
-      return totalPrice;
+      return savedTotal;
     } catch (error) {
       console.error('Error calculating total price:', error);
       return parseFloat(job.service_price) || 0;
     }
+  }
+
+  // Parse service modifiers from JSON
+  const getServiceModifiers = () => {
+    try {
+      if (!job.service_modifiers) return [];
+      if (typeof job.service_modifiers === 'string') {
+        return JSON.parse(job.service_modifiers);
+      }
+      return Array.isArray(job.service_modifiers) ? job.service_modifiers : [];
+    } catch (error) {
+      console.error('Error parsing service modifiers:', error);
+      return [];
+    }
+  }
+
+  // Parse service intake questions from JSON
+  const getServiceIntakeQuestions = () => {
+    try {
+      if (!job.service_intake_questions) return [];
+      if (typeof job.service_intake_questions === 'string') {
+        console.log('🔄 Parsing intake questions string:', job.service_intake_questions);
+        try {
+          const firstParse = JSON.parse(job.service_intake_questions);
+          console.log('🔄 First parse result:', firstParse);
+          
+          // Check if it's double-encoded
+          if (typeof firstParse === 'string') {
+            console.log('🔄 First parse is string, attempting second parse...');
+            const secondParse = JSON.parse(firstParse);
+            console.log('🔄 Second parse result:', secondParse);
+            return Array.isArray(secondParse) ? secondParse : [];
+          }
+          
+          return Array.isArray(firstParse) ? firstParse : [];
+        } catch (firstError) {
+          console.log('🔄 First parse failed:', firstError.message);
+          return [];
+        }
+      }
+      return Array.isArray(job.service_intake_questions) ? job.service_intake_questions : [];
+    } catch (error) {
+      console.error('Error parsing service intake questions:', error);
+      return [];
+    }
+  }
+
+  // Format duration for display
+  const formatDuration = (minutes) => {
+    if (!minutes) return '0h';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
   }
 
   const getCustomerInitials = () => {
@@ -844,10 +832,12 @@ const JobDetails = () => {
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900">{job.service_name}</p>
                   <p className="text-gray-600 text-sm mb-2">Default service category</p>
-                  <p className="text-sm text-gray-600 mt-2">{job.duration || 0} minutes</p>
+                  <p className="text-sm text-gray-600 mt-2">{formatDuration(job.duration || 0)}</p>
                 </div>
               </div>
             </div>
+
+
 
             {/* Team Assignment Section - Moved from sidebar */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-4 sm:mb-6 p-4 sm:p-6">
@@ -1107,75 +1097,26 @@ const JobDetails = () => {
                   
                   {/* Show modifier breakdown if there are any */}
                   {(() => {
-                    const serviceModifiers = job.service_modifiers || [];
-                    const jobAnswers = job.intake_answers || [];
+                    const serviceModifiers = getServiceModifiers();
                     let hasModifiers = false;
                     
                     return (
                       <>
-                        {jobAnswers.map(answer => {
-                          const modifier = serviceModifiers.find(m => m.id == answer.question_id);
-                          if (!modifier) return null;
-                          
-                          let parsedAnswer = answer.answer;
-                          if (typeof answer.answer === 'string') {
-                            try {
-                              const parsed = JSON.parse(answer.answer);
-                              if (Array.isArray(parsed)) {
-                                parsedAnswer = parsed;
-                              }
-                            } catch (e) {
-                              // Ignore parsing errors
-                            }
+                        {serviceModifiers.map(modifier => {
+                          if (!modifier.selectedOptions || modifier.selectedOptions.length === 0) {
+                            return null;
                           }
                           
-                          if (modifier.selectionType === 'quantity') {
-                            if (typeof parsedAnswer === 'object' && parsedAnswer.quantities) {
-                              return Object.entries(parsedAnswer.quantities).map(([optionId, quantity]) => {
-                                const option = modifier.options?.find(o => o.id == optionId);
-                                if (option && option.price && quantity > 0) {
-                                  hasModifiers = true;
-                                  return (
-                                    <div key={`${answer.question_id}-${optionId}`} className="flex justify-between text-sm">
-                                      <span className="text-gray-600">• {option.label} (x{quantity})</span>
-                                      <span>${(parseFloat(option.price) * quantity).toFixed(2)}</span>
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              });
-                            }
-                          } else if (modifier.selectionType === 'multi') {
-                            if (Array.isArray(parsedAnswer)) {
-                              return parsedAnswer.map(optionId => {
-                                const option = modifier.options?.find(o => o.id == optionId);
-                                if (option && option.price) {
-                                  hasModifiers = true;
-                                  return (
-                                    <div key={`${answer.question_id}-${optionId}`} className="flex justify-between text-sm">
-                                      <span className="text-gray-600">• {option.label}</span>
-                                      <span>${parseFloat(option.price).toFixed(2)}</span>
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              });
-                            }
-                          } else {
-                            if (parsedAnswer) {
-                              const option = modifier.options?.find(o => o.id == parsedAnswer);
-                              if (option && option.price) {
-                                hasModifiers = true;
-                                return (
-                                  <div key={`${answer.question_id}-${parsedAnswer}`} className="flex justify-between text-sm">
-                                    <span className="text-gray-600">• {option.label}</span>
-                                    <span>${parseFloat(option.price).toFixed(2)}</span>
-                                  </div>
-                                );
-                              }
-                            }
-                          }
-                          return null;
+                          hasModifiers = true;
+                          return modifier.selectedOptions.map((option, index) => (
+                            <div key={`${modifier.id}-${option.id}-${index}`} className="flex justify-between text-sm">
+                              <span className="text-gray-600">
+                                • {modifier.title}: {option.label || option.description}
+                                {option.selectedQuantity && ` (x${option.selectedQuantity})`}
+                              </span>
+                              <span>${(option.totalPrice || option.price || 0).toFixed(2)}</span>
+                            </div>
+                          ));
                         })}
                         {!hasModifiers && (
                           <div className="text-sm text-gray-500 italic">
@@ -1338,7 +1279,23 @@ const JobDetails = () => {
             </div>
 
             {/* Intake Questions & Answers */}
-            <IntakeAnswersDisplay intakeAnswers={job.intake_answers || []} />
+            <IntakeAnswersDisplay intakeAnswers={(() => {
+              // Get intake questions and answers from job data
+              const intakeQuestionsAndAnswers = job.service_intake_questions || [];
+              
+              console.log('🔄 Intake questions and answers from job:', intakeQuestionsAndAnswers);
+              
+              // Convert to the format expected by IntakeAnswersDisplay
+              return intakeQuestionsAndAnswers.map(question => {
+                console.log('🔄 Processing question:', question);
+                return {
+                  question_text: question.question,
+                  question_type: question.questionType,
+                  answer: question.answer || null,
+                  created_at: job.created_at
+                };
+              });
+            })()} />
 
             {/* Notes & Files */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">

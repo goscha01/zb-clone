@@ -775,38 +775,14 @@ export default function CreateJobPage() {
         photosRequired: formData.photosRequired,
         qualityCheck: formData.qualityCheck,
         // Service modifiers and intake questions
+        serviceModifiers: formData.serviceModifiers,
+        serviceIntakeQuestions: formData.serviceIntakeQuestions,
         selectedModifiers: selectedModifiers,
-        intakeQuestionAnswers: (() => {
-          // Convert normalized IDs back to original IDs for backend
+        intakeQuestionAnswers: intakeQuestionAnswers, // Send original answers as-is
+        originalIntakeQuestionIds: (() => {
+          // Send the original question IDs so backend can match them with answers
           const idMapping = formData.intakeQuestionIdMapping || {};
-          const convertedAnswers = {};
-          
-          Object.entries(intakeQuestionAnswers).forEach(([normalizedId, answer]) => {
-            const originalId = idMapping[normalizedId];
-            if (originalId) {
-              convertedAnswers[originalId] = answer;
-              
-              // Debug specific question types
-              const question = formData.serviceIntakeQuestions?.find(q => q.id == normalizedId);
-              if (question) {
-                console.log(`🔄 Question "${question.question}" (${question.questionType}):`, {
-                  normalizedId,
-                  originalId,
-                  answer,
-                  answerType: typeof answer,
-                  answerLength: answer?.length
-                });
-              }
-            }
-          });
-          
-          console.log('🔄 Converting intake answers:', {
-            original: intakeQuestionAnswers,
-            converted: convertedAnswers,
-            mapping: idMapping
-          });
-          
-          return convertedAnswers;
+          return Object.values(idMapping); // Return array of original IDs
         })(),
         totalPrice: calculateTotalPrice()
       };
@@ -1535,12 +1511,33 @@ export default function CreateJobPage() {
                       <div className="flex items-center space-x-2 bg-gray-100 rounded-full px-3 py-2">
                         <Clock className="w-4 h-4 text-gray-600" />
                         <span className="text-sm font-medium text-gray-700" key={`duration-${calculationTrigger}`}>
-                          {((calculateTotalDuration() || 0) / 60).toFixed(1)} hr
-                          {(calculateTotalDuration() || 0) !== (parseFloat(formData.duration) || 0) && (
-                            <span className="text-xs text-blue-600 ml-1">
-                              (base: {((parseFloat(formData.duration) || 0) / 60).toFixed(1)} + modifiers: {(((calculateTotalDuration() || 0) - (parseFloat(formData.duration) || 0)) / 60).toFixed(1)})
-                            </span>
-                          )}
+                          {(() => {
+                            const totalMinutes = calculateTotalDuration() || 0;
+                            const baseMinutes = parseFloat(formData.duration) || 0;
+                            const hours = Math.floor(totalMinutes / 60);
+                            const mins = totalMinutes % 60;
+                            const display = mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+                            
+                            if (totalMinutes !== baseMinutes) {
+                              const baseHours = Math.floor(baseMinutes / 60);
+                              const baseMins = baseMinutes % 60;
+                              const baseDisplay = baseMins > 0 ? `${baseHours}h ${baseMins}m` : `${baseHours}h`;
+                              const modifierMinutes = totalMinutes - baseMinutes;
+                              const modifierHours = Math.floor(modifierMinutes / 60);
+                              const modifierMins = modifierMinutes % 60;
+                              const modifierDisplay = modifierMins > 0 ? `${modifierHours}h ${modifierMins}m` : `${modifierHours}h`;
+                              
+                              return (
+                                <>
+                                  {display}
+                                  <span className="text-xs text-blue-600 ml-1">
+                                    (base: {baseDisplay} + modifiers: {modifierDisplay})
+                                  </span>
+                                </>
+                              );
+                            }
+                            return display;
+                          })()}
                         </span>
                         <button
                           onClick={() => setFormData(prev => ({ ...prev, duration: prev.duration + 0.5 }))}
