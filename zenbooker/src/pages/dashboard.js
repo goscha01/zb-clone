@@ -7,7 +7,7 @@ import CustomerModal from "../components/customer-modal"
 import { Plus, ChevronDown, Info, Star, Calendar, ArrowRight, BarChart2, CreditCard, Users, RefreshCw, MapPin, Globe, Check, AlertTriangle } from "lucide-react"
 import { Link, useNavigate } from "react-router-dom"
 import { useAuth } from "../context/AuthContext"
-import { jobsAPI, customersAPI, servicesAPI, invoicesAPI } from "../services/api"
+import { jobsAPI, customersAPI, servicesAPI, invoicesAPI, teamAPI } from "../services/api"
 
 const ZenbookerDashboard = () => {
   const { user } = useAuth()
@@ -192,10 +192,8 @@ const ZenbookerDashboard = () => {
       console.log('👥 Fetching team members...')
       let teamMembers = []
       try {
-        // TODO: Re-enable team API when backend team endpoints are fully implemented
-        // const teamResponse = await teamAPI.getAll(user.id, { page: 1, limit: 1000 })
-        // const teamMembers = teamResponse.teamMembers || teamResponse || []
-        teamMembers = [] // Temporarily set to empty array
+        const teamResponse = await teamAPI.getAll(user.id, { page: 1, limit: 1000 })
+        teamMembers = teamResponse.teamMembers || teamResponse || []
         console.log('✅ Team members loaded:', teamMembers.length)
       } catch (teamError) {
         console.warn('⚠️ Team members fetch failed:', teamError.message)

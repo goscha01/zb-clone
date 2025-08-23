@@ -239,6 +239,16 @@ const ZenbookerSchedule = () => {
     }
   }
 
+  const formatTime = (dateString) => {
+    if (!dateString) return 'Time placeholder'
+    const date = new Date(dateString)
+    return date.toLocaleTimeString([], { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      timeZone: 'local'
+    })
+  }
+
   const navigateDate = (direction) => {
     // Prevent rapid navigation clicks
     if (isNavigating) {
@@ -593,7 +603,7 @@ const ZenbookerSchedule = () => {
                 {job.customer_address || `${job.service_address_street}, ${job.service_address_city}`}
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {formatTime(job.scheduled_date)}
               </div>
               <div className="text-xs text-gray-400 mt-1">
                 {job.customer_first_name && job.customer_last_name 
@@ -700,10 +710,7 @@ const ZenbookerSchedule = () => {
                         <div className="flex items-center space-x-2 text-gray-600">
                           <Clock className="w-4 h-4 flex-shrink-0" />
                           <span className="truncate">
-                            {job.scheduled_date 
-                              ? new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                              : 'Time placeholder'
-                            }
+                            {formatTime(job.scheduled_date)}
                           </span>
                         </div>
                         <div className="flex items-center space-x-2 text-gray-600">
@@ -824,10 +831,7 @@ const ZenbookerSchedule = () => {
                           }
                         </div>
                         <div className="text-gray-500">
-                          {job.scheduled_date 
-                            ? new Date(job.scheduled_date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                            : 'Time placeholder'
-                          }
+                                                                            {formatTime(job.scheduled_date)}
                         </div>
                       </div>
                     ))}
