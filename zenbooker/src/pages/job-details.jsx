@@ -145,6 +145,8 @@ const JobDetails = () => {
       setLoading(true)
       try {
         const jobData = await jobsAPI.getById(jobId)
+        console.log('🔄 Job data received:', jobData)
+        console.log('🔄 Team assignments in job data:', jobData.team_assignments)
         setJob(jobData)
         
         // Initialize form data
@@ -347,9 +349,11 @@ const JobDetails = () => {
     if (!job) return
     try {
       setLoading(true)
+      console.log('🔄 Team assignment request:', { teamMemberId, specificMemberId, makePrimary, jobId: job.id })
       
       if (specificMemberId) {
         // Remove specific team member
+        console.log('🔄 Removing team member:', specificMemberId)
         await jobsAPI.removeTeamMember(job.id, specificMemberId)
         setJob(prev => ({
           ...prev,
@@ -357,14 +361,21 @@ const JobDetails = () => {
         }))
         setSuccessMessage('Team member removed!')
       } else if (teamMemberId) {
-        // Add new team member (makePrimary parameter not supported by backend yet)
+        // Add new team member
+        console.log('🔄 Assigning team member:', teamMemberId)
         await jobsAPI.assignToTeamMember(job.id, teamMemberId)
+        
         // Refresh job data to get updated team assignments
+        console.log('🔄 Refreshing job data...')
         const updatedJob = await jobsAPI.getById(job.id)
+        console.log('🔄 Updated job data:', updatedJob)
+        console.log('🔄 Team assignments in updated job:', updatedJob.team_assignments)
+        
         setJob(updatedJob)
         setSuccessMessage('Team member assigned!')
       } else {
         // Remove all team members
+        console.log('🔄 Removing all team members')
         await jobsAPI.assignToTeamMember(job.id, null)
         setJob(prev => ({ ...prev, team_assignments: [] }))
         setSuccessMessage('All team members unassigned!')

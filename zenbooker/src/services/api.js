@@ -723,6 +723,27 @@ export const jobsAPI = {
     } catch (error) {
       throw error;
     }
+  },
+
+  assignMultipleTeamMembers: async (jobId, teamMemberIds, primaryMemberId) => {
+    try {
+      const response = await api.post(`/jobs/${jobId}/assign-multiple`, { 
+        teamMemberIds, 
+        primaryMemberId 
+      });
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
+  },
+
+  getTeamAssignments: async (jobId) => {
+    try {
+      const response = await api.get(`/jobs/${jobId}/assignments`);
+      return response.data;
+    } catch (error) {
+      throw error;
+    }
   }
 };
 
