@@ -576,50 +576,52 @@ const ZenbookerDashboard = () => {
                   </div>
                 </div>
               )}
-              {/* Setup Section */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4 lg:p-6 shadow-sm hover:shadow-md transition-shadow duration-200">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-display font-semibold text-gray-900">Finish setting up your account</h2>
-                  <span className="text-sm text-gray-500">{setupTasks.filter(task => task.completed).length}/{setupTasks.length} completed</span>
-                </div>
-                
-                {/* Progress Bar */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                    <span>Setup Progress</span>
-                    <span>{Math.round((setupTasks.filter(task => task.completed).length / setupTasks.length) * 100)}%</span>
+              {/* Setup Section - Only show if not all tasks are completed */}
+              {setupTasks.filter(task => !task.hidden).filter(task => !task.completed).length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-200 p-4 lg:p-6 shadow-sm hover:shadow-md transition-shadow duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-display font-semibold text-gray-900">Finish setting up your account</h2>
+                    <span className="text-sm text-gray-500">{setupTasks.filter(task => !task.hidden).filter(task => task.completed).length}/{setupTasks.filter(task => !task.hidden).length} completed</span>
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div 
-                      className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-                      style={{ 
-                        width: `${(setupTasks.filter(task => task.completed).length / setupTasks.length) * 100}%` 
-                      }}
-                    ></div>
+                  
+                  {/* Progress Bar */}
+                  <div className="mb-6">
+                    <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+                      <span>Setup Progress</span>
+                      <span>{Math.round((setupTasks.filter(task => !task.hidden).filter(task => task.completed).length / setupTasks.filter(task => !task.hidden).length) * 100)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                        style={{ 
+                          width: `${(setupTasks.filter(task => !task.hidden).filter(task => task.completed).length / setupTasks.filter(task => !task.hidden).length) * 100}%` 
+                        }}
+                      ></div>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3 lg:space-y-4">
+                    {setupTasks.filter(task => !task.hidden).map((task, index) => (
+                      <Link to={task.link} key={index}>
+                        <div className="flex items-start space-x-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group relative">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${task.completed ? 'bg-green-50' : 'bg-primary-50'}`}>
+                            {task.completed ? (
+                              <Check className="w-4 h-4 text-green-600" />
+                            ) : (
+                              <task.icon className="w-4 h-4 text-primary-600" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-medium text-gray-900">{task.title}</h3>
+                            <p className="text-sm text-gray-600 mt-1">{task.description}</p>
+                          </div>
+                          <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-primary-600 transition-colors duration-200" />
+                        </div>
+                      </Link>
+                    ))}
                   </div>
                 </div>
-                
-                <div className="space-y-3 lg:space-y-4">
-                  {setupTasks.map((task, index) => (
-                    <Link to={task.link} key={index} className={task.hidden ? "feature-hidden" : ""}>
-                      <div className="flex items-start space-x-4 p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors duration-200 group relative">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${task.completed ? 'bg-green-50' : 'bg-primary-50'}`}>
-                          {task.completed ? (
-                            <Check className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <task.icon className="w-4 h-4 text-primary-600" />
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="text-sm font-medium text-gray-900">{task.title}</h3>
-                          <p className="text-sm text-gray-600 mt-1">{task.description}</p>
-                        </div>
-                        <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-primary-600 transition-colors duration-200" />
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
+              )}
 
               {/* Today Section */}
               <div className="bg-white rounded-xl border border-gray-200 p-4 lg:p-6 shadow-sm hover:shadow-md transition-shadow duration-200">
