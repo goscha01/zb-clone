@@ -65,7 +65,18 @@ const TeamMemberDashboard = () => {
   }
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    if (!dateString) return 'Date placeholder'
+    // Extract date part directly from the string (format: "2024-01-15 10:00:00")
+    const datePart = dateString.split(' ')[0]
+    if (!datePart) return 'Date placeholder'
+    
+    const [year, month, day] = datePart.split('-')
+    if (!year || !month || !day) return 'Date placeholder'
+    
+    const date = new Date(year, month - 1, day) // month is 0-indexed
+    if (isNaN(date.getTime())) return 'Date placeholder'
+    
+    return date.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric'
@@ -73,14 +84,16 @@ const TeamMemberDashboard = () => {
   }
 
   const formatTime = (dateString) => {
-    if (!dateString) return ''
+    if (!dateString) return 'Time placeholder'
     // Extract time part directly from the string (format: "2024-01-15 10:00:00")
     const timePart = dateString.split(' ')[1]
-    if (!timePart) return ''
+    if (!timePart) return 'Time placeholder'
     
     const [hours, minutes] = timePart.split(':')
     const hour = parseInt(hours, 10)
     const minute = parseInt(minutes, 10)
+    
+    if (isNaN(hour) || isNaN(minute)) return 'Time placeholder'
     
     // Convert to 12-hour format
     const ampm = hour >= 12 ? 'PM' : 'AM'
@@ -122,11 +135,13 @@ const TeamMemberDashboard = () => {
   }
 
   const todayJobs = dashboardData?.jobs?.filter(job => {
+    if (!job.scheduled_date) return false
     const today = new Date().toISOString().split('T')[0]
     return job.scheduled_date.split(' ')[0] === today
   }) || []
 
   const upcomingJobs = dashboardData?.jobs?.filter(job => {
+    if (!job.scheduled_date) return false
     const today = new Date().toISOString().split('T')[0]
     return job.scheduled_date.split(' ')[0] > today
   }) || []

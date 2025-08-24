@@ -252,6 +252,8 @@ const ZenbookerSchedule = () => {
     const hour = parseInt(hours, 10)
     const minute = parseInt(minutes, 10)
     
+    if (isNaN(hour) || isNaN(minute)) return 'Time placeholder'
+    
     // Convert to 12-hour format
     const ampm = hour >= 12 ? 'PM' : 'AM'
     const displayHour = hour % 12 || 12
@@ -737,7 +739,7 @@ const ZenbookerSchedule = () => {
                           <span className="truncate">
                             {job.team_member_first_name && job.team_member_last_name 
                               ? `${job.team_member_first_name} ${job.team_member_last_name}`
-                              : job.team_member_first_name || job.team_member_last_name || 'Team placeholder'
+                              : job.team_member_first_name || job.team_member_last_name || 'Unassigned'
                             }
                           </span>
                         </div>
