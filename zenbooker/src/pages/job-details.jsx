@@ -130,11 +130,14 @@ const JobDetails = () => {
   // For reschedule modal mapping
   useEffect(() => {
     if (showRescheduleModal && job) {
-      const scheduledDate = job.scheduled_date ? new Date(job.scheduled_date) : new Date()
+      // Extract date and time directly from the string (format: "2024-01-15 10:00:00")
+      const datePart = job.scheduled_date ? job.scheduled_date.split(' ')[0] : new Date().toISOString().split('T')[0]
+      const timePart = job.scheduled_date ? job.scheduled_date.split(' ')[1]?.substring(0, 5) : '09:00'
+      
       setFormData(prev => ({
         ...prev,
-        scheduledDate: scheduledDate.toISOString().split('T')[0],
-        scheduledTime: job.scheduled_date ? scheduledDate.toTimeString().slice(0, 5) : '09:00'
+        scheduledDate: datePart,
+        scheduledTime: timePart
       }))
     }
   }, [showRescheduleModal, job])
@@ -164,8 +167,8 @@ const JobDetails = () => {
             state: jobData.service_address_state || "",
             zipCode: jobData.service_address_zip || ""
           },
-          scheduledDate: jobData.scheduled_date ? jobData.scheduled_date.split('T')[0] : "",
-          scheduledTime: jobData.scheduled_date ? jobData.scheduled_date.split('T')[1]?.substring(0, 5) : "",
+          scheduledDate: jobData.scheduled_date ? jobData.scheduled_date.split(' ')[0] : "",
+          scheduledTime: jobData.scheduled_date ? jobData.scheduled_date.split(' ')[1]?.substring(0, 5) : "",
           offer_to_providers: jobData.offer_to_providers || false
         })
 
@@ -431,7 +434,12 @@ const JobDetails = () => {
 
   const formatDate = (dateString) => {
     if (!dateString) return ''
-    const date = new Date(dateString)
+    // Extract date part directly from the string (format: "2024-01-15 10:00:00")
+    const datePart = dateString.split(' ')[0]
+    if (!datePart) return ''
+    
+    const [year, month, day] = datePart.split('-')
+    const date = new Date(year, month - 1, day) // month is 0-indexed
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'short',
@@ -442,12 +450,20 @@ const JobDetails = () => {
 
   const formatTime = (dateString) => {
     if (!dateString) return ''
-    const date = new Date(dateString)
-    return date.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
+    // Extract time part directly from the string (format: "2024-01-15 10:00:00")
+    const timePart = dateString.split(' ')[1]
+    if (!timePart) return ''
+    
+    const [hours, minutes] = timePart.split(':')
+    const hour = parseInt(hours, 10)
+    const minute = parseInt(minutes, 10)
+    
+    // Convert to 12-hour format
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const displayHour = hour % 12 || 12
+    const displayMinute = minute.toString().padStart(2, '0')
+    
+    return `${displayHour}:${displayMinute} ${ampm}`
   }
 
   // Calculate total price including modifiers

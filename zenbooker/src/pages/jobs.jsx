@@ -247,12 +247,21 @@ const ZenbookerJobs = () => {
   }
 
   const formatTime = (dateString) => {
-    const date = new Date(dateString)
-    return date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit',
-      hour12: true
-    })
+    if (!dateString) return ''
+    // Extract time part directly from the string (format: "2024-01-15 10:00:00")
+    const timePart = dateString.split(' ')[1]
+    if (!timePart) return ''
+    
+    const [hours, minutes] = timePart.split(':')
+    const hour = parseInt(hours, 10)
+    const minute = parseInt(minutes, 10)
+    
+    // Convert to 12-hour format
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const displayHour = hour % 12 || 12
+    const displayMinute = minute.toString().padStart(2, '0')
+    
+    return `${displayHour}:${displayMinute} ${ampm}`
   }
 
   const getStatusColor = (status) => {

@@ -189,8 +189,11 @@ const ZenbookerSchedule = () => {
     
     // Filter jobs by date range
     let filteredJobs = allJobs.filter(job => {
-      const jobDate = new Date(job.scheduled_date)
-      return jobDate >= startDate && jobDate <= endDate
+      // Extract date part from scheduled_date string (format: "2024-01-15 10:00:00")
+      const jobDateString = job.scheduled_date ? job.scheduled_date.split(' ')[0] : ''
+      const startDateString = startDate.toISOString().split('T')[0]
+      const endDateString = endDate.toISOString().split('T')[0]
+      return jobDateString >= startDateString && jobDateString <= endDateString
     })
     
     // Apply status filter
@@ -241,11 +244,20 @@ const ZenbookerSchedule = () => {
 
   const formatTime = (dateString) => {
     if (!dateString) return 'Time placeholder'
-    const date = new Date(dateString)
-    return date.toLocaleTimeString([], { 
-      hour: '2-digit', 
-      minute: '2-digit'
-    })
+    // Extract time part directly from the string (format: "2024-01-15 10:00:00")
+    const timePart = dateString.split(' ')[1]
+    if (!timePart) return 'Time placeholder'
+    
+    const [hours, minutes] = timePart.split(':')
+    const hour = parseInt(hours, 10)
+    const minute = parseInt(minutes, 10)
+    
+    // Convert to 12-hour format
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const displayHour = hour % 12 || 12
+    const displayMinute = minute.toString().padStart(2, '0')
+    
+    return `${displayHour}:${displayMinute} ${ampm}`
   }
 
   const navigateDate = (direction) => {
@@ -396,18 +408,26 @@ const ZenbookerSchedule = () => {
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
       
       filtered = filtered.filter(job => {
-        const jobTime = new Date(job.scheduled_date)
-        const jobDate = new Date(jobTime.getFullYear(), jobTime.getMonth(), jobTime.getDate())
+        // Extract time and date parts from scheduled_date string (format: "2024-01-15 10:00:00")
+        const jobDateTime = job.scheduled_date ? job.scheduled_date.split(' ') : ['', '']
+        const jobDateString = jobDateTime[0]
+        const jobTimeString = jobDateTime[1]
+        
+        if (!jobTimeString) return true
+        
+        const [hours] = jobTimeString.split(':')
+        const jobHour = parseInt(hours, 10)
+        const todayString = today.toISOString().split('T')[0]
         
         switch (filters.timeRange) {
           case 'morning':
-            return jobTime.getHours() < 12
+            return jobHour < 12
           case 'afternoon':
-            return jobTime.getHours() >= 12 && jobTime.getHours() < 17
+            return jobHour >= 12 && jobHour < 17
           case 'evening':
-            return jobTime.getHours() >= 17
+            return jobHour >= 17
           case 'today':
-            return jobDate.getTime() === today.getTime()
+            return jobDateString === todayString
           default:
             return true
         }
@@ -791,8 +811,10 @@ const ZenbookerSchedule = () => {
 
     const getJobsForDay = (date) => {
       return jobs.filter(job => {
-        const jobDate = new Date(job.scheduled_date)
-        return jobDate.toDateString() === date.toDateString()
+        // Extract date part from scheduled_date string (format: "2024-01-15 10:00:00")
+        const jobDateString = job.scheduled_date ? job.scheduled_date.split(' ')[0] : ''
+        const dateString = date.toISOString().split('T')[0]
+        return jobDateString === dateString
       })
     }
 
@@ -869,8 +891,10 @@ const ZenbookerSchedule = () => {
 
     const getJobsForDay = (date) => {
       return jobs.filter(job => {
-        const jobDate = new Date(job.scheduled_date)
-        return jobDate.toDateString() === date.toDateString()
+        // Extract date part from scheduled_date string (format: "2024-01-15 10:00:00")
+        const jobDateString = job.scheduled_date ? job.scheduled_date.split(' ')[0] : ''
+        const dateString = date.toISOString().split('T')[0]
+        return jobDateString === dateString
       })
     }
 

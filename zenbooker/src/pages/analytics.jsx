@@ -86,8 +86,11 @@ const Analytics = () => {
     const invoices = await invoicesAPI.getAll(user.id, { page: 1, limit: 1000 })
     
     const filteredJobs = jobs.jobs?.filter(job => {
-      const jobDate = new Date(job.scheduled_date)
-      return jobDate >= startDate && jobDate <= endDate
+      // Extract date part from scheduled_date string (format: "2024-01-15 10:00:00")
+      const jobDateString = job.scheduled_date ? job.scheduled_date.split(' ')[0] : ''
+      const startDateString = startDate.toISOString().split('T')[0]
+      const endDateString = endDate.toISOString().split('T')[0]
+      return jobDateString >= startDateString && jobDateString <= endDateString
     }) || []
     
     const filteredInvoices = invoices.invoices?.filter(invoice => {

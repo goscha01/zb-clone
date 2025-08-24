@@ -73,11 +73,21 @@ const TeamMemberDashboard = () => {
   }
 
   const formatTime = (dateString) => {
-    return new Date(dateString).toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    })
+    if (!dateString) return ''
+    // Extract time part directly from the string (format: "2024-01-15 10:00:00")
+    const timePart = dateString.split(' ')[1]
+    if (!timePart) return ''
+    
+    const [hours, minutes] = timePart.split(':')
+    const hour = parseInt(hours, 10)
+    const minute = parseInt(minutes, 10)
+    
+    // Convert to 12-hour format
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const displayHour = hour % 12 || 12
+    const displayMinute = minute.toString().padStart(2, '0')
+    
+    return `${displayHour}:${displayMinute} ${ampm}`
   }
 
   const getStatusColor = (status) => {
@@ -113,12 +123,12 @@ const TeamMemberDashboard = () => {
 
   const todayJobs = dashboardData?.jobs?.filter(job => {
     const today = new Date().toISOString().split('T')[0]
-    return job.scheduled_date.split('T')[0] === today
+    return job.scheduled_date.split(' ')[0] === today
   }) || []
 
   const upcomingJobs = dashboardData?.jobs?.filter(job => {
     const today = new Date().toISOString().split('T')[0]
-    return job.scheduled_date.split('T')[0] > today
+    return job.scheduled_date.split(' ')[0] > today
   }) || []
 
   return (

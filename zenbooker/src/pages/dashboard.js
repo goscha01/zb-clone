@@ -207,8 +207,11 @@ const ZenbookerDashboard = () => {
       tomorrow.setDate(tomorrow.getDate() + 1)
       
       const todayJobs = jobs.filter(job => {
-        const jobDate = new Date(job.scheduled_date)
-        return jobDate >= today && jobDate < tomorrow
+        // Extract date part from scheduled_date string (format: "2024-01-15 10:00:00")
+        const jobDateString = job.scheduled_date ? job.scheduled_date.split(' ')[0] : ''
+        const todayString = today.toISOString().split('T')[0]
+        const tomorrowString = tomorrow.toISOString().split('T')[0]
+        return jobDateString >= todayString && jobDateString < tomorrowString
       })
       
       const todayEarnings = todayJobs.reduce((sum, job) => {
@@ -231,8 +234,10 @@ const ZenbookerDashboard = () => {
       startDate.setDate(startDate.getDate() - parseInt(dateRange))
       
       const rangeJobs = jobs.filter(job => {
-        const jobDate = new Date(job.scheduled_date)
-        return jobDate >= startDate
+        // Extract date part from scheduled_date string (format: "2024-01-15 10:00:00")
+        const jobDateString = job.scheduled_date ? job.scheduled_date.split(' ')[0] : ''
+        const startDateString = startDate.toISOString().split('T')[0]
+        return jobDateString >= startDateString
       })
       
       const rangeInvoices = invoices.filter(invoice => {

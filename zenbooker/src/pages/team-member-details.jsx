@@ -1415,7 +1415,7 @@ const TeamMemberDetails = () => {
                                 {job.customer_first_name} {job.customer_last_name}
                               </p>
                         <p className="text-sm text-gray-500">
-                                {new Date(job.scheduled_date).toLocaleDateString()}
+                                {job.scheduled_date ? job.scheduled_date.split(' ')[0] : 'No date'}
                         </p>
                       </div>
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${
